@@ -1,0 +1,19 @@
+{
+  "name": "kings-taxi-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kings Taxi Mobile & Mobility Services Platform",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "start": "npm run start --workspace=apps/passenger-mobile",
+    "android": "npm run android --workspace=apps/passenger-mobile",
+    "ios": "npm run ios --workspace=apps/passenger-mobile",
+    "web": "npm run web --workspace=apps/passenger-mobile",
+    "typecheck": "npm run typecheck --workspace=apps/passenger-mobile"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

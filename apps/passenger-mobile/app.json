@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Kings Taxi",
+    "slug": "kings-taxi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "kingstaxi",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1A1D20"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "et.kingstaxi.passenger"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1A1D20"
+      },
+      "package": "et.kingstaxi.passenger"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Kings Taxi uses your location to pinpoint your pickup position and connect you with nearby drivers."
+        }
+      ]
+    ]
+  }
+}

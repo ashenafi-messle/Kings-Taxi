@@ -1,0 +1,80 @@
+import { PaymentMethodOption, PaymentTransaction } from '../types';
+
+export const mockPaymentMethods: PaymentMethodOption[] = [
+  {
+    id: 'telebirr',
+    name: 'Telebirr SuperApp',
+    subtitle: 'Instant mobile wallet payment by Ethio Telecom',
+    iconName: 'smartphone',
+    badge: 'Fastest',
+    isPopular: true,
+  },
+  {
+    id: 'cbe_birr',
+    name: 'CBE Birr',
+    subtitle: 'Commercial Bank of Ethiopia mobile money',
+    iconName: 'building-2',
+    isPopular: true,
+  },
+  {
+    id: 'chapa',
+    name: 'Chapa Payment Gateway',
+    subtitle: 'Pay via local debit cards or international cards',
+    iconName: 'credit-card',
+    badge: 'Visa / Mastercard',
+  },
+  {
+    id: 'bank_transfer',
+    name: 'Direct Bank Transfer',
+    subtitle: 'Awash Bank, Bank of Abyssinia, CBE',
+    iconName: 'building-2',
+  },
+  {
+    id: 'cash',
+    name: 'Cash Payment',
+    subtitle: 'Pay directly to your driver upon arrival',
+    iconName: 'banknote',
+  },
+];
+
+export const mockTransactions: PaymentTransaction[] = [
+  {
+    id: 'txn_pay_90182',
+    transactionReference: 'KT-TXN-202611-0918',
+    amountETB: 480,
+    paymentMethod: 'telebirr',
+    status: 'COMPLETED',
+    serviceCategory: 'ride',
+    serviceReferenceId: 'ride_bole_to_skylight',
+    description: 'Ride fare: Bole Airport to Ethiopian Skylight Hotel',
+    createdAt: '2026-11-01T14:32:00Z',
+    completedAt: '2026-11-01T14:32:45Z',
+    feeETB: 0,
+  },
+  {
+    id: 'txn_pay_78201',
+    transactionReference: 'KT-TXN-202610-4491',
+    amountETB: 17000,
+    paymentMethod: 'cbe_birr',
+    status: 'COMPLETED',
+    serviceCategory: 'hotel',
+    serviceReferenceId: 'htl_skylight_addis',
+    description: 'Ethiopian Skylight Hotel — 2 nights Deluxe King',
+    createdAt: '2026-10-24T09:15:00Z',
+    completedAt: '2026-10-24T09:16:30Z',
+    feeETB: 0,
+  },
+  {
+    id: 'txn_pay_63912',
+    transactionReference: 'KT-TXN-202610-1823',
+    amountETB: 24500,
+    paymentMethod: 'chapa',
+    status: 'COMPLETED',
+    serviceCategory: 'tour',
+    serviceReferenceId: 'tour_gondar_full_contract',
+    description: 'Full-Contract Transport: Gondar, Fasil Ghebbi & Debre Berhan',
+    createdAt: '2026-10-18T11:00:00Z',
+    completedAt: '2026-10-18T11:02:10Z',
+    feeETB: 0,
+  },
+];
