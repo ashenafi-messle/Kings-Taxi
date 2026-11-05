@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,119 +6,126 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  StatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Crown, Car, Hotel, Compass, ShieldCheck, Globe } from 'lucide-react-native';
-import { theme } from '../../src/theme';
-import { PrimaryButton, SecondaryButton } from '../../src/components';
+import { Globe, ArrowRight, ShieldCheck, Star } from 'lucide-react-native';
+import { colors } from '../../src/theme/colors';
+import {
+  KingsTaxiLogo,
+  LandingHeroCarousel,
+  LanguageSelectorModal,
+  PrimaryButton,
+  SecondaryButton,
+} from '../../src/components';
 import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
 import { useSettingsStore } from '../../src/stores';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { t } = useTranslation(['auth', 'home', 'payments', 'common']);
+  const { t } = useTranslation(['auth', 'common']);
   const { language } = useSettingsStore();
+  const [langModalVisible, setLangModalVisible] = useState(false);
 
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Language Selection Header Pill */}
-        <View style={styles.langPillRow}>
-          <TouchableOpacity
-            style={styles.langPill}
-            onPress={() => router.push('/settings/language')}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Change language"
-          >
-            <Globe size={16} color={theme.colors.primaryDark} />
-            <Text style={styles.langPillText}>{currentLangLabel}</Text>
-          </TouchableOpacity>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+
+      {/* Top Header Bar */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity
+          style={styles.langPill}
+          onPress={() => setLangModalVisible(true)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Change language. Current: ${currentLangLabel}`}
+        >
+          <Globe size={15} color={colors.deepGold} />
+          <Text style={styles.langPillText}>{currentLangLabel}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.signInShortcut}
+          onPress={() => router.push('/(auth)/login')}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={t('signInBtn')}
+        >
+          <Text style={styles.signInShortcutText}>{t('signInBtn')}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Official Brand Hero Presentation */}
+        <View style={styles.brandHeroSection}>
+          <KingsTaxiLogo variant="hero" showTagline showText />
         </View>
 
-        {/* Crown & Brand Identity Header */}
-        <View style={styles.brandHeader}>
-          <View style={styles.crownCircle}>
-            <Crown size={38} color={theme.colors.primary} />
-          </View>
-          <Text style={styles.appName}>KINGS TAXI</Text>
-          <Text style={styles.appTagline}>{t('tagline')}</Text>
-        </View>
+        {/* 5-Slide Advertising Hero Carousel */}
+        <LandingHeroCarousel />
 
-        {/* Feature Value Cards */}
-        <View style={styles.featuresContainer}>
-          <View style={styles.featureItem}>
-            <View style={[styles.featureIconBox, { backgroundColor: '#FFF9E6' }]}>
-              <Car size={22} color={theme.colors.primaryDark} />
-            </View>
-            <View style={styles.featureTextBox}>
-              <Text style={styles.featureTitle}>{t('home:services.rideTitle')}</Text>
-              <Text style={styles.featureDesc}>
-                {t('home:services.rideSubtitle')}
-              </Text>
-            </View>
+        {/* Trust Badges */}
+        <View style={styles.trustRow}>
+          <View style={styles.trustItem}>
+            <ShieldCheck size={16} color={colors.primaryGold} />
+            <Text style={styles.trustText}>Screened Drivers</Text>
           </View>
-
-          <View style={styles.featureItem}>
-            <View style={[styles.featureIconBox, { backgroundColor: '#EFF6FF' }]}>
-              <Hotel size={22} color={theme.colors.hotelAccent} />
-            </View>
-            <View style={styles.featureTextBox}>
-              <Text style={styles.featureTitle}>{t('home:services.hotelsTitle')}</Text>
-              <Text style={styles.featureDesc}>
-                {t('home:services.hotelsSubtitle')}
-              </Text>
-            </View>
+          <View style={styles.trustDot} />
+          <View style={styles.trustItem}>
+            <Star size={16} color={colors.primaryGold} fill={colors.primaryGold} />
+            <Text style={styles.trustText}>5-Star Fleet</Text>
           </View>
-
-          <View style={styles.featureItem}>
-            <View style={[styles.featureIconBox, { backgroundColor: '#F3E8FF' }]}>
-              <Compass size={22} color={theme.colors.heritageAccent} />
-            </View>
-            <View style={styles.featureTextBox}>
-              <Text style={styles.featureTitle}>{t('home:services.heritageTitle')}</Text>
-              <Text style={styles.featureDesc}>
-                {t('home:services.heritageSubtitle')}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.featureItem}>
-            <View style={[styles.featureIconBox, { backgroundColor: '#ECFDF5' }]}>
-              <ShieldCheck size={22} color="#059669" />
-            </View>
-            <View style={styles.featureTextBox}>
-              <Text style={styles.featureTitle}>{t('payments:title')}</Text>
-              <Text style={styles.featureDesc}>
-                {t('payments:subtitle')}
-              </Text>
-            </View>
+          <View style={styles.trustDot} />
+          <View style={styles.trustItem}>
+            <Globe size={16} color={colors.primaryGold} />
+            <Text style={styles.trustText}>3 Languages</Text>
           </View>
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.buttonContainer}>
+        {/* Main Action CTAs */}
+        <View style={styles.actionsSection}>
           <PrimaryButton
+            title={t('getStarted')}
+            onPress={() => router.push('/(auth)/register')}
+            icon={<ArrowRight size={18} color={colors.white} />}
+            style={styles.getStartedBtn}
+          />
+
+          <SecondaryButton
             title={t('signInBtn')}
             onPress={() => router.push('/(auth)/login')}
-            style={styles.signInBtn}
+            style={styles.secondaryBtn}
           />
-          <SecondaryButton
-            title={t('signUpBtn')}
-            onPress={() => router.push('/(auth)/register')}
-            style={styles.registerBtn}
-          />
-        </View>
 
-        <Text style={styles.termsNotice}>
-          {t('termsNotice')}{' '}
-          <Text style={styles.termsLink}>{t('termsOfService')}</Text> {t('and')}{' '}
-          <Text style={styles.termsLink}>{t('privacyPolicy')}</Text>
-        </Text>
+          <TouchableOpacity
+            style={styles.guestLink}
+            onPress={() => router.replace('/(tabs)')}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={t('exploreAsGuest')}
+          >
+            <Text style={styles.guestLinkText}>{t('exploreAsGuest')}</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.termsNotice}>
+            {t('termsNotice')}{' '}
+            <Text style={styles.termsLink}>{t('termsOfService')}</Text> {t('and')}{' '}
+            <Text style={styles.termsLink}>{t('privacyPolicy')}</Text>.
+          </Text>
+        </View>
       </ScrollView>
+
+      {/* Language Selector Modal */}
+      <LanguageSelectorModal
+        visible={langModalVisible}
+        onClose={() => setLangModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -126,109 +133,118 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: colors.background,
   },
-  scrollContent: {
-    padding: theme.spacing.lg,
+  topHeader: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  langPillRow: {
-    alignItems: 'flex-end',
-    marginBottom: theme.spacing.sm,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   langPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: colors.lightGold,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: theme.colors.borderGold,
+    borderColor: colors.champagne,
   },
   langPillText: {
-    ...theme.typography.captionBold,
-    color: theme.colors.primaryDark,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.deepGold,
   },
-  brandHeader: {
+  signInShortcut: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  signInShortcutText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primaryGold,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
     alignItems: 'center',
-    marginVertical: theme.spacing.md,
   },
-  crownCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: theme.colors.surface,
+  brandHeroSection: {
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
-    marginBottom: theme.spacing.sm,
-    ...theme.shadows.card,
+    marginTop: 8,
+    marginBottom: 4,
   },
-  appName: {
-    ...theme.typography.h1,
-    color: theme.colors.text,
-    letterSpacing: 2,
-  },
-  appTagline: {
-    ...theme.typography.body,
-    color: theme.colors.textSecondary,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  featuresContainer: {
-    gap: theme.spacing.md,
-    marginVertical: theme.spacing.md,
-  },
-  featureItem: {
+  trustRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  featureIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: theme.spacing.md,
+    gap: 12,
+    marginVertical: 14,
+    backgroundColor: colors.white,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  featureTextBox: {
-    flex: 1,
+  trustItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  featureTitle: {
-    ...theme.typography.bodyBold,
-    color: theme.colors.text,
+  trustText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.secondaryText,
   },
-  featureDesc: {
-    ...theme.typography.caption,
-    color: theme.colors.textMuted,
+  trustDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderGold,
+  },
+  actionsSection: {
+    width: '100%',
+    maxWidth: 420,
+    marginTop: 10,
+    gap: 12,
+    alignItems: 'center',
+  },
+  getStartedBtn: {
+    width: '100%',
+    height: 52,
+    borderRadius: 14,
+  },
+  secondaryBtn: {
+    width: '100%',
+    height: 50,
+    borderRadius: 14,
+    borderColor: colors.borderGold,
+  },
+  guestLink: {
+    paddingVertical: 8,
     marginTop: 2,
   },
-  buttonContainer: {
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
-  },
-  signInBtn: {
-    width: '100%',
-  },
-  registerBtn: {
-    width: '100%',
+  guestLinkText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.deepGold,
+    letterSpacing: 0.2,
   },
   termsNotice: {
-    ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    fontSize: 11,
+    color: colors.textLight,
     textAlign: 'center',
-    marginTop: theme.spacing.md,
+    lineHeight: 16,
+    marginTop: 6,
+    paddingHorizontal: 10,
   },
   termsLink: {
-    color: theme.colors.primaryDark,
+    color: colors.deepGold,
     fontWeight: '600',
   },
 });

@@ -116,3 +116,4 @@ console.log(`  OM native label: ${omProfile.language.nativeOromo}`);
 console.log('  -> PASSED: Languages clearly identified using their native scripts.\n');
 
 console.log('>>> ALL 6 MULTILINGUAL RUNTIME VERIFICATION TESTS PASSED SUCCESSFULLY! <<<');
+

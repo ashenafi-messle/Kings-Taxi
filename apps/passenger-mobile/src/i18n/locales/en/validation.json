@@ -7,6 +7,9 @@
   "passwordRequired": "Password is required",
   "passwordTooShort": "Password must be at least 6 characters",
   "emailInvalid": "Please enter a valid email address",
+  "emailRequired": "Email address is required",
+  "passwordsMustMatch": "Passwords do not match",
+  "mustAgreeTerms": "You must agree to the Terms of Service to continue",
   "otpIncomplete": "Please enter all 6 digits of the verification code",
   "pickupRequired": "Pickup location is required",
   "destinationRequired": "Destination is required",
@@ -16,4 +19,3 @@
   "invalidDateRange": "Check-out date must be after check-in date",
   "paymentMethodRequired": "Please select a payment method"
 }
-

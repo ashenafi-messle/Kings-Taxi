@@ -22,7 +22,7 @@ import {
   ShieldCheck,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
-import { SearchInput, DestinationCard, StatusBadge } from '../../src/components';
+import { SearchInput, DestinationCard, StatusBadge, KingsTaxiLogo, HomeAdCarousel } from '../../src/components';
 import { useAuthStore, useRideStore } from '../../src/stores';
 import { mockLocations, mockHeritageSites, mockHotels } from '../../src/mocks';
 import { useTranslation } from '../../src/i18n';
@@ -61,10 +61,7 @@ export default function HomeScreen() {
         {/* Top Branding & Greeting Bar */}
         <View style={styles.topHeader}>
           <View>
-            <View style={styles.brandRow}>
-              <Crown size={20} color={theme.colors.primary} />
-              <Text style={styles.brandName}>KINGS TAXI</Text>
-            </View>
+            <KingsTaxiLogo variant="header" showTagline={false} showText={true} />
             <Text style={styles.greetingText}>{getGreeting()}</Text>
           </View>
           <TouchableOpacity
@@ -197,28 +194,8 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Featured Full-Contract Itinerary Banner */}
-        <TouchableOpacity
-          activeOpacity={0.88}
-          onPress={() => router.push('/tours/contract-builder')}
-          style={styles.featuredContractBanner}
-        >
-          <View style={styles.featuredContractContent}>
-            <View style={styles.goldPill}>
-              <Sparkles size={12} color="#FFFFFF" />
-              <Text style={styles.goldPillText}>{t('promoTitle').toUpperCase()}</Text>
-            </View>
-            <Text style={styles.featuredContractTitle}>
-              {t('promoTitle')}
-            </Text>
-            <Text style={styles.featuredContractDesc}>
-              {t('promoSubtitle')}
-            </Text>
-            <View style={styles.featuredContractAction}>
-              <Text style={styles.featuredActionText}>{t('services.customTourTitle')} →</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+        {/* Premium 5-Slide Advertising Carousel */}
+        <HomeAdCarousel />
 
         {/* Recent Destinations Section */}
         <View style={styles.sectionHeader}>

@@ -1,31 +1,191 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PassengerProfile } from '../types';
 import { mockPassenger } from '../mocks';
+import { SecureStorageUtil } from '../utils/secureStorage';
+import { TelegramAuthService } from '../services/telegramAuth.service';
+
+const REMEMBERED_EMAIL_KEY = '@kings_taxi_remembered_email';
+const AUTH_TOKEN_KEY = 'kings_taxi_session_jwt';
+const AUTH_USER_KEY = 'kings_taxi_session_user';
 
 interface AuthState {
   user: PassengerProfile | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (phone: string, password?: string) => Promise<boolean>;
+  rememberedEmail: string;
+  isEmailRemembered: boolean;
+
+  login: (identifier: string, password?: string) => Promise<boolean>;
+  loginWithEmail: (email: string, password?: string, remember?: boolean) => Promise<boolean>;
+  loginWithTelegram: () => Promise<boolean>;
+  register: (payload: {
+    fullName: string;
+    email: string;
+    phone: string;
+    password?: string;
+  }) => Promise<boolean>;
   verifyOtp: (code: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateProfile: (updates: Partial<PassengerProfile>) => void;
+  loadInitialAuth: () => Promise<void>;
+  setRememberedEmail: (email: string, remember: boolean) => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: mockPassenger,
   token: 'mock_jwt_token_kings_78912',
-  isAuthenticated: true, // Default to true for smooth developer preview & testing
+  isAuthenticated: true, // Default active for immediate developer access & preview
   isLoading: false,
+  rememberedEmail: '',
+  isEmailRemembered: false,
 
-  login: async (phone: string, _password?: string) => {
+  loadInitialAuth: async () => {
+    try {
+      // 1. Load remembered email
+      const savedEmail = await AsyncStorage.getItem(REMEMBERED_EMAIL_KEY);
+      if (savedEmail) {
+        set({ rememberedEmail: savedEmail, isEmailRemembered: true });
+      }
+
+      // 2. Load secure session token
+      const storedToken = await SecureStorageUtil.getItem(AUTH_TOKEN_KEY);
+      const storedUserJson = await SecureStorageUtil.getItem(AUTH_USER_KEY);
+
+      if (storedToken && storedUserJson) {
+        const user = JSON.parse(storedUserJson);
+        set({
+          token: storedToken,
+          user,
+          isAuthenticated: true,
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to restore auth session:', e);
+    }
+  },
+
+  setRememberedEmail: async (email: string, remember: boolean) => {
+    try {
+      if (remember && email.trim()) {
+        await AsyncStorage.setItem(REMEMBERED_EMAIL_KEY, email.trim());
+        set({ rememberedEmail: email.trim(), isEmailRemembered: true });
+      } else {
+        await AsyncStorage.removeItem(REMEMBERED_EMAIL_KEY);
+        set({ rememberedEmail: '', isEmailRemembered: false });
+      }
+    } catch (e) {
+      console.warn('Failed to update remembered email:', e);
+    }
+  },
+
+  login: async (identifier: string, _password?: string) => {
     set({ isLoading: true });
-    // Simulate network latency
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    const isEmail = identifier.includes('@');
+    const updatedUser: PassengerProfile = {
+      ...mockPassenger,
+      phone: isEmail ? mockPassenger.phone : identifier,
+      email: isEmail ? identifier : mockPassenger.email,
+    };
+
+    const token = 'mock_jwt_token_kings_78912';
+
+    // Persist securely
+    await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
+    await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser));
+
     set({
-      user: { ...mockPassenger, phone },
-      token: 'mock_jwt_token_kings_78912',
+      user: updatedUser,
+      token,
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    return true;
+  },
+
+  loginWithEmail: async (email: string, password?: string, remember = false) => {
+    set({ isLoading: true });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    // Handle remember email preference
+    await get().setRememberedEmail(email, remember);
+
+    const updatedUser: PassengerProfile = {
+      ...mockPassenger,
+      email,
+    };
+
+    const token = `jwt_kt_email_${Date.now().toString(36)}`;
+    await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
+    await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser));
+
+    set({
+      user: updatedUser,
+      token,
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    return true;
+  },
+
+  loginWithTelegram: async () => {
+    set({ isLoading: true });
+    try {
+      const challenge = TelegramAuthService.generateChallenge();
+      await TelegramAuthService.initiateTelegramAuth(challenge);
+
+      // Verify challenge session
+      const verifyRes = await TelegramAuthService.verifySession(challenge);
+      if (verifyRes.success && verifyRes.data) {
+        const { token, user } = verifyRes.data;
+        await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
+        await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user));
+
+        set({
+          user,
+          token,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        return true;
+      }
+    } catch (err) {
+      console.warn('Telegram auth error:', err);
+    }
+    set({ isLoading: false });
+    return false;
+  },
+
+  register: async (payload: {
+    fullName: string;
+    email: string;
+    phone: string;
+    password?: string;
+  }) => {
+    set({ isLoading: true });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+
+    const newUser: PassengerProfile = {
+      id: `usr_${Date.now().toString(36)}`,
+      fullName: payload.fullName,
+      phone: payload.phone,
+      email: payload.email,
+      rating: 5.0,
+      totalTrips: 0,
+      defaultPaymentMethod: 'telebirr',
+      preferredLanguage: 'en',
+    };
+
+    const token = `jwt_kt_reg_${Date.now().toString(36)}`;
+    await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
+    await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(newUser));
+
+    set({
+      user: newUser,
+      token,
       isAuthenticated: true,
       isLoading: false,
     });
@@ -34,8 +194,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   verifyOtp: async (code: string) => {
     set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    // Accepts any 4 to 6 digit code for development ease
+    await new Promise((resolve) => setTimeout(resolve, 600));
     if (code.length >= 4) {
       set({
         user: mockPassenger,
@@ -49,7 +208,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     return false;
   },
 
-  logout: () => {
+  logout: async () => {
+    await SecureStorageUtil.removeItem(AUTH_TOKEN_KEY);
+    await SecureStorageUtil.removeItem(AUTH_USER_KEY);
     set({
       user: null,
       token: null,
@@ -59,8 +220,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   updateProfile: (updates: Partial<PassengerProfile>) => {
-    set((state) => ({
-      user: state.user ? { ...state.user, ...updates } : null,
-    }));
+    set((state) => {
+      const updated = state.user ? { ...state.user, ...updates } : null;
+      if (updated) {
+        SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(updated));
+      }
+      return { user: updated };
+    });
   },
 }));

@@ -38,6 +38,30 @@ export const shadows = {
     },
     default: {},
   }),
+  medium: Platform.select<ViewStyle>({
+    ios: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.09,
+      shadowRadius: 10,
+    },
+    android: {
+      elevation: 4,
+    },
+    default: {},
+  }),
+  goldGlow: Platform.select<ViewStyle>({
+    ios: {
+      shadowColor: '#C69A45',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+    },
+    android: {
+      elevation: 5,
+    },
+    default: {},
+  }),
   bottomSheet: Platform.select<ViewStyle>({
     ios: {
       shadowColor: '#000000',
