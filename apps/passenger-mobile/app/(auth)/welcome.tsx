@@ -67,7 +67,7 @@ export default function WelcomeScreen() {
           <KingsTaxiLogo variant="hero" showTagline showText />
         </View>
 
-        {/* 5-Slide Advertising Hero Carousel */}
+        {/* 4-Slide Image Advertising Hero Carousel */}
         <LandingHeroCarousel />
 
         {/* Trust Badges */}

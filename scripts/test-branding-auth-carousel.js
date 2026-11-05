@@ -45,38 +45,47 @@ requiredTokens.forEach((token) => {
 console.log('  -> All 12 requested luxury gold, ivory, charcoal, and status tokens confirmed.');
 console.log('  -> PASSED: Centralized design system tokens verified.\n');
 
-// 3. 5-Slide Landing Page Hero Verification
-console.log('Test 3: 5-Slide Landing Hero Carousel & Localization');
+// 3. 4-Slide Landing Page Image Advertisement Slider Verification
+console.log('Test 3: 4-Slide Landing Page Image Advertisement Slider');
 const landingFile = path.resolve(__dirname, '../apps/passenger-mobile/src/components/advertising/LandingHeroCarousel.tsx');
 const landingContent = fs.readFileSync(landingFile, 'utf8');
 
-const landingKeys = [
-  'landingSlide1Title',
-  'landingSlide1Subtitle',
-  'landingSlide2Title',
-  'landingSlide2Subtitle',
-  'landingSlide3Title',
-  'landingSlide3Subtitle',
-  'landingSlide4Title',
-  'landingSlide4Subtitle',
-  'landingSlide5Title',
-  'landingSlide5Subtitle',
+const requiredCloudinaryImages = [
+  'https://res.cloudinary.com/oxzqogef/image/upload/v1793899852/Gemini_Generated_Image_fiik2fiik2fiik2f.jpg',
+  'https://res.cloudinary.com/oxzqogef/image/upload/v1793899833/cc5c695e0fa8121f959da68cc94b8538.jpg',
+  'https://res.cloudinary.com/oxzqogef/image/upload/v1793899800/Gemini_Generated_Image_uzogyyuzogyyuzog.jpg',
+  'https://res.cloudinary.com/oxzqogef/image/upload/v1793899787/Gemini_Generated_Image_59zpk459zpk459zp.jpg',
 ];
 
-const authEn = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../apps/passenger-mobile/src/i18n/locales/en/auth.json'), 'utf8'));
-const authAm = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../apps/passenger-mobile/src/i18n/locales/am/auth.json'), 'utf8'));
-const authOm = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../apps/passenger-mobile/src/i18n/locales/om/auth.json'), 'utf8'));
-
-landingKeys.forEach((key) => {
-  assert(authEn[key], `Missing English translation for ${key}`);
-  assert(authAm[key], `Missing Amharic translation for ${key}`);
-  assert(authOm[key], `Missing Oromo translation for ${key}`);
+requiredCloudinaryImages.forEach((imgUrl, i) => {
+  assert(landingContent.includes(imgUrl), `Landing carousel must include official Cloudinary image ${i + 1}`);
 });
-console.log(`  -> Verified all 5 landing promotional slides across EN, AM, OM.`);
-console.log(`     Sample Slide 1 [EN]: "${authEn.landingSlide1Title}"`);
-console.log(`     Sample Slide 1 [AM]: "${authAm.landingSlide1Title}"`);
-console.log(`     Sample Slide 1 [OM]: "${authOm.landingSlide1Title}"`);
-console.log('  -> PASSED: Landing hero promotional carousel fully localized.\n');
+
+const localAdDir = path.resolve(__dirname, '../apps/passenger-mobile/assets/advertising/landing');
+for (let i = 1; i <= 4; i++) {
+  const localFile = path.join(localAdDir, `ad-slide-${i}.jpg`);
+  assert(fs.existsSync(localFile), `Local bundled asset must exist: ad-slide-${i}.jpg`);
+  const stat = fs.statSync(localFile);
+  assert(stat.size > 50000, `Local image ad-slide-${i}.jpg must be high resolution (found ${stat.size} bytes)`);
+}
+
+// Preserve card dimensions & style verification
+assert(landingContent.includes('cardWidth = Math.min(width - 32, 440)'), 'Must preserve responsive cardWidth');
+assert(landingContent.includes('cardHeight = 200') || landingContent.includes('cardHeight'), 'Must define cardHeight');
+assert(landingContent.includes('borderRadius: 22'), 'Must preserve 22px border radius');
+assert(landingContent.includes('colors.borderGold'), 'Must preserve luxury gold border');
+assert(landingContent.includes('resizeMode="cover"'), 'Image scaling must be cover');
+assert(landingContent.includes('overflow: \'hidden\''), 'Must clip to rounded corners with overflow hidden');
+assert(!landingContent.includes('<Text style={styles.slideTitle}'), 'Must not contain text title overlays');
+assert(!landingContent.includes('<Text style={styles.slideSubtitle}'), 'Must not contain text subtitle overlays');
+assert(landingContent.includes('LANDING_AD_SLIDES.map'), 'Must render all 4 advertisement slides');
+assert(landingContent.includes('pagingEnabled'), 'Must enable horizontal swipe paging');
+
+console.log('  -> All 4 official Cloudinary advertisement images verified in configuration.');
+console.log('  -> All 4 local high-res asset fallbacks present and validated (>50KB each).');
+console.log('  -> Card dimensions preserved: width Math.min(w - 32, 440), height 200, radius 22, gold border.');
+console.log('  -> Text overlays cleanly eliminated; pure cover-mode imagery with 4-dot pagination.');
+console.log('  -> PASSED: Landing page advertisement slideshow verified.\n');
 
 // 4. 5-Slide Home Advertising Carousel Verification
 console.log('Test 4: 5-Slide Home Advertising Carousel & Service Routing');

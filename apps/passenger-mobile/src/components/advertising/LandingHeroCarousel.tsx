@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   useWindowDimensions,
@@ -9,83 +8,64 @@ import {
   NativeScrollEvent,
   TouchableOpacity,
   Image,
+  ImageSourcePropType,
 } from 'react-native';
-import { Car, Hotel, Compass, ShieldCheck, Crown } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
-import { useTranslation } from '../../i18n';
 
-interface SlideData {
+export interface LandingAdSlide {
   id: string;
-  badge: string;
-  titleKey: string;
-  subtitleKey: string;
-  icon: React.ReactNode;
-  accentColor: string;
-  bgLight: string;
+  remoteUri: string;
+  localSource: ImageSourcePropType;
+  alt: string;
 }
 
+// 4 Official Cloudinary Advertisement Creatives
+export const LANDING_AD_SLIDES: LandingAdSlide[] = [
+  {
+    id: 'ad-1',
+    remoteUri:
+      'https://res.cloudinary.com/oxzqogef/image/upload/v1793899852/Gemini_Generated_Image_fiik2fiik2fiik2f.jpg',
+    localSource: require('../../../assets/advertising/landing/ad-slide-1.jpg'),
+    alt: 'Kings Taxi Luxury Ride Experience',
+  },
+  {
+    id: 'ad-2',
+    remoteUri:
+      'https://res.cloudinary.com/oxzqogef/image/upload/v1793899833/cc5c695e0fa8121f959da68cc94b8538.jpg',
+    localSource: require('../../../assets/advertising/landing/ad-slide-2.jpg'),
+    alt: 'Kings Taxi VIP Transport & Hotel Partnerships',
+  },
+  {
+    id: 'ad-3',
+    remoteUri:
+      'https://res.cloudinary.com/oxzqogef/image/upload/v1793899800/Gemini_Generated_Image_uzogyyuzogyyuzog.jpg',
+    localSource: require('../../../assets/advertising/landing/ad-slide-3.jpg'),
+    alt: 'Kings Taxi Timeless Ethiopian Heritage & Tourism',
+  },
+  {
+    id: 'ad-4',
+    remoteUri:
+      'https://res.cloudinary.com/oxzqogef/image/upload/v1793899787/Gemini_Generated_Image_59zpk459zpk459zp.jpg',
+    localSource: require('../../../assets/advertising/landing/ad-slide-4.jpg'),
+    alt: 'Kings Taxi Premium Fleet & Professional Chauffeurs',
+  },
+];
+
 export const LandingHeroCarousel: React.FC = () => {
-  const { t } = useTranslation(['auth', 'home']);
   const { width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const isInteracting = useRef(false);
 
+  // Exact preserved card dimensions
   const cardWidth = Math.min(width - 32, 440);
+  const cardHeight = 200;
 
-  const slides: SlideData[] = [
-    {
-      id: 'transport',
-      badge: 'PREMIUM MOBILITY',
-      titleKey: 'landingSlide1Title',
-      subtitleKey: 'landingSlide1Subtitle',
-      icon: <Car size={26} color={colors.primaryGold} />,
-      accentColor: colors.primaryGold,
-      bgLight: colors.lightGold,
-    },
-    {
-      id: 'hotels',
-      badge: '5-STAR HOSPITALITY',
-      titleKey: 'landingSlide2Title',
-      subtitleKey: 'landingSlide2Subtitle',
-      icon: <Hotel size={26} color="#2563EB" />,
-      accentColor: '#2563EB',
-      bgLight: '#EFF6FF',
-    },
-    {
-      id: 'heritage',
-      badge: 'TIMELESS HERITAGE',
-      titleKey: 'landingSlide3Title',
-      subtitleKey: 'landingSlide3Subtitle',
-      icon: <Compass size={26} color="#7C3AED" />,
-      accentColor: '#7C3AED',
-      bgLight: '#F5F3FF',
-    },
-    {
-      id: 'safety',
-      badge: 'ROYAL SAFETY PROMISE',
-      titleKey: 'landingSlide4Title',
-      subtitleKey: 'landingSlide4Subtitle',
-      icon: <ShieldCheck size={26} color="#059669" />,
-      accentColor: '#059669',
-      bgLight: '#ECFDF5',
-    },
-    {
-      id: 'experience',
-      badge: 'BESPOKE TOURS',
-      titleKey: 'landingSlide5Title',
-      subtitleKey: 'landingSlide5Subtitle',
-      icon: <Crown size={26} color={colors.deepGold} />,
-      accentColor: colors.deepGold,
-      bgLight: '#FFFBEB',
-    },
-  ];
-
-  // Auto-play timer
+  // Auto-play timer (4.5s transition)
   useEffect(() => {
     const timer = setInterval(() => {
       if (!isInteracting.current && scrollRef.current) {
-        const nextIndex = (activeIndex + 1) % slides.length;
+        const nextIndex = (activeIndex + 1) % LANDING_AD_SLIDES.length;
         scrollRef.current.scrollTo({
           x: nextIndex * cardWidth,
           animated: true,
@@ -95,12 +75,12 @@ export const LandingHeroCarousel: React.FC = () => {
     }, 4500);
 
     return () => clearInterval(timer);
-  }, [activeIndex, cardWidth, slides.length]);
+  }, [activeIndex, cardWidth]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(offsetX / cardWidth);
-    if (index >= 0 && index < slides.length && index !== activeIndex) {
+    if (index >= 0 && index < LANDING_AD_SLIDES.length && index !== activeIndex) {
       setActiveIndex(index);
     }
   };
@@ -130,44 +110,30 @@ export const LandingHeroCarousel: React.FC = () => {
             isInteracting.current = false;
           }, 3000);
         }}
-        contentContainerStyle={{
-          alignItems: 'center',
-        }}
-        style={{ width: cardWidth }}
+        contentContainerStyle={styles.scrollContent}
+        style={{ width: cardWidth, height: cardHeight }}
       >
-        {slides.map((slide, index) => (
+        {LANDING_AD_SLIDES.map((slide) => (
           <View
             key={slide.id}
             style={[
               styles.slideCard,
-              { width: cardWidth },
+              { width: cardWidth, height: cardHeight },
             ]}
           >
-            <View style={styles.cardHeader}>
-              <View style={[styles.iconBox, { backgroundColor: slide.bgLight }]}>
-                {slide.icon}
-              </View>
-              <View style={[styles.badgePill, { borderColor: slide.accentColor }]}>
-                <Text style={[styles.badgeText, { color: slide.accentColor }]}>
-                  {slide.badge}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.slideTitle}>
-              {t(slide.titleKey as any)}
-            </Text>
-
-            <Text style={styles.slideSubtitle}>
-              {t(slide.subtitleKey as any)}
-            </Text>
+            <Image
+              source={slide.localSource || { uri: slide.remoteUri }}
+              style={styles.cardImage}
+              resizeMode="cover"
+              accessibilityLabel={slide.alt}
+            />
           </View>
         ))}
       </ScrollView>
 
-      {/* Pagination Indicators */}
+      {/* 4 Pagination Indicators */}
       <View style={styles.indicatorsRow}>
-        {slides.map((_, idx) => {
+        {LANDING_AD_SLIDES.map((_, idx) => {
           const isActive = idx === activeIndex;
           return (
             <TouchableOpacity
@@ -179,7 +145,7 @@ export const LandingHeroCarousel: React.FC = () => {
                 isActive ? styles.dotActive : styles.dotInactive,
               ]}
               accessibilityRole="button"
-              accessibilityLabel={`Slide ${idx + 1} of ${slides.length}`}
+              accessibilityLabel={`Slide ${idx + 1} of ${LANDING_AD_SLIDES.length}`}
             />
           );
         })}
@@ -194,10 +160,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginVertical: 12,
   },
+  scrollContent: {
+    alignItems: 'center',
+  },
   slideCard: {
     backgroundColor: colors.white,
     borderRadius: 22,
-    padding: 22,
     borderWidth: 1.5,
     borderColor: colors.borderGold,
     shadowColor: colors.primaryGold,
@@ -205,43 +173,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 4,
+    overflow: 'hidden',
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  cardImage: {
+    width: '100%',
+    height: '100%',
     borderRadius: 20,
-    borderWidth: 1,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-  },
-  slideTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.dark,
-    lineHeight: 26,
-    letterSpacing: -0.3,
-    marginBottom: 8,
-  },
-  slideSubtitle: {
-    fontSize: 14,
-    color: colors.secondaryText,
-    lineHeight: 21,
   },
   indicatorsRow: {
     flexDirection: 'row',
@@ -253,9 +190,7 @@ const styles = StyleSheet.create({
   dot: {
     height: 8,
     borderRadius: 4,
-    transitionProperty: 'width',
-    transitionDuration: '200ms',
-  } as any,
+  },
   dotActive: {
     width: 24,
     backgroundColor: colors.primaryGold,
@@ -265,4 +200,3 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
 });
-

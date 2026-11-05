@@ -343,3 +343,4 @@ assert(existingDawit.passwordHash === hashPassword('Password123!', existingDawit
 console.log('  -> PASSED: Existing passenger account remains 100% operational.\n');
 
 console.log('>>> ALL 12 REGISTRATION & AUTHENTICATION SCENARIO TESTS PASSED SUCCESSFULLY! <<<');
+
