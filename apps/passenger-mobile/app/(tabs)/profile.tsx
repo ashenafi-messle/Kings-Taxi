@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: theme.spacing.md,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: theme.layout.tabBarContentPadding,
   },
   profileHeader: {
     flexDirection: 'row',

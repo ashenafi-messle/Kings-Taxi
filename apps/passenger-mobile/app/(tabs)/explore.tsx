@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   scrollList: {
     padding: theme.spacing.md,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: theme.layout.tabBarContentPadding,
   },
   contractCalloutCard: {
     flexDirection: 'row',

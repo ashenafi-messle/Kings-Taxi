@@ -24,4 +24,6 @@ export const layout = {
   iconSizeSm: 18,
   iconSizeMd: 24,
   iconSizeLg: 32,
+  tabBarBaseHeight: 52,
+  tabBarContentPadding: 104, // Generous padding to ensure last item is fully above bottom bar
 } as const;

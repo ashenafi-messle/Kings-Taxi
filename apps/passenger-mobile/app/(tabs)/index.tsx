@@ -138,7 +138,7 @@ export default function HomeScreen() {
           {/* Service 2: Hotel Reservations */}
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => router.push('/(tabs)/explore')}
+            onPress={() => router.push('/(tabs)/hotels')}
             style={[styles.serviceCard, styles.hotelCard]}
           >
             <View style={[styles.serviceIconCircle, { backgroundColor: '#EFF6FF' }]}>
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: theme.layout.tabBarContentPadding,
   },
   topHeader: {
     flexDirection: 'row',
