@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { AppHeader, PrimaryButton } from '../../src/components';
+import { useTranslation } from '../../src/i18n';
 
 interface FAQItem {
   question: string;
@@ -48,6 +49,7 @@ const faqs: FAQItem[] = [
 ];
 
 export default function SupportScreen() {
+  const { t } = useTranslation(['profile', 'common', 'navigation']);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
 
   const toggleFaq = (index: number) => {
@@ -56,7 +58,7 @@ export default function SupportScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="Help & Safety Center" showBack />
+      <AppHeader title={t('navigation:titles.support')} showBack />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

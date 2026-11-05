@@ -1,0 +1,19 @@
+{
+  "required": "This field is required",
+  "phoneRequired": "Phone number is required",
+  "phoneInvalid": "Please enter a valid Ethiopian phone number (e.g. 0911234567)",
+  "nameRequired": "Full name is required",
+  "nameTooShort": "Name must be at least 3 characters",
+  "passwordRequired": "Password is required",
+  "passwordTooShort": "Password must be at least 6 characters",
+  "emailInvalid": "Please enter a valid email address",
+  "otpIncomplete": "Please enter all 6 digits of the verification code",
+  "pickupRequired": "Pickup location is required",
+  "destinationRequired": "Destination is required",
+  "sameLocations": "Pickup and destination cannot be identical",
+  "checkInDateRequired": "Check-in date is required",
+  "checkOutDateRequired": "Check-out date is required",
+  "invalidDateRange": "Check-out date must be after check-in date",
+  "paymentMethodRequired": "Please select a payment method"
+}
+

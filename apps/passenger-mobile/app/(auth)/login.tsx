@@ -14,9 +14,11 @@ import { Phone, Lock, Smartphone } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { AppHeader, FormInput, PrimaryButton, SecondaryButton } from '../../src/components';
 import { useAuthStore } from '../../src/stores';
+import { useTranslation } from '../../src/i18n';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['auth', 'validation', 'common']);
   const { login, isLoading } = useAuthStore();
 
   const [phone, setPhone] = useState('+251911234567');
@@ -25,7 +27,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!phone || phone.length < 9) {
-      setError('Please enter a valid Ethiopian phone number (e.g., +251 91 123 4567)');
+      setError(t('validation:phoneInvalid'));
       return;
     }
     setError('');
@@ -33,13 +35,13 @@ export default function LoginScreen() {
     if (success) {
       router.replace('/(tabs)');
     } else {
-      setError('Invalid credentials. Please try again.');
+      setError(t('validation:passwordRequired'));
     }
   };
 
   const handleRequestOtp = () => {
     if (!phone || phone.length < 9) {
-      setError('Please enter your phone number to receive OTP');
+      setError(t('validation:phoneRequired'));
       return;
     }
     router.push({
@@ -50,16 +52,16 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="Sign In" showBack />
+      <AppHeader title={t('signInBtn')} showBack />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            <Text style={styles.welcomeTitle}>Welcome Back</Text>
+            <Text style={styles.welcomeTitle}>{t('loginTitle')}</Text>
             <Text style={styles.subtitle}>
-              Sign in to manage your rides, hotels, and tour contracts.
+              {t('loginSubtitle')}
             </Text>
           </View>
 
@@ -67,8 +69,8 @@ export default function LoginScreen() {
 
           <View style={styles.form}>
             <FormInput
-              label="Ethiopian Phone Number"
-              placeholder="+251 9X XXX XXXX"
+              label={t('phoneLabel')}
+              placeholder={t('phonePlaceholder')}
               value={phone}
               onChangeText={(text) => {
                 setPhone(text);
@@ -79,8 +81,8 @@ export default function LoginScreen() {
             />
 
             <FormInput
-              label="Password"
-              placeholder="Enter your password"
+              label={t('passwordLabel')}
+              placeholder={t('passwordPlaceholder')}
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
@@ -94,11 +96,11 @@ export default function LoginScreen() {
               onPress={() => router.push('/(auth)/forgot-password')}
               style={styles.forgotBtn}
             >
-              <Text style={styles.forgotText}>Forgot password?</Text>
+              <Text style={styles.forgotText}>{t('forgotPassword')}</Text>
             </TouchableOpacity>
 
             <PrimaryButton
-              title="Sign In"
+              title={t('signInBtn')}
               onPress={handleLogin}
               loading={isLoading}
               style={styles.signInBtn}
@@ -106,12 +108,12 @@ export default function LoginScreen() {
 
             <View style={styles.dividerRow}>
               <View style={styles.divider} />
-              <Text style={styles.orText}>OR</Text>
+              <Text style={styles.orText}>-</Text>
               <View style={styles.divider} />
             </View>
 
             <SecondaryButton
-              title="Sign In with SMS / OTP"
+              title={t('verifyTitle')}
               onPress={handleRequestOtp}
               icon={<Smartphone size={18} color={theme.colors.text} />}
               style={styles.otpBtn}
@@ -119,9 +121,9 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Don't have an account?</Text>
+            <Text style={styles.footerText}>{t('noAccount')}</Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-              <Text style={styles.signUpLink}> Sign Up</Text>
+              <Text style={styles.signUpLink}> {t('registerHere')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

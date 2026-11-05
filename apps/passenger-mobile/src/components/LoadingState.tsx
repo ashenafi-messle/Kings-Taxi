@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, ViewStyle } from 'react-native';
 import { theme } from '../theme';
+import { useTranslation } from '../i18n';
 
 export interface LoadingStateProps {
   message?: string;
@@ -8,13 +9,16 @@ export interface LoadingStateProps {
 }
 
 export const LoadingState: React.FC<LoadingStateProps> = ({
-  message = 'Loading...',
+  message,
   style,
 }) => {
+  const { t } = useTranslation('common');
+  const displayMessage = message !== undefined ? message : t('loading');
+
   return (
     <View style={[styles.container, style]}>
       <ActivityIndicator size="large" color={theme.colors.primaryDark} />
-      {message ? <Text style={styles.message}>{message}</Text> : null}
+      {displayMessage ? <Text style={styles.message}>{displayMessage}</Text> : null}
     </View>
   );
 };

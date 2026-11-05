@@ -1,0 +1,26 @@
+{
+  "title": "Secure Checkout",
+  "subtitle": "Choose your preferred payment method in Ethiopian Birr",
+  "methods": {
+    "telebirr": "Telebirr",
+    "telebirrDesc": "Instant mobile wallet payment",
+    "cbeBirr": "CBE Birr",
+    "cbeBirrDesc": "Commercial Bank of Ethiopia mobile payment",
+    "chapa": "Chapa / Bank Cards",
+    "chapaDesc": "Visa, Mastercard & Local Debit Cards",
+    "cash": "Cash on Arrival",
+    "cashDesc": "Pay cash directly to driver or hotel reception"
+  },
+  "summary": "Payment Summary",
+  "orderTotal": "Total Amount",
+  "serviceFeeNotice": "All prices are in Ethiopian Birr (ETB) and inclusive of VAT.",
+  "payBtn": "Pay {{amount}}",
+  "processing": "Authorizing Payment...",
+  "successTitle": "Payment Successful",
+  "successMsg": "Your payment of {{amount}} was processed securely.",
+  "failedTitle": "Payment Failed",
+  "failedMsg": "We could not complete your transaction. Please try another method.",
+  "referenceNumber": "Reference: {{ref}}",
+  "backToBookings": "Go to Bookings"
+}
+

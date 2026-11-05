@@ -10,6 +10,7 @@ import {
 import { MapPin, Award } from 'lucide-react-native';
 import { theme } from '../theme';
 import { HeritageSite } from '../types';
+import { useTranslation } from '../i18n';
 
 export interface HeritageCardProps {
   site: HeritageSite;
@@ -22,6 +23,8 @@ export const HeritageCard: React.FC<HeritageCardProps> = ({
   onPress,
   style,
 }) => {
+  const { t } = useTranslation(['heritage', 'common']);
+
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -32,7 +35,7 @@ export const HeritageCard: React.FC<HeritageCardProps> = ({
       {site.unescoDesignated && (
         <View style={styles.unescoBadge}>
           <Award size={12} color="#FFFFFF" />
-          <Text style={styles.unescoText}>UNESCO World Heritage</Text>
+          <Text style={styles.unescoText}>{t('categories.unesco')}</Text>
         </View>
       )}
       <View style={styles.content}>
@@ -47,8 +50,8 @@ export const HeritageCard: React.FC<HeritageCardProps> = ({
           {site.shortDescription}
         </Text>
         <View style={styles.footerRow}>
-          <Text style={styles.duration}>Est. visit: {site.recommendedDuration}</Text>
-          <Text style={styles.exploreLink}>View Site & Transport →</Text>
+          <Text style={styles.duration}>{t('recommendedDuration')}: {site.recommendedDuration}</Text>
+          <Text style={styles.exploreLink}>{t('common:viewDetails')} →</Text>
         </View>
       </View>
     </TouchableOpacity>

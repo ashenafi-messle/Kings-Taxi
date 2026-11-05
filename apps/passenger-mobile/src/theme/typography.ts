@@ -3,52 +3,52 @@ import { TextStyle } from 'react-native';
 export const typography = {
   h1: {
     fontSize: 28,
-    lineHeight: 34,
+    lineHeight: 36,
     fontWeight: '700',
   } as TextStyle,
   h2: {
     fontSize: 22,
-    lineHeight: 28,
+    lineHeight: 30,
     fontWeight: '700',
   } as TextStyle,
   h3: {
     fontSize: 18,
-    lineHeight: 24,
+    lineHeight: 26,
     fontWeight: '600',
   } as TextStyle,
   h4: {
     fontSize: 16,
-    lineHeight: 22,
+    lineHeight: 24,
     fontWeight: '600',
   } as TextStyle,
   body: {
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 24,
     fontWeight: '400',
   } as TextStyle,
   bodyBold: {
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 24,
     fontWeight: '600',
   } as TextStyle,
   bodySmall: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 20,
     fontWeight: '400',
   } as TextStyle,
   caption: {
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 18,
     fontWeight: '400',
   } as TextStyle,
   captionBold: {
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 18,
     fontWeight: '600',
   } as TextStyle,
   badge: {
     fontSize: 11,
-    lineHeight: 14,
+    lineHeight: 16,
     fontWeight: '600',
   } as TextStyle,
 } as const;

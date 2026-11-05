@@ -13,19 +13,33 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../src/theme';
 import { SearchInput, HotelCard, EmptyState } from '../../src/components';
 import { mockHotels } from '../../src/mocks';
+import { useTranslation } from '../../src/i18n';
 
-const CITIES = ['All Cities', 'Addis Ababa', 'Bahir Dar', 'Hawassa', 'Lalibela'];
+interface CityFilter {
+  id: string;
+  name: string;
+  labelKey: string;
+}
+
+const CITY_OPTIONS: CityFilter[] = [
+  { id: 'ALL', name: 'All Cities', labelKey: 'allCities' },
+  { id: 'Addis Ababa', name: 'Addis Ababa', labelKey: 'cities.addisAbaba' },
+  { id: 'Bahir Dar', name: 'Bahir Dar', labelKey: 'cities.bahirDar' },
+  { id: 'Hawassa', name: 'Hawassa', labelKey: 'cities.hawassa' },
+  { id: 'Lalibela', name: 'Lalibela', labelKey: 'cities.lalibela' },
+];
 
 export default function HotelsTabScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [selectedCity, setSelectedCity] = useState('All Cities');
+  const { t } = useTranslation(['hotels', 'home', 'common']);
+  const [selectedCityId, setSelectedCityId] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredHotels = mockHotels.filter((hotel) => {
     const matchesCity =
-      selectedCity === 'All Cities' ||
-      hotel.city.toLowerCase() === selectedCity.toLowerCase();
+      selectedCityId === 'ALL' ||
+      hotel.city.toLowerCase() === selectedCityId.toLowerCase();
     const matchesSearch =
       hotel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       hotel.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -38,16 +52,16 @@ export default function HotelsTabScreen() {
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
           <HotelIcon size={22} color={theme.colors.hotelAccent} />
-          <Text style={styles.headerTitle}>Hotels & Resorts</Text>
+          <Text style={styles.headerTitle}>{t('home:services.hotelsTitle')}</Text>
         </View>
         <Text style={styles.headerSubtitle}>
-          Verified luxury, boutique & resort stays across Ethiopia
+          {t('home:services.hotelsSubtitle')}
         </Text>
 
         <SearchInput
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search by hotel name or location..."
+          placeholder={t('hotels:searchPlaceholder')}
           style={styles.searchBar}
         />
 
@@ -57,17 +71,17 @@ export default function HotelsTabScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.cityPillsContainer}
         >
-          {CITIES.map((city) => {
-            const isSelected = selectedCity === city;
+          {CITY_OPTIONS.map((item) => {
+            const isSelected = selectedCityId === item.id;
             return (
               <TouchableOpacity
-                key={city}
+                key={item.id}
                 style={[styles.cityPill, isSelected && styles.cityPillActive]}
-                onPress={() => setSelectedCity(city)}
+                onPress={() => setSelectedCityId(item.id)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
               >
-                {city !== 'All Cities' && (
+                {item.id !== 'ALL' && (
                   <MapPin
                     size={12}
                     color={isSelected ? theme.colors.text : theme.colors.textMuted}
@@ -79,7 +93,7 @@ export default function HotelsTabScreen() {
                     isSelected && styles.cityPillTextActive,
                   ]}
                 >
-                  {city}
+                  {t(item.labelKey as any)}
                 </Text>
               </TouchableOpacity>
             );
@@ -96,12 +110,12 @@ export default function HotelsTabScreen() {
       >
         {filteredHotels.length === 0 ? (
           <EmptyState
-            title="No Hotels Found"
-            description="Try modifying your search or selecting a different city filter."
-            actionTitle="Reset Filters"
+            title={t('hotels:noHotelsFound')}
+            description={t('common:noResults')}
+            actionTitle={t('hotels:resetFilters')}
             onAction={() => {
               setSearchQuery('');
-              setSelectedCity('All Cities');
+              setSelectedCityId('ALL');
             }}
           />
         ) : (

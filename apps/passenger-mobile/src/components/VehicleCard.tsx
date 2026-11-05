@@ -10,6 +10,7 @@ import { Car, Users, Clock } from 'lucide-react-native';
 import { theme } from '../theme';
 import { VehicleOption } from '../types';
 import { formatETB } from '../utils/currency';
+import { useTranslation } from '../i18n';
 
 export interface VehicleCardProps {
   vehicle: VehicleOption;
@@ -24,6 +25,38 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
   onSelect,
   style,
 }) => {
+  const { t } = useTranslation(['transportation', 'common']);
+
+  const getVehicleName = () => {
+    switch (vehicle.id) {
+      case 'economy':
+        return t('vehicles.standardName');
+      case 'comfort':
+        return t('vehicles.comfortName');
+      case 'minibus':
+        return t('vehicles.vanName');
+      case 'vip':
+        return t('vehicles.vipName');
+      default:
+        return vehicle.name;
+    }
+  };
+
+  const getVehicleDesc = () => {
+    switch (vehicle.id) {
+      case 'economy':
+        return t('vehicles.standardDesc');
+      case 'comfort':
+        return t('vehicles.comfortDesc');
+      case 'minibus':
+        return t('vehicles.vanDesc');
+      case 'vip':
+        return t('vehicles.vipDesc');
+      default:
+        return vehicle.description;
+    }
+  };
+
   return (
     <TouchableOpacity
       activeOpacity={0.8}
@@ -42,21 +75,21 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
       </View>
       <View style={styles.detailsContainer}>
         <View style={styles.headerRow}>
-          <Text style={styles.name}>{vehicle.name}</Text>
+          <Text style={styles.name}>{getVehicleName()}</Text>
           <View style={styles.capacityBadge}>
             <Users size={12} color={theme.colors.textMuted} />
             <Text style={styles.capacityText}>{vehicle.capacity}</Text>
           </View>
         </View>
-        <Text style={styles.description}>{vehicle.description}</Text>
+        <Text style={styles.description}>{getVehicleDesc()}</Text>
         <View style={styles.etaRow}>
           <Clock size={12} color={theme.colors.textMuted} />
-          <Text style={styles.etaText}>{vehicle.etaMinutes} min away</Text>
+          <Text style={styles.etaText}>{vehicle.etaMinutes} {t('common:mins')}</Text>
         </View>
       </View>
       <View style={styles.priceContainer}>
         <Text style={styles.price}>{formatETB(vehicle.estimatedPrice)}</Text>
-        <Text style={styles.estLabel}>Est. Fare</Text>
+        <Text style={styles.estLabel}>{t('fareEstimate')}</Text>
       </View>
     </TouchableOpacity>
   );

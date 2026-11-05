@@ -28,6 +28,7 @@ import { mockHeritageSites } from '../../src/mocks';
 import { useBookingStore } from '../../src/stores';
 import { formatETB } from '../../src/utils/currency';
 import { CustomContractStop } from '../../src/types';
+import { useTranslation } from '../../src/i18n';
 
 interface VehicleContractChoice {
   id: 'suv' | 'van' | 'minibus' | 'coaster_bus';
@@ -70,6 +71,7 @@ const contractVehicles: VehicleContractChoice[] = [
 
 export default function ContractBuilderScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['heritage', 'common', 'navigation']);
   const { createTourContract } = useBookingStore();
 
   // Initial stops: Gondar Fasil Ghebbi & Debre Berhan Selassie (from prompt example)
@@ -157,7 +159,7 @@ export default function ContractBuilderScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="Chauffeured Tour Contract" showBack />
+      <AppHeader title={t('customTour.title')} showBack />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -165,20 +167,20 @@ export default function ContractBuilderScreen() {
         {submittedContract ? (
           <View style={styles.confirmationSuccess}>
             <CheckCircle2 size={54} color={theme.colors.success} />
-            <Text style={styles.successTitle}>Contract Request Submitted!</Text>
+            <Text style={styles.successTitle}>{t('customTour.inquirySubmitted')}</Text>
             <Text style={styles.successDesc}>
-              Your custom tour request has been recorded. Kings Taxi Tour Dispatch will review your stops and confirm vehicle and driver assignment.
+              {t('customTour.inquirySuccessMsg')}
             </Text>
 
             <View style={styles.quotationNotice}>
               <AlertCircle size={18} color="#92400E" />
               <Text style={styles.quotationNoticeText}>
-                Important: The displayed amount of {formatETB(submittedContract.estimatedPriceETB)} is an ESTIMATED QUOTATION. Final payable amount is confirmed upon dispatch approval.
+                {t('customTour.estimatedPrice')}: {formatETB(submittedContract.estimatedPriceETB)}
               </Text>
             </View>
 
             <PrimaryButton
-              title="View in My Bookings"
+              title={t('common:done')}
               onPress={() => router.replace('/(tabs)/bookings')}
               style={styles.viewBookingsBtn}
             />
@@ -187,22 +189,22 @@ export default function ContractBuilderScreen() {
           <>
             {/* Value Explanation Banner */}
             <View style={styles.explainerCard}>
-              <Text style={styles.explainerTitle}>Full-Contract Multi-Stop Transport</Text>
+              <Text style={styles.explainerTitle}>{t('customTour.title')}</Text>
               <Text style={styles.explainerDesc}>
-                Customize your private chauffeured itinerary. Select heritage landmarks, set visit order, choose an all-terrain vehicle, and receive an upfront ETB contract estimate.
+                {t('customTour.subtitle')}
               </Text>
             </View>
 
             {/* 1. Departure Point */}
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionHeaderTitle}>1. Departure Location</Text>
+              <Text style={styles.sectionHeaderTitle}>{t('customTour.stepDestination')}</Text>
               <View style={styles.inputContainer}>
                 <MapPin size={18} color={theme.colors.primaryDark} />
                 <TextInput
                   value={departureLocation}
                   onChangeText={setDepartureLocation}
                   style={styles.textInput}
-                  placeholder="Enter pickup city or airport..."
+                  placeholder={t('searchPlaceholder')}
                 />
               </View>
             </View>

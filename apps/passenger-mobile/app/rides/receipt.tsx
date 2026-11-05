@@ -20,9 +20,11 @@ import {
 } from '../../src/components';
 import { useRideStore } from '../../src/stores';
 import { formatETB } from '../../src/utils/currency';
+import { useTranslation } from '../../src/i18n';
 
 export default function RideReceiptScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['transportation', 'common', 'navigation', 'payments']);
   const { currentRide, resetRide } = useRideStore();
 
   const [rating, setRating] = useState(5);
@@ -55,15 +57,15 @@ export default function RideReceiptScreen() {
   };
 
   const breakdownItems = [
-    { label: 'Base Flag-Down Fare', amount: 180 },
-    { label: `Distance Fare (${ride.distanceKm} km)`, amount: 220 },
-    { label: `Travel Time (${ride.estimatedDurationMins} mins)`, amount: 80 },
+    { label: t('baseFare'), amount: 180 },
+    { label: `${t('distanceCharge')} (${ride.distanceKm} ${t('common:km')})`, amount: 220 },
+    { label: `${t('timeCharge')} (${ride.estimatedDurationMins} ${t('common:mins')})`, amount: 80 },
   ];
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <AppHeader
-        title="Digital Trip Receipt"
+        title={t('navigation:titles.rideReceipt')}
         showBack
         onBack={() => {
           resetRide();
@@ -82,8 +84,8 @@ export default function RideReceiptScreen() {
         {/* Success Stamp */}
         <View style={styles.successStamp}>
           <CheckCircle2 size={44} color={theme.colors.success} />
-          <Text style={styles.paidTitle}>Payment Completed</Text>
-          <Text style={styles.paidMethod}>Paid via Telebirr SuperApp</Text>
+          <Text style={styles.paidTitle}>{t('payments:successTitle')}</Text>
+          <Text style={styles.paidMethod}>Telebirr SuperApp</Text>
           <Text style={styles.totalAmountText}>
             {formatETB(ride.finalPrice || ride.estimatedPrice)}
           </Text>
@@ -102,19 +104,19 @@ export default function RideReceiptScreen() {
         </View>
 
         {/* Itemized Price Breakdown */}
-        <Text style={styles.sectionTitle}>Itemized Fare Breakdown</Text>
+        <Text style={styles.sectionTitle}>{t('receiptTitle')}</Text>
         <PriceBreakdown
           items={breakdownItems}
           total={ride.finalPrice || ride.estimatedPrice}
-          totalLabel="Total Fare (ETB)"
+          totalLabel={t('totalFare')}
           style={styles.priceCard}
         />
 
         {/* Rate Driver Section */}
         <View style={styles.ratingCard}>
-          <Text style={styles.ratingTitle}>Rate Your Experience</Text>
+          <Text style={styles.ratingTitle}>{t('rateDriverTitle')}</Text>
           <Text style={styles.ratingSubtitle}>
-            How was your ride with {ride.driver?.name || 'your driver'}?
+            {t('rateDriverPrompt', { name: ride.driver?.name || t('driverName') })}
           </Text>
 
           {ride.driver && (
@@ -138,7 +140,7 @@ export default function RideReceiptScreen() {
           />
 
           <TextInput
-            placeholder="Add an optional compliment or feedback..."
+            placeholder={t('submitRating')}
             placeholderTextColor={theme.colors.textLight}
             value={feedback}
             onChangeText={setFeedback}
@@ -150,7 +152,7 @@ export default function RideReceiptScreen() {
 
         {/* Done Button */}
         <PrimaryButton
-          title={submitted ? 'Rating Submitted!' : 'Submit Rating & Done'}
+          title={submitted ? t('common:done') : `${t('submitRating')} & ${t('doneBtn')}`}
           onPress={handleFinish}
           style={styles.doneBtn}
         />

@@ -13,9 +13,11 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { theme } from '../../src/theme';
 import { AppHeader, PrimaryButton } from '../../src/components';
 import { useAuthStore } from '../../src/stores';
+import { useTranslation } from '../../src/i18n';
 
 export default function VerifyOtpScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['auth', 'validation', 'common']);
   const params = useLocalSearchParams();
   const phone = (params.phone as string) || '+251 91 123 4567';
 
@@ -33,7 +35,7 @@ export default function VerifyOtpScreen() {
 
   const handleVerify = async () => {
     if (code.length < 4) {
-      setError('Please enter the 4 to 6 digit verification code sent to your phone');
+      setError(t('validation:otpIncomplete'));
       return;
     }
 
@@ -42,7 +44,7 @@ export default function VerifyOtpScreen() {
     if (success) {
       router.replace('/(tabs)');
     } else {
-      setError('Invalid verification code. Please check and try again.');
+      setError(t('invalidOtp'));
     }
   };
 
@@ -55,15 +57,15 @@ export default function VerifyOtpScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="OTP Verification" showBack />
+      <AppHeader title={t('verifyTitle')} showBack />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>Enter Verification Code</Text>
+          <Text style={styles.title}>{t('verifyTitle')}</Text>
           <Text style={styles.subtitle}>
-            We sent a verification SMS to <Text style={styles.phoneBold}>{phone}</Text>
+            {t('verifySubtitle', { phone })}
           </Text>
 
           {error ? <Text style={styles.errorBanner}>{error}</Text> : null}
@@ -104,17 +106,17 @@ export default function VerifyOtpScreen() {
           <View style={styles.resendRow}>
             {timer > 0 ? (
               <Text style={styles.timerText}>
-                Resend code in <Text style={styles.timerBold}>{timer}s</Text>
+                {t('resendIn', { seconds: timer })}
               </Text>
             ) : (
               <TouchableOpacity onPress={handleResend}>
-                <Text style={styles.resendAction}>Resend Verification Code</Text>
+                <Text style={styles.resendAction}>{t('resendCode')}</Text>
               </TouchableOpacity>
             )}
           </View>
 
           <PrimaryButton
-            title="Verify & Continue"
+            title={t('verifyBtn')}
             onPress={handleVerify}
             loading={isLoading}
             disabled={code.length < 4}

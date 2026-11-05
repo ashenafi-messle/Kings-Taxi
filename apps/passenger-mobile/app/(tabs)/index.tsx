@@ -25,14 +25,23 @@ import { theme } from '../../src/theme';
 import { SearchInput, DestinationCard, StatusBadge } from '../../src/components';
 import { useAuthStore, useRideStore } from '../../src/stores';
 import { mockLocations, mockHeritageSites, mockHotels } from '../../src/mocks';
+import { useTranslation } from '../../src/i18n';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['home', 'transportation', 'common', 'navigation']);
   const { user } = useAuthStore();
   const { currentRide, setDestination, setPickup } = useRideStore();
   const [searchQuery, setSearchQuery] = useState('');
 
   const firstName = user?.fullName?.split(' ')[0] || 'Passenger';
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return t('greetingMorning', { name: firstName });
+    if (hour < 18) return t('greetingAfternoon', { name: firstName });
+    return t('greetingEvening', { name: firstName });
+  };
 
   const handleSelectRecentDestination = (loc: typeof mockLocations[0]) => {
     setDestination(loc);
@@ -56,7 +65,7 @@ export default function HomeScreen() {
               <Crown size={20} color={theme.colors.primary} />
               <Text style={styles.brandName}>KINGS TAXI</Text>
             </View>
-            <Text style={styles.greetingText}>Selam, {firstName}! 👋</Text>
+            <Text style={styles.greetingText}>{getGreeting()}</Text>
           </View>
           <TouchableOpacity
             style={styles.avatarCircle}
@@ -73,7 +82,7 @@ export default function HomeScreen() {
         {/* Current Location Pill */}
         <View style={styles.locationPill}>
           <MapPin size={14} color={theme.colors.primaryDark} />
-          <Text style={styles.locationLabel}>Pickup Location:</Text>
+          <Text style={styles.locationLabel}>{t('transportation:pickupLocation')}:</Text>
           <Text style={styles.locationValue} numberOfLines={1}>
             Bole Airport, Addis Ababa
           </Text>
@@ -88,7 +97,7 @@ export default function HomeScreen() {
           <SearchInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Where to? (e.g. Skylight Hotel, Piassa...)"
+            placeholder={t('searchDestinationPlaceholder')}
           />
         </TouchableOpacity>
 
@@ -104,7 +113,7 @@ export default function HomeScreen() {
                 <Car size={20} color={theme.colors.primaryDark} />
               </View>
               <View>
-                <Text style={styles.activeRideTitle}>Active Trip in Progress</Text>
+                <Text style={styles.activeRideTitle}>{t('activeRideBannerTitle')}</Text>
                 <Text style={styles.activeRideSubtitle} numberOfLines={1}>
                   {currentRide.destination.title}
                 </Text>
@@ -128,10 +137,10 @@ export default function HomeScreen() {
             <View style={[styles.serviceIconCircle, { backgroundColor: '#FFF9E6' }]}>
               <Car size={26} color={theme.colors.primaryDark} />
             </View>
-            <Text style={styles.serviceTitle}>Kings Rides</Text>
-            <Text style={styles.serviceDesc}>Instant city rides & airport transfers</Text>
+            <Text style={styles.serviceTitle}>{t('services.rideTitle')}</Text>
+            <Text style={styles.serviceDesc}>{t('services.rideSubtitle')}</Text>
             <View style={styles.serviceBadge}>
-              <Text style={styles.serviceBadgeText}>From 120 ETB</Text>
+              <Text style={styles.serviceBadgeText}>120 ETB+</Text>
             </View>
           </TouchableOpacity>
 
@@ -144,11 +153,11 @@ export default function HomeScreen() {
             <View style={[styles.serviceIconCircle, { backgroundColor: '#EFF6FF' }]}>
               <Hotel size={26} color={theme.colors.hotelAccent} />
             </View>
-            <Text style={styles.serviceTitle}>Verified Hotels</Text>
-            <Text style={styles.serviceDesc}>Luxury stays across Ethiopian cities</Text>
+            <Text style={styles.serviceTitle}>{t('services.hotelsTitle')}</Text>
+            <Text style={styles.serviceDesc}>{t('services.hotelsSubtitle')}</Text>
             <View style={[styles.serviceBadge, { backgroundColor: '#DBEAFE' }]}>
               <Text style={[styles.serviceBadgeText, { color: theme.colors.hotelAccent }]}>
-                Verified
+                {t('common:status')}
               </Text>
             </View>
           </TouchableOpacity>
@@ -162,11 +171,11 @@ export default function HomeScreen() {
             <View style={[styles.serviceIconCircle, { backgroundColor: '#F3E8FF' }]}>
               <Compass size={26} color={theme.colors.heritageAccent} />
             </View>
-            <Text style={styles.serviceTitle}>Heritage Tours</Text>
-            <Text style={styles.serviceDesc}>UNESCO landmarks & cultural sites</Text>
+            <Text style={styles.serviceTitle}>{t('services.heritageTitle')}</Text>
+            <Text style={styles.serviceDesc}>{t('services.heritageSubtitle')}</Text>
             <View style={[styles.serviceBadge, { backgroundColor: '#EDE9FE' }]}>
               <Text style={[styles.serviceBadgeText, { color: theme.colors.heritageAccent }]}>
-                Historical
+                UNESCO
               </Text>
             </View>
           </TouchableOpacity>
@@ -180,10 +189,10 @@ export default function HomeScreen() {
             <View style={[styles.serviceIconCircle, { backgroundColor: '#ECFDF5' }]}>
               <FileText size={26} color="#059669" />
             </View>
-            <Text style={styles.serviceTitle}>Full Contract</Text>
-            <Text style={styles.serviceDesc}>Multi-destination dedicated transport</Text>
+            <Text style={styles.serviceTitle}>{t('services.customTourTitle')}</Text>
+            <Text style={styles.serviceDesc}>{t('services.customTourSubtitle')}</Text>
             <View style={[styles.serviceBadge, { backgroundColor: '#D1FAE5' }]}>
-              <Text style={[styles.serviceBadgeText, { color: '#059669' }]}>Chauffeured</Text>
+              <Text style={[styles.serviceBadgeText, { color: '#059669' }]}>VIP</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -197,16 +206,16 @@ export default function HomeScreen() {
           <View style={styles.featuredContractContent}>
             <View style={styles.goldPill}>
               <Sparkles size={12} color="#FFFFFF" />
-              <Text style={styles.goldPillText}>ROYAL CONTRACT EXPEDITION</Text>
+              <Text style={styles.goldPillText}>{t('promoTitle').toUpperCase()}</Text>
             </View>
             <Text style={styles.featuredContractTitle}>
-              Historic Northern Route Tour
+              {t('promoTitle')}
             </Text>
             <Text style={styles.featuredContractDesc}>
-              Dedicated chauffeured 4WD vehicle: Gondar Castles, Fasilides Bath & Debre Berhan.
+              {t('promoSubtitle')}
             </Text>
             <View style={styles.featuredContractAction}>
-              <Text style={styles.featuredActionText}>Build Custom Itinerary →</Text>
+              <Text style={styles.featuredActionText}>{t('services.customTourTitle')} →</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -215,7 +224,7 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
             <Clock size={18} color={theme.colors.text} />
-            <Text style={styles.sectionTitle}>Frequent Destinations</Text>
+            <Text style={styles.sectionTitle}>{t('recentActivity')}</Text>
           </View>
         </View>
         <View style={styles.recentDestinationsContainer}>
@@ -233,10 +242,10 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
             <Compass size={18} color={theme.colors.text} />
-            <Text style={styles.sectionTitle}>Explore Ethiopia</Text>
+            <Text style={styles.sectionTitle}>{t('popularDestinations')}</Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/(tabs)/explore')}>
-            <Text style={styles.seeAllText}>See All</Text>
+            <Text style={styles.seeAllText}>{t('seeAllDestinations')}</Text>
           </TouchableOpacity>
         </View>
         <ScrollView
@@ -266,9 +275,9 @@ export default function HomeScreen() {
         <View style={styles.safetyBanner}>
           <ShieldCheck size={22} color={theme.colors.success} />
           <View style={styles.safetyTextWrap}>
-            <Text style={styles.safetyTitle}>Verified Drivers & Transparent Fares</Text>
+            <Text style={styles.safetyTitle}>{t('tagline', { ns: 'auth' })}</Text>
             <Text style={styles.safetySubtitle}>
-              Every ride is insured and monitored with emergency support and digital receipts.
+              {t('services:vanDesc', { defaultValue: 'Insured and monitored passenger mobility across Ethiopia' })}
             </Text>
           </View>
         </View>

@@ -1,0 +1,19 @@
+{
+  "required": "ይህ መረጃ ያስፈልጋል",
+  "phoneRequired": "ስልክ ቁጥር ማስገባት ግዴታ ነው",
+  "phoneInvalid": "እባክዎ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ (ለምሳሌ 0911234567)",
+  "nameRequired": "ሙሉ ስም ማስገባት ግዴታ ነው",
+  "nameTooShort": "ስም ቢያንስ 3 ፊደላት መሆን አለበት",
+  "passwordRequired": "የይለፍ ቃል ማስገባት ግዴታ ነው",
+  "passwordTooShort": "የይለፍ ቃል ቢያንስ 6 ቁምፊዎች መሆን አለበት",
+  "emailInvalid": "እባክዎ ትክክለኛ የኢሜይል አድራሻ ያስገቡ",
+  "otpIncomplete": "እባክዎ ባለ 6-አሃዙን የማረጋገጫ ኮድ ሙሉ በሙሉ ያስገቡ",
+  "pickupRequired": "የመነሻ ቦታ መምረጥ ግዴታ ነው",
+  "destinationRequired": "የመድረሻ ቦታ መምረጥ ግዴታ ነው",
+  "sameLocations": "የመነሻና የመድረሻ ቦታ አንድ መሆን አይችሉም",
+  "checkInDateRequired": "የመግቢያ ቀን መመረጥ አለበት",
+  "checkOutDateRequired": "የመውጫ ቀን መመረጥ አለበት",
+  "invalidDateRange": "የመውጫ ቀን ከመግቢያ ቀን በኋላ መሆን አለበት",
+  "paymentMethodRequired": "እባክዎ የክፍያ ዘዴ ይምረጡ"
+}
+

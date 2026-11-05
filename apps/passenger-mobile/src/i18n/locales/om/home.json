@@ -1,0 +1,29 @@
+{
+  "greetingMorning": "Akkam bulte, {{name}}",
+  "greetingAfternoon": "Akkam oolte, {{name}}",
+  "greetingEvening": "Akkam galte, {{name}}",
+  "whereTo": "Har'a gara kam deemuu barbaaddu?",
+  "searchDestinationPlaceholder": "Bakkeewwan, hoteelota ykn imala barbaadi...",
+  "quickServicesTitle": "Tajaajiloota Geejjibaa fi Turizimii",
+  "services": {
+    "rideTitle": "Geejjiba Ajajuu",
+    "rideSubtitle": "Taaksii magaalaa fi imala sadarkaa ol'aanaa",
+    "hotelsTitle": "Hoteelota fi Loojota",
+    "hotelsSubtitle": "Bakkeewwan boqonnaa filatamoo Itoophiyaa",
+    "heritageTitle": "Daawwannaa Dhaalaa",
+    "heritageSubtitle": "Bakkeewwan seena-qabeessa fi aadaa",
+    "customTourTitle": "Kireeffannaa Addaa",
+    "customTourSubtitle": "Imala qophaa'aa magaalota gidduu"
+  },
+  "activeRideBannerTitle": "Imalli Adeemsarra Jira",
+  "activeRideBannerSubtitle": "Gara {{destination}} deemaa jira • daqiiqaa {{eta}}tu hafa",
+  "trackRideBtn": "Imala Hordofi",
+  "popularDestinations": "Bakkeewwan Jaallataman",
+  "seeAllDestinations": "Hunda Daawwadhaa",
+  "featuredHotels": "Hoteelota Qananii Filataman",
+  "recentActivity": "Sochii Dhiyoo",
+  "noRecentActivity": "Ajajni dhiyoo hin jiru. Har'uma imala keessan jalqabaa!",
+  "promoTitle": "Itoophiyaa Kings Taxi'n Daawwadhaa",
+  "promoSubtitle": "Telebirr ykn CBE Birr fayyadamuun paakeejota daawwannaa dhaalaa irratti hir'ifama 15% argadhaa."
+}
+

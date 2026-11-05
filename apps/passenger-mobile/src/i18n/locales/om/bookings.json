@@ -1,0 +1,32 @@
+{
+  "tabs": {
+    "active": "Ammaa",
+    "completed": "Xumurame",
+    "cancelled": "Haqame"
+  },
+  "emptyState": {
+    "activeTitle": "Ajajni Ammaa Hin Jiru",
+    "activeSubtitle": "Yeroo ammaa kanatti imalli adeemsarra jiru ykn qabannaan hoteelaa hin jiru.",
+    "completedTitle": "Ajajni Xumurame Hin Jiru",
+    "completedSubtitle": "Imalli fi qabannaan hoteelaa xumuraman asitti mul'atu.",
+    "cancelledTitle": "Ajajni Haqame Hin Jiru",
+    "cancelledSubtitle": "Hanga ammaatti ajajni haqame tokkollee hin jiru."
+  },
+  "card": {
+    "rideType": "Imala Taaksii",
+    "hotelType": "Turtii Hoteelaa",
+    "tourType": "Daawwannaa Dhaalaa",
+    "statusActive": "Adeemsarra",
+    "statusCompleted": "Xumurame",
+    "statusCancelled": "Haqame",
+    "bookingCode": "Koodii Ajajaa #{{id}}",
+    "pickup": "Ka'umsa",
+    "dropoff": "Ga'umsa",
+    "checkIn": "Seensa",
+    "totalPrice": "Kaffaltii Waliigalaa",
+    "viewReceipt": "Nagahee Ilaali",
+    "rebook": "Irra Deebi'ii Qabadhu",
+    "cancelBooking": "Ajaja Haqi"
+  }
+}
+

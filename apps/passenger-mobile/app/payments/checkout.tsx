@@ -26,9 +26,11 @@ import {
 import { mockPaymentMethods } from '../../src/mocks';
 import { PaymentMethodType, PaymentStatus } from '../../src/types';
 import { formatETB } from '../../src/utils/currency';
+import { useTranslation } from '../../src/i18n';
 
 export default function CheckoutPaymentScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['payments', 'common', 'navigation']);
   const params = useLocalSearchParams();
 
   const amount = Number(params.amount) || 480;
@@ -71,7 +73,7 @@ export default function CheckoutPaymentScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <AppHeader
-        title="Secure Payment"
+        title={t('title')}
         showBack
         onBack={() => {
           if (paymentStatus === 'PROCESSING') return; // Do not interrupt in flight
@@ -85,13 +87,13 @@ export default function CheckoutPaymentScreen() {
         {paymentStatus === 'PROCESSING' && (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={theme.colors.primaryDark} />
-            <Text style={styles.processingTitle}>Authorizing Transaction...</Text>
+            <Text style={styles.processingTitle}>{t('processing')}</Text>
             <Text style={styles.processingDesc}>
-              Connecting to {mockPaymentMethods.find((m) => m.id === selectedMethod)?.name}. Please do not close this window.
+              {mockPaymentMethods.find((m) => m.id === selectedMethod)?.name}
             </Text>
             <View style={styles.securityBadge}>
               <Lock size={14} color="#059669" />
-              <Text style={styles.securityBadgeText}>256-Bit Encrypted Financial Tunnel</Text>
+              <Text style={styles.securityBadgeText}>256-Bit Encrypted</Text>
             </View>
           </View>
         )}
@@ -99,14 +101,14 @@ export default function CheckoutPaymentScreen() {
         {paymentStatus === 'COMPLETED' && (
           <View style={styles.centerContainer}>
             <CheckCircle2 size={58} color={theme.colors.success} />
-            <Text style={styles.successTitle}>Payment Verified & Completed</Text>
+            <Text style={styles.successTitle}>{t('successTitle')}</Text>
             <Text style={styles.successAmount}>{formatETB(amount)}</Text>
-            <Text style={styles.successRef}>Reference ID: {transactionRef}</Text>
+            <Text style={styles.successRef}>{t('referenceNumber', { ref: transactionRef })}</Text>
             <Text style={styles.successDesc}>
-              Authoritative transaction confirmed by Kings Taxi central gateway. Digital receipt archived in My Bookings.
+              {t('successMsg', { amount: formatETB(amount) })}
             </Text>
             <PrimaryButton
-              title="Done & View Bookings"
+              title={t('backToBookings')}
               onPress={handleFinish}
               style={styles.doneBtn}
             />
@@ -116,12 +118,12 @@ export default function CheckoutPaymentScreen() {
         {paymentStatus === 'FAILED' && (
           <View style={styles.centerContainer}>
             <XCircle size={58} color={theme.colors.danger} />
-            <Text style={styles.failedTitle}>Payment Failed</Text>
+            <Text style={styles.failedTitle}>{t('failedTitle')}</Text>
             <Text style={styles.failedDesc}>
-              The payment provider could not authorize this transaction. Please ensure sufficient funds or select another payment channel.
+              {t('failedMsg')}
             </Text>
             <PrimaryButton
-              title="Try Again"
+              title={t('common:retry')}
               onPress={handleRetry}
               style={styles.retryBtn}
             />
@@ -132,13 +134,13 @@ export default function CheckoutPaymentScreen() {
           <>
             {/* Amount Banner */}
             <View style={styles.amountBanner}>
-              <Text style={styles.amountLabel}>Total Payable Amount</Text>
+              <Text style={styles.amountLabel}>{t('orderTotal')}</Text>
               <Text style={styles.amountValue}>{formatETB(amount)}</Text>
               <Text style={styles.serviceDesc}>{description}</Text>
             </View>
 
             {/* Select Method */}
-            <Text style={styles.sectionTitle}>Select Ethiopian Payment Gateway</Text>
+            <Text style={styles.sectionTitle}>{t('subtitle')}</Text>
             <View style={styles.methodsList}>
               {mockPaymentMethods.map((method) => (
                 <PaymentMethodCard
@@ -151,26 +153,24 @@ export default function CheckoutPaymentScreen() {
             </View>
 
             {/* Price Breakdown */}
-            <Text style={styles.sectionTitle}>Payment Breakdown</Text>
+            <Text style={styles.sectionTitle}>{t('summary')}</Text>
             <PriceBreakdown
               items={breakdownItems}
               total={amount}
               style={styles.priceBreakdown}
             />
 
-            {/* Security Assurance Footer */}
+            {/* Security Notice */}
             <View style={styles.securityFooter}>
               <ShieldCheck size={18} color="#059669" />
               <Text style={styles.securityText}>
-                Zero bank card numbers stored on device. Transactions authenticated server-side.
+                {t('serviceFeeNotice')}
               </Text>
             </View>
 
-            {/* Pay Button with Idempotency Protection */}
+            {/* Pay Button */}
             <PrimaryButton
-              title={`Pay ${formatETB(amount)} via ${
-                mockPaymentMethods.find((m) => m.id === selectedMethod)?.name || 'Gateway'
-              }`}
+              title={t('payBtn', { amount: formatETB(amount) })}
               onPress={handleProcessPayment}
               disabled={isSubmitting}
               style={styles.payBtn}

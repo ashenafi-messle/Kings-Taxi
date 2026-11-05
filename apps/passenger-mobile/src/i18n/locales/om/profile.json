@@ -1,0 +1,48 @@
+{
+  "title": "Akkaawuntii Koo",
+  "memberSince": "Miseensa bara {{year}} irraa eegalee",
+  "verifiedPassenger": "Imaltuu Mirkanaa'e",
+  "sections": {
+    "account": "Qindaa'ina Akkaawuntii",
+    "preferences": "Filannoowwan",
+    "support": "Deeggarsaa fi Seeraa"
+  },
+  "items": {
+    "personalInfo": "Odeeffannoo Dhuunfaa",
+    "editProfile": "Odeeffannoo Gulaali",
+    "language": "Filannoo Afaanii",
+    "security": "Nageenyaa fi Baayoomeetiriiksii",
+    "paymentMethods": "Mala Kaffaltii",
+    "savedPlaces": "Bakkeewwan Olkaawwatan",
+    "notifications": "Beeksisawwanii fi Nagahee SMS",
+    "helpSupport": "Gargaarsa fi Deeggarsa",
+    "privacyPolicy": "Imaammata Dhuunfaa",
+    "termsOfService": "Waliigaltee Tajaajilaa",
+    "logout": "Ba'i"
+  },
+  "edit": {
+    "editTitle": "Odeeffannoo Gulaali",
+    "fullName": "Maqaa Guutuu",
+    "email": "Teessoo Imeelii",
+    "phone": "Lakkoofsa Bilbilaa",
+    "saveChanges": "Jijjiirama Olkaayi",
+    "profileUpdated": "Odeeffannoon dhuunfaa milkaa'inaan haaromeera"
+  },
+  "language": {
+    "title": "Filannoo Afaanii",
+    "description": "Ajaja taaksii, nagahee fi qabiyyee appilikeeshinii keessatti afaan ittiin fayyadamuu barbaaddan filadhaa.",
+    "english": "Afaan Ingilizii",
+    "amharic": "Afaan Amaaraa",
+    "oromo": "Afaan Oromoo",
+    "nativeEnglish": "English",
+    "nativeAmharic": "አማርኛ",
+    "nativeOromo": "Afaan Oromoo"
+  },
+  "logoutModal": {
+    "title": "Kings Taxi Keessaa Ba'uu Barbaadduu?",
+    "message": "Akkaawuntii imaltuu keessan keessaa ba'uu keessan mirkaneeffattuu?",
+    "cancel": "Dhiisi",
+    "confirm": "Ba'i"
+  }
+}
+

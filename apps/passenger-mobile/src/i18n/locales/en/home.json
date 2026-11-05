@@ -1,0 +1,29 @@
+{
+  "greetingMorning": "Good morning, {{name}}",
+  "greetingAfternoon": "Good afternoon, {{name}}",
+  "greetingEvening": "Good evening, {{name}}",
+  "whereTo": "Where would you like to go today?",
+  "searchDestinationPlaceholder": "Search destinations, hotels, or tours...",
+  "quickServicesTitle": "Our Mobility Services",
+  "services": {
+    "rideTitle": "Book a Ride",
+    "rideSubtitle": "City cabs & luxury transport",
+    "hotelsTitle": "Hotels & Lodges",
+    "hotelsSubtitle": "Premier stays across Ethiopia",
+    "heritageTitle": "Heritage Tours",
+    "heritageSubtitle": "Historic destinations & circuits",
+    "customTourTitle": "Custom Charters",
+    "customTourSubtitle": "Tailored intercity itineraries"
+  },
+  "activeRideBannerTitle": "Ride in Progress",
+  "activeRideBannerSubtitle": "Heading to {{destination}} • {{eta}} min away",
+  "trackRideBtn": "Track Journey",
+  "popularDestinations": "Popular Destinations",
+  "seeAllDestinations": "Explore All",
+  "featuredHotels": "Featured Luxury Stays",
+  "recentActivity": "Recent Activity",
+  "noRecentActivity": "No recent bookings. Where will you travel first?",
+  "promoTitle": "Explore Ethiopia with Kings Taxi",
+  "promoSubtitle": "Save 15% on multi-day heritage tour packages using Telebirr or CBE Birr."
+}
+

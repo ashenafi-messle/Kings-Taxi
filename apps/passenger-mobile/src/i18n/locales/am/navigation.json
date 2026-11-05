@@ -1,0 +1,28 @@
+{
+  "tabs": {
+    "home": "መነሻ",
+    "hotels": "ሆቴሎች",
+    "explore": "ያስሱ",
+    "bookings": "ቦታ ማስያዣ",
+    "profile": "መገለጫ",
+    "homeA11y": "ዋና መነሻና ፈጣን አገልግሎቶች",
+    "hotelsA11y": "የኢትዮጵያ ምርጥ ሆቴሎችና ሎጆችን ያስሱ",
+    "exploreA11y": "የኢትዮጵያ ታሪካዊና ባህላዊ ቅርሶችን ይጎብኙ",
+    "bookingsA11y": "የነቃና ያለፉ ቦታ ማስያዣዎችን ያስተዳድሩ",
+    "profileA11y": "የተሳፋሪ መገለጫ፣ ክፍያዎችና ቅንብሮች"
+  },
+  "titles": {
+    "rideBooking": "ተሽከርካሪ ይያዙ",
+    "activeRide": "የቀጠለ ጉዞ",
+    "rideReceipt": "የጉዞ ደረሰኝ",
+    "hotelDetails": "የሆቴል ዝርዝር",
+    "hotelReserve": "ክፍል ማስያዣ",
+    "heritageDetails": "የቅርስ መዳረሻ",
+    "customTour": "ልዩ የጉብኝት ማዘጋጃ",
+    "checkout": "ደህንነቱ የተጠበቀ ክፍያ",
+    "support": "እርዳታና ድጋፍ",
+    "language": "የቋንቋ ምርጫ",
+    "notifications": "ማሳወቂያዎች"
+  }
+}
+

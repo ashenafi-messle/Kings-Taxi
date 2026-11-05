@@ -17,11 +17,13 @@ import {
   EmptyState,
 } from '../../src/components';
 import { mockHotels, mockHeritageSites } from '../../src/mocks';
+import { useTranslation } from '../../src/i18n';
 
 type CategoryFilter = 'all' | 'hotels' | 'heritage' | 'tours';
 
 export default function ExploreScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['heritage', 'hotels', 'home', 'common']);
   const [selectedFilter, setSelectedFilter] = useState<CategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -46,14 +48,14 @@ export default function ExploreScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Explore Ethiopia</Text>
+        <Text style={styles.headerTitle}>{t('home:popularDestinations')}</Text>
         <Text style={styles.headerSubtitle}>
-          Discover verified hotels, cultural heritage, and custom tours.
+          {t('heritage:customTour.subtitle')}
         </Text>
         <SearchInput
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search by city, hotel, or heritage site..."
+          placeholder={t('heritage:searchPlaceholder')}
           style={styles.searchBar}
         />
 
@@ -77,7 +79,7 @@ export default function ExploreScreen() {
                 selectedFilter === 'all' && styles.filterPillTextActive,
               ]}
             >
-              All
+              {t('heritage:categories.all')}
             </Text>
           </TouchableOpacity>
 
@@ -95,7 +97,7 @@ export default function ExploreScreen() {
                 selectedFilter === 'hotels' && styles.filterPillTextActive,
               ]}
             >
-              Hotels & Resorts
+              {t('home:services.hotelsTitle')}
             </Text>
           </TouchableOpacity>
 
@@ -113,7 +115,7 @@ export default function ExploreScreen() {
                 selectedFilter === 'heritage' && styles.filterPillTextActive,
               ]}
             >
-              Heritage Sites
+              {t('heritage:categories.historical')}
             </Text>
           </TouchableOpacity>
 
@@ -131,7 +133,7 @@ export default function ExploreScreen() {
                 selectedFilter === 'tours' && styles.filterPillTextActive,
               ]}
             >
-              Full Contract Tours
+              {t('home:services.customTourTitle')}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -143,9 +145,9 @@ export default function ExploreScreen() {
       >
         {!hasResults ? (
           <EmptyState
-            title="No Results Found"
-            description="Try modifying your search or switching to another category."
-            actionTitle="Reset Search"
+            title={t('common:noResults')}
+            description={t('common:empty')}
+            actionTitle={t('common:retry')}
             onAction={() => {
               setSearchQuery('');
               setSelectedFilter('all');
@@ -165,12 +167,12 @@ export default function ExploreScreen() {
                 </View>
                 <View style={styles.contractCalloutContent}>
                   <Text style={styles.contractCalloutTitle}>
-                    Chauffeured Full-Contract Transportation
+                    {t('heritage:customTour.title')}
                   </Text>
                   <Text style={styles.contractCalloutDesc}>
-                    Book a dedicated vehicle & driver for multiple heritage destinations with upfront transparent daily quotes.
+                    {t('heritage:customTour.subtitle')}
                   </Text>
-                  <Text style={styles.contractCalloutAction}>Launch Contract Builder →</Text>
+                  <Text style={styles.contractCalloutAction}>{t('heritage:buildCustomTourBtn')} →</Text>
                 </View>
               </TouchableOpacity>
             )}
@@ -179,9 +181,9 @@ export default function ExploreScreen() {
             {(selectedFilter === 'all' || selectedFilter === 'heritage') && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Historical & Cultural Heritage</Text>
+                  <Text style={styles.sectionTitle}>{t('heritage:categories.historical')}</Text>
                   <Text style={styles.sectionSubtitle}>
-                    Ethiopia’s UNESCO World Heritage & Sacred Monuments
+                    {t('heritage:categories.unesco')}
                   </Text>
                 </View>
                 {filteredHeritage.map((site) => (

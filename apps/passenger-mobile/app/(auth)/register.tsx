@@ -14,9 +14,11 @@ import { User, Phone, Mail, Lock } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { AppHeader, FormInput, PrimaryButton } from '../../src/components';
 import { useAuthStore } from '../../src/stores';
+import { useTranslation } from '../../src/i18n';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['auth', 'validation', 'common']);
   const { isLoading } = useAuthStore();
 
   const [fullName, setFullName] = useState('');
@@ -27,15 +29,15 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!fullName.trim()) {
-      setError('Please enter your full name');
+      setError(t('validation:nameRequired'));
       return;
     }
     if (!phone || phone.length < 9) {
-      setError('Please enter a valid Ethiopian phone number (+251)');
+      setError(t('validation:phoneInvalid'));
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('validation:passwordTooShort'));
       return;
     }
 
@@ -49,16 +51,16 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="Create Account" showBack />
+      <AppHeader title={t('registerTitle')} showBack />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            <Text style={styles.title}>Join Kings Taxi</Text>
+            <Text style={styles.title}>{t('registerTitle')}</Text>
             <Text style={styles.subtitle}>
-              Experience seamless urban rides, hotels, and Ethiopian heritage tours.
+              {t('registerSubtitle')}
             </Text>
           </View>
 
@@ -66,8 +68,8 @@ export default function RegisterScreen() {
 
           <View style={styles.form}>
             <FormInput
-              label="Full Name"
-              placeholder="e.g. Almaz Bekele"
+              label={t('fullNameLabel')}
+              placeholder={t('fullNamePlaceholder')}
               value={fullName}
               onChangeText={(text) => {
                 setFullName(text);
@@ -77,8 +79,8 @@ export default function RegisterScreen() {
             />
 
             <FormInput
-              label="Ethiopian Phone Number"
-              placeholder="+251 9X XXX XXXX"
+              label={t('phoneLabel')}
+              placeholder={t('phonePlaceholder')}
               value={phone}
               onChangeText={(text) => {
                 setPhone(text);
@@ -89,8 +91,8 @@ export default function RegisterScreen() {
             />
 
             <FormInput
-              label="Email Address (Optional)"
-              placeholder="almaz@example.com"
+              label={t('emailLabel')}
+              placeholder={t('emailPlaceholder')}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -99,8 +101,8 @@ export default function RegisterScreen() {
             />
 
             <FormInput
-              label="Create Password"
-              placeholder="Minimum 6 characters"
+              label={t('passwordLabel')}
+              placeholder={t('passwordPlaceholder')}
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
@@ -111,13 +113,13 @@ export default function RegisterScreen() {
             />
 
             <Text style={styles.termsText}>
-              By registering, you agree to Kings Taxi’s{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>.
+              {t('termsNotice')}{' '}
+              <Text style={styles.termsLink}>{t('termsOfService')}</Text> {t('and')}{' '}
+              <Text style={styles.termsLink}>{t('privacyPolicy')}</Text>.
             </Text>
 
             <PrimaryButton
-              title="Continue to Verification"
+              title={t('signUpBtn')}
               onPress={handleRegister}
               loading={isLoading}
               style={styles.continueBtn}
@@ -125,9 +127,9 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Already registered?</Text>
+            <Text style={styles.footerText}>{t('alreadyAccount')}</Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-              <Text style={styles.signInLink}> Sign In</Text>
+              <Text style={styles.signInLink}> {t('loginHere')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

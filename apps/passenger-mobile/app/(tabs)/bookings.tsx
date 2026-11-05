@@ -11,11 +11,13 @@ import { useRouter } from 'expo-router';
 import { theme } from '../../src/theme';
 import { BookingCard, BookingSummaryItem, EmptyState } from '../../src/components';
 import { useRideStore, useBookingStore } from '../../src/stores';
+import { useTranslation } from '../../src/i18n';
 
 type TabType = 'all' | 'rides' | 'hotels' | 'tours';
 
 export default function BookingsScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['bookings', 'navigation', 'common']);
   const [activeTab, setActiveTab] = useState<TabType>('all');
 
   const { rideHistory } = useRideStore();
@@ -77,12 +79,25 @@ export default function BookingsScreen() {
     }
   };
 
+  const getTabLabel = (tab: TabType) => {
+    switch (tab) {
+      case 'all':
+        return t('common:viewAll');
+      case 'rides':
+        return t('card.rideType');
+      case 'hotels':
+        return t('card.hotelType');
+      case 'tours':
+        return t('card.tourType');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Bookings</Text>
+        <Text style={styles.headerTitle}>{t('navigation:tabs.bookings')}</Text>
         <Text style={styles.headerSubtitle}>
-          Unified history of urban rides, hotel stays, and tour contracts.
+          {t('navigation:tabs.bookingsA11y')}
         </Text>
 
         {/* Tab Filters */}
@@ -99,7 +114,7 @@ export default function BookingsScreen() {
                   activeTab === tab && styles.tabButtonTextActive,
                 ]}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {getTabLabel(tab)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -112,9 +127,9 @@ export default function BookingsScreen() {
       >
         {displayedBookings.length === 0 ? (
           <EmptyState
-            title="No Bookings in this Category"
-            description="When you take a ride, reserve a room, or contract a tour, it will appear here."
-            actionTitle="Explore Services"
+            title={t('emptyState.activeTitle')}
+            description={t('emptyState.activeSubtitle')}
+            actionTitle={t('common:seeMore')}
             onAction={() => router.push('/(tabs)/explore')}
           />
         ) : (

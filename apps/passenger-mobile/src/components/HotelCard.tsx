@@ -12,6 +12,7 @@ import { theme } from '../theme';
 import { Hotel } from '../types';
 import { formatETB } from '../utils/currency';
 import { RatingComponent } from './RatingComponent';
+import { useTranslation } from '../i18n';
 
 export interface HotelCardProps {
   hotel: Hotel;
@@ -24,6 +25,8 @@ export const HotelCard: React.FC<HotelCardProps> = ({
   onPress,
   style,
 }) => {
+  const { t } = useTranslation(['hotels', 'common']);
+
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -54,11 +57,11 @@ export const HotelCard: React.FC<HotelCardProps> = ({
 
         <View style={styles.footerRow}>
           <View>
-            <Text style={styles.startingFrom}>From</Text>
-            <Text style={styles.price}>{formatETB(hotel.startingPricePerNight)}<Text style={styles.perNight}> / night</Text></Text>
+            <Text style={styles.startingFrom}>{t('startingFrom')}</Text>
+            <Text style={styles.price}>{formatETB(hotel.startingPricePerNight)}<Text style={styles.perNight}> / {t('common:perNight')}</Text></Text>
           </View>
           <View style={styles.viewButton}>
-            <Text style={styles.viewButtonText}>View Rooms</Text>
+            <Text style={styles.viewButtonText}>{t('selectRoom')}</Text>
           </View>
         </View>
       </View>

@@ -1,0 +1,28 @@
+{
+  "tabs": {
+    "home": "Mana",
+    "hotels": "Hoteelota",
+    "explore": "Daawwadhu",
+    "bookings": "Ajajawwan",
+    "profile": "Odeeffannoo",
+    "homeA11y": "Fuula duraa fi tajaajiloota ariifachiisoo",
+    "hotelsA11y": "Hoteelota filatamoo Itoophiyaa daawwadhaa",
+    "exploreA11y": "Dhaala aadaa fi seena-qabeessa Itoophiyaa daawwadhaa",
+    "bookingsA11y": "Ajajawwan yeroo ammaa fi darban to'adhaa",
+    "profileA11y": "Odeeffannoo imaltuu, kaffaltii fi qindaa'inoota"
+  },
+  "titles": {
+    "rideBooking": "Geejjiba Ajajuu",
+    "activeRide": "Imala Ammaa",
+    "rideReceipt": "Nagahee Imalaa",
+    "hotelDetails": "Bal'ina Hoteelaa",
+    "hotelReserve": "Kutaa Qabachuu",
+    "heritageDetails": "Bakka Dhaalaa",
+    "customTour": "Imala Addaa Qopheessuu",
+    "checkout": "Kaffaltii Nagaadhaan",
+    "support": "Gargaarsa fi Deeggarsa",
+    "language": "Filannoo Afaanii",
+    "notifications": "Beeksisawwan"
+  }
+}
+

@@ -1,0 +1,26 @@
+{
+  "title": "ደህንነቱ የተጠበቀ ክፍያ",
+  "subtitle": "በኢትዮጵያ ብር ተመራጭ የክፍያ አማራጭዎን ይምረጡ",
+  "methods": {
+    "telebirr": "ቴሌብር",
+    "telebirrDesc": "ፈጣን የሞባይል ቦርሳ ክፍያ",
+    "cbeBirr": "የንግድ ባንክ ብር (CBE Birr)",
+    "cbeBirrDesc": "የኢትዮጵያ ንግድ ባንክ የሞባይል ክፍያ",
+    "chapa": "ቻፓ / የባንክ ካርዶች",
+    "chapaDesc": "ቪዛ፣ ማስተርካርድና የሀገር ውስጥ ዴቢት ካርዶች",
+    "cash": "በእጅ የሚከፈል ጥሬ ገንዘብ",
+    "cashDesc": "ለሹፌሩ ወይም ለሆቴሉ አስተናጋጅ ጥሬ ገንዘብ ይክፈሉ"
+  },
+  "summary": "የክፍያ ማጠቃለያ",
+  "orderTotal": "ጠቅላላ የሚከፈል",
+  "serviceFeeNotice": "ሁሉም ዋጋዎች በኢትዮጵያ ብር (ETB) ሲሆኑ የተጨማሪ እሴት ታክስን (ቫት) ያካትታሉ።",
+  "payBtn": "{{amount}} ይክፈሉ",
+  "processing": "ክፍያው በመረጋገጥ ላይ ነው...",
+  "successTitle": "ክፍያው ተሳክቷል",
+  "successMsg": "የ{{amount}} ክፍያዎ በደህንነት ተከናውኗል።",
+  "failedTitle": "ክፍያው አልተሳካም",
+  "failedMsg": "ክፍያውን ማጠናቀቅ አልተቻለም። እባክዎ በሌላ ዘዴ እንደገና ይሞክሩ።",
+  "referenceNumber": "መለያ ቁጥር፡ {{ref}}",
+  "backToBookings": "ወደ ቦታ ማስያዣዎች ተመለስ"
+}
+

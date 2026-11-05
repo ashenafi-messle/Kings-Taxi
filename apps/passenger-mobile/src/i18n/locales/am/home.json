@@ -1,0 +1,29 @@
+{
+  "greetingMorning": "እንደምን አደሩ፣ {{name}}",
+  "greetingAfternoon": "እንደምን ዋሉ፣ {{name}}",
+  "greetingEvening": "እንደምን አመሹ፣ {{name}}",
+  "whereTo": "ዛሬ ወዴት መሄድ ይፈልጋሉ?",
+  "searchDestinationPlaceholder": "መዳረሻዎችን፣ ሆቴሎችን ወይም ጉብኝቶችን ይፈልጉ...",
+  "quickServicesTitle": "የጉዞና ቱሪዝም አገልግሎቶች",
+  "services": {
+    "rideTitle": "ተሽከርካሪ ይያዙ",
+    "rideSubtitle": "ፈጣን የከተማ ታክሲና የቅንጦት ጉዞ",
+    "hotelsTitle": "ሆቴሎችና ሎጆች",
+    "hotelsSubtitle": "በመላው ኢትዮጵያ ምርጥ ማረፊያዎች",
+    "heritageTitle": "የቅርሶች ጉብኝት",
+    "heritageSubtitle": "ታሪካዊና ባህላዊ የቱሪዝም መዳረሻዎች",
+    "customTourTitle": "ልዩ ኪራይ",
+    "customTourSubtitle": "የቀናት የተዘጋጁ የከተሞች ጉዞዎች"
+  },
+  "activeRideBannerTitle": "ጉዞ በመካሄድ ላይ ነው",
+  "activeRideBannerSubtitle": "ወደ {{destination}} በመጓዝ ላይ • {{eta}} ደቂቃ ይቀራል",
+  "trackRideBtn": "ጉዞን ይከታተሉ",
+  "popularDestinations": "ተወዳጅ መዳረሻዎች",
+  "seeAllDestinations": "ሁሉንም ያስሱ",
+  "featuredHotels": "ተመራጭ የቅንጦት ሆቴሎች",
+  "recentActivity": "የቅርብ ጊዜ እንቅስቃሴዎች",
+  "noRecentActivity": "የቅርብ ጊዜ ቦታ ማስያዣ የለም። ጉዞዎን ዛሬውኑ ይጀምሩ!",
+  "promoTitle": "ኢትዮጵያን በኪንግስ ታክሲ ይጎብኙ",
+  "promoSubtitle": "በቴሌብር ወይም በንግድ ባንክ ብር ለሚከፈሉ የበርካታ ቀናት የቅርስ ጉብኝቶች የ15% ቅናሽ ያግኙ።"
+}
+

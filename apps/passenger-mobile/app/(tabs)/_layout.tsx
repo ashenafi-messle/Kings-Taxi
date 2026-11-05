@@ -11,10 +11,12 @@ import {
   Bell,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
+import { useTranslation } from '../../src/i18n';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const { t } = useTranslation(['navigation']);
 
   // Responsive device width breakpoint (small screens e.g., 320-359px)
   const isSmallScreen = width < 360;
@@ -77,8 +79,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarAccessibilityLabel: 'Home tab',
+          title: t('tabs.home'),
+          tabBarAccessibilityLabel: t('tabs.homeA11y'),
           tabBarIcon: ({ color, focused }) => (
             <Home
               size={iconSize}
@@ -91,8 +93,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="hotels"
         options={{
-          title: 'Hotels',
-          tabBarAccessibilityLabel: 'Hotels tab',
+          title: t('tabs.hotels'),
+          tabBarAccessibilityLabel: t('tabs.hotelsA11y'),
           tabBarIcon: ({ color, focused }) => (
             <Hotel
               size={iconSize}
@@ -105,8 +107,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
-          tabBarAccessibilityLabel: 'Explore tab',
+          title: t('tabs.explore'),
+          tabBarAccessibilityLabel: t('tabs.exploreA11y'),
           tabBarIcon: ({ color, focused }) => (
             <Compass
               size={iconSize}
@@ -119,8 +121,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="bookings"
         options={{
-          title: 'Bookings',
-          tabBarAccessibilityLabel: 'Bookings tab',
+          title: t('tabs.bookings'),
+          tabBarAccessibilityLabel: t('tabs.bookingsA11y'),
           tabBarIcon: ({ color, focused }) => (
             <CalendarDays
               size={iconSize}
@@ -133,8 +135,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
-          tabBarAccessibilityLabel: 'Profile tab',
+          title: t('tabs.profile'),
+          tabBarAccessibilityLabel: t('tabs.profileA11y'),
           tabBarIcon: ({ color, focused }) => (
             <User
               size={iconSize}

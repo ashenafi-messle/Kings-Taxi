@@ -1,0 +1,26 @@
+{
+  "title": "Kaffaltii Nagaadhaan",
+  "subtitle": "Qarshii Itoophiyaatiin mala kaffaltii filatamaa keessan filadhaa",
+  "methods": {
+    "telebirr": "Telebirr",
+    "telebirrDesc": "Kaffaltii boorsaa moobaayilaa battalaa",
+    "cbeBirr": "CBE Birr",
+    "cbeBirrDesc": "Kaffaltii moobaayilaa Baankii Daldala Itoophiyaa",
+    "chapa": "Chaappaa / Kaardiiwwan Baankii",
+    "chapaDesc": "Viizaa, Maastarkaardii fi kaardiiwwan debiitii biyya keessaa",
+    "cash": "Qarshii Qulqulluu (Kaashii)",
+    "cashDesc": "Konkolaachisaadhaaf ykn keessummeessaa hoteelaatiif kaffalaa"
+  },
+  "summary": "Cuunfaa Kaffaltii",
+  "orderTotal": "Ida'ama Kaffaltii",
+  "serviceFeeNotice": "Gatiin hundi Qarshii Itoophiyaatiin (ETB) ta'ee taaksii dabalataa of keessatti qabata.",
+  "payBtn": "{{amount}} Kaffalaa",
+  "processing": "Kaffaltiin mirkanaa'aa jira...",
+  "successTitle": "Kaffaltiin Milkaa'eera",
+  "successMsg": "Kaffaltiin keessan {{amount}} nagaadhaan raawwatameera.",
+  "failedTitle": "Kaffaltiin Hin Milkoofne",
+  "failedMsg": "Kaffalticha xumuruun hin danda'amne. Maaloo mala biraatiin yaalaa.",
+  "referenceNumber": "Lakkoofsa Eenyummaa: {{ref}}",
+  "backToBookings": "Gara Ajajawwaniitti Deebi'aa"
+}
+

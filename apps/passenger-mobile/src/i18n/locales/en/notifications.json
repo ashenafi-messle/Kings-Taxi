@@ -1,0 +1,21 @@
+{
+  "title": "Notifications",
+  "markAllRead": "Mark All as Read",
+  "clearAll": "Clear All",
+  "emptyTitle": "All Caught Up",
+  "emptyDesc": "You have no unread notifications or ride alerts.",
+  "categories": {
+    "ride": "Ride Updates",
+    "hotel": "Hotel Confirmations",
+    "tour": "Tour Updates",
+    "payment": "Payment Receipts",
+    "system": "System Notices"
+  },
+  "timeAgo": {
+    "justNow": "Just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
+  }
+}
+

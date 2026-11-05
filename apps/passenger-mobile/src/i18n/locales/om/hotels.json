@@ -1,0 +1,46 @@
+{
+  "searchPlaceholder": "Hoteelota maqaan ykn magaalaan barbaadi...",
+  "allCities": "Magaalota Hunda",
+  "cities": {
+    "addisAbaba": "Finfinnee",
+    "bahirDar": "Baahir Daar",
+    "hawassa": "Hawaasaa",
+    "lalibela": "Laallibalaa",
+    "gondar": "Gondar"
+  },
+  "categories": {
+    "all": "Hunda",
+    "luxury": "Qananii",
+    "boutique": "Buutiikii",
+    "resort": "Rizoortii",
+    "business": "Daldalaa"
+  },
+  "startingFrom": "Gatii Ka'umsaa",
+  "viewDetails": "Bal'inaa fi Kutaa Ilaali",
+  "aboutHotel": "Waa'ee Hoteelichaa",
+  "amenities": "Tajaajilaa fi Mijaawina Hoteelichaa",
+  "availableRooms": "Kutaalee fi Suwittota Jiran",
+  "selectRoom": "Kutaa Filadhu",
+  "policies": "Imaammata Hoteelichaa",
+  "checkInTime": "Seensaa erga",
+  "checkOutTime": "Ba'iinsa dura",
+  "cancellationPolicy": "Imaammata Haquu",
+  "freeCancellation": "Bilisaan haquun ni danda'ama",
+  "contactHotel": "Gaaffii Kallattii",
+  "reserveNow": "Kutaa Qabadhu",
+  "reservationTitle": "Kutaa Hoteelaa Qabachuu",
+  "datesAndGuests": "Guyyootaa fi Keessummoota",
+  "checkInDate": "Guyyaa Seensaa",
+  "checkOutDate": "Guyyaa Ba'iinsaa",
+  "guestCount": "Baay'ina Keessummootaa",
+  "selectedRoom": "Kutaa Filatame",
+  "nights": "Halkan {{count}}",
+  "nights_plural": "Halkaniyyiin {{count}}",
+  "priceSummary": "Cuunfaa Gatii",
+  "confirmReservation": "Ajaja Mirkaneessi",
+  "bookingSuccess": "Qabachuun Milkaa'eera!",
+  "bookingSuccessMsg": "Qabannaan keessan hoteela {{hotel}} irratti milkaa'inaan galmaa'eera.",
+  "noHotelsFound": "Hoteelli barbaaddan hin argamne",
+  "resetFilters": "Gingilchaa Haqi"
+}
+

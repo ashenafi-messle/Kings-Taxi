@@ -1,0 +1,28 @@
+{
+  "tabs": {
+    "home": "Home",
+    "hotels": "Hotels",
+    "explore": "Explore",
+    "bookings": "Bookings",
+    "profile": "Profile",
+    "homeA11y": "Home dashboard and quick services",
+    "hotelsA11y": "Browse Ethiopian premier hotels and lodges",
+    "exploreA11y": "Explore Ethiopian heritage tours and cultural destinations",
+    "bookingsA11y": "Manage active and historical reservations",
+    "profileA11y": "Passenger profile, payments, and settings"
+  },
+  "titles": {
+    "rideBooking": "Book a Ride",
+    "activeRide": "Active Ride",
+    "rideReceipt": "Ride Receipt",
+    "hotelDetails": "Hotel Details",
+    "hotelReserve": "Room Reservation",
+    "heritageDetails": "Heritage Destination",
+    "customTour": "Custom Tour Builder",
+    "checkout": "Secure Checkout",
+    "support": "Help & Support",
+    "language": "Language Preferences",
+    "notifications": "Notifications"
+  }
+}
+

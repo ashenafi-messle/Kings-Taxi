@@ -1,0 +1,32 @@
+{
+  "tabs": {
+    "active": "Active",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+  "emptyState": {
+    "activeTitle": "No Active Bookings",
+    "activeSubtitle": "You don't have any in-progress rides or hotel reservations right now.",
+    "completedTitle": "No Completed Bookings",
+    "completedSubtitle": "Your finished rides and hotel stays will appear here.",
+    "cancelledTitle": "No Cancelled Bookings",
+    "cancelledSubtitle": "You don't have any cancelled reservations."
+  },
+  "card": {
+    "rideType": "Ride",
+    "hotelType": "Hotel Stay",
+    "tourType": "Heritage Tour",
+    "statusActive": "Active",
+    "statusCompleted": "Completed",
+    "statusCancelled": "Cancelled",
+    "bookingCode": "Booking #{{id}}",
+    "pickup": "Pickup",
+    "dropoff": "Dropoff",
+    "checkIn": "Check-in",
+    "totalPrice": "Total Paid",
+    "viewReceipt": "View Receipt",
+    "rebook": "Book Again",
+    "cancelBooking": "Cancel Booking"
+  }
+}
+

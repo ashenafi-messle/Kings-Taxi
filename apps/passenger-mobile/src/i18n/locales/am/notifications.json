@@ -1,0 +1,21 @@
+{
+  "title": "ማሳወቂያዎች",
+  "markAllRead": "ሁሉንም እንደተነበቡ ምልክት አድርግ",
+  "clearAll": "ሁሉንም አጽዳ",
+  "emptyTitle": "ምንም አዲስ ማሳወቂያ የለም",
+  "emptyDesc": "ያልተነበቡ የጉዞ ወይም የክፍያ ማሳወቂያዎች የለዎትም።",
+  "categories": {
+    "ride": "የጉዞ ማሳወቂያዎች",
+    "hotel": "የሆቴል ማረጋገጫዎች",
+    "tour": "የጉብኝት መረጃዎች",
+    "payment": "የክፍያ ደረሰኞች",
+    "system": "የስርዓት መልእክቶች"
+  },
+  "timeAgo": {
+    "justNow": "አሁን",
+    "minutesAgo": "ከ{{count}} ደቂቃ በፊት",
+    "hoursAgo": "ከ{{count}} ሰዓት በፊት",
+    "daysAgo": "ከ{{count}} ቀን በፊት"
+  }
+}
+

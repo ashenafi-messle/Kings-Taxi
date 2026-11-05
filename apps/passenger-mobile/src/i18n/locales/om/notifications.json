@@ -1,0 +1,21 @@
+{
+  "title": "Beeksisawwan",
+  "markAllRead": "Hunda akka dubbifametti mallatteessi",
+  "clearAll": "Hunda Haqi",
+  "emptyTitle": "Beeksisni Haaraan Hin Jiru",
+  "emptyDesc": "Beeksisni imalaa ykn kaffaltii hin dubbifamne hin jiru.",
+  "categories": {
+    "ride": "Odeeffannoo Imalaa",
+    "hotel": "Mirkaneessa Hoteelaa",
+    "tour": "Odeeffannoo Daawwannaa",
+    "payment": "Nagahee Kaffaltii",
+    "system": "Hubachiisa Sirnaa"
+  },
+  "timeAgo": {
+    "justNow": "Amma",
+    "minutesAgo": "Daqiiqaa {{count}} dura",
+    "hoursAgo": "Sa'aatii {{count}} dura",
+    "daysAgo": "Guyyaa {{count}} dura"
+  }
+}
+

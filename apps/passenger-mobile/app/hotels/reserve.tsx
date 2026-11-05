@@ -26,9 +26,11 @@ import {
 import { mockHotels } from '../../src/mocks';
 import { useBookingStore } from '../../src/stores';
 import { formatETB } from '../../src/utils/currency';
+import { useTranslation } from '../../src/i18n';
 
 export default function HotelReserveScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['hotels', 'common', 'navigation', 'payments']);
   const params = useLocalSearchParams();
   const hotelId = (params.hotelId as string) || mockHotels[0].id;
   const roomId = (params.roomId as string) || mockHotels[0].rooms[0].id;
@@ -47,8 +49,8 @@ export default function HotelReserveScreen() {
   const totalAmount = roomSubtotal + serviceCharge;
 
   const priceItems = [
-    { label: `${room.title} (${nights} nights @ ${formatETB(room.pricePerNight)})`, amount: roomSubtotal },
-    { label: 'Hospitality & Tourism Tax (10%)', amount: serviceCharge },
+    { label: `${room.title} (${nights} ${t('nights', { count: nights })} @ ${formatETB(room.pricePerNight)})`, amount: roomSubtotal },
+    { label: `${t('common:tax')} (10%)`, amount: serviceCharge },
   ];
 
   const handleConfirmReservation = () => {
@@ -75,7 +77,7 @@ export default function HotelReserveScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="Hotel Reservation" showBack />
+      <AppHeader title={t('reservationTitle')} showBack />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -83,9 +85,9 @@ export default function HotelReserveScreen() {
         {confirmed ? (
           <View style={styles.confirmationSuccess}>
             <CheckCircle2 size={54} color={theme.colors.success} />
-            <Text style={styles.successTitle}>Reservation Confirmed!</Text>
+            <Text style={styles.successTitle}>{t('bookingSuccess')}</Text>
             <Text style={styles.successDesc}>
-              Your stay at {hotel.name} has been booked. Confirmation voucher added to My Bookings.
+              {t('bookingSuccessMsg', { hotel: hotel.name })}
             </Text>
           </View>
         ) : (
@@ -101,12 +103,12 @@ export default function HotelReserveScreen() {
             <View style={styles.configCard}>
               <View style={styles.configHeader}>
                 <Calendar size={18} color={theme.colors.hotelAccent} />
-                <Text style={styles.configTitle}>Length of Stay</Text>
+                <Text style={styles.configTitle}>{t('datesAndGuests')}</Text>
               </View>
               <View style={styles.counterRow}>
                 <View>
-                  <Text style={styles.counterLabel}>{nights} Nights</Text>
-                  <Text style={styles.counterSub}>Check-in: Nov 12 • Check-out: Nov 14</Text>
+                  <Text style={styles.counterLabel}>{t('nights', { count: nights })}</Text>
+                  <Text style={styles.counterSub}>{t('checkInDate')}: Nov 12 • {t('checkOutDate')}: Nov 14</Text>
                 </View>
                 <View style={styles.stepperWrap}>
                   <TouchableOpacity
@@ -130,12 +132,12 @@ export default function HotelReserveScreen() {
             <View style={styles.configCard}>
               <View style={styles.configHeader}>
                 <Users size={18} color={theme.colors.hotelAccent} />
-                <Text style={styles.configTitle}>Guests</Text>
+                <Text style={styles.configTitle}>{t('guestCount')}</Text>
               </View>
               <View style={styles.counterRow}>
                 <View>
-                  <Text style={styles.counterLabel}>{adults} Adults</Text>
-                  <Text style={styles.counterSub}>Room capacity: {room.capacityAdults} Adults</Text>
+                  <Text style={styles.counterLabel}>{adults} {t('guestCount')}</Text>
+                  <Text style={styles.counterSub}>{room.capacityAdults} max</Text>
                 </View>
                 <View style={styles.stepperWrap}>
                   <TouchableOpacity
@@ -156,11 +158,11 @@ export default function HotelReserveScreen() {
             </View>
 
             {/* Price Breakdown */}
-            <Text style={styles.sectionTitle}>Price Summary (ETB)</Text>
+            <Text style={styles.sectionTitle}>{t('priceSummary')}</Text>
             <PriceBreakdown
               items={priceItems}
               total={totalAmount}
-              totalLabel="Total Amount Due"
+              totalLabel={t('common:total')}
               style={styles.priceCard}
             />
 
@@ -171,14 +173,14 @@ export default function HotelReserveScreen() {
             >
               <View style={styles.paymentLeft}>
                 <CreditCard size={18} color={theme.colors.primaryDark} />
-                <Text style={styles.paymentMethodText}>Payment: Telebirr / CBE Birr</Text>
+                <Text style={styles.paymentMethodText}>Telebirr / CBE Birr</Text>
               </View>
               <ChevronRight size={16} color={theme.colors.textMuted} />
             </TouchableOpacity>
 
             {/* Confirm Reservation CTA */}
             <PrimaryButton
-              title={`Confirm Reservation • ${formatETB(totalAmount)}`}
+              title={`${t('confirmReservation')} • ${formatETB(totalAmount)}`}
               onPress={handleConfirmReservation}
               style={styles.confirmBtn}
             />

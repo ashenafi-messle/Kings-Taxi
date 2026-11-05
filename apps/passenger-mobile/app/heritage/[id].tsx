@@ -23,10 +23,12 @@ import { theme } from '../../src/theme';
 import { AppHeader, PrimaryButton, SecondaryButton } from '../../src/components';
 import { mockHeritageSites } from '../../src/mocks';
 import { formatETB } from '../../src/utils/currency';
+import { useTranslation } from '../../src/i18n';
 
 export default function HeritageDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { t } = useTranslation(['heritage', 'common', 'navigation']);
 
   const site = mockHeritageSites.find((s) => s.id === id) || mockHeritageSites[0];
 
@@ -58,7 +60,7 @@ export default function HeritageDetailScreen() {
             <View style={styles.unescoPill}>
               <Award size={14} color="#8B5CF6" />
               <Text style={styles.unescoText}>
-                UNESCO World Heritage Site (Inscribed {site.unescoYear || 1978})
+                {t('categories.unesco')} ({site.unescoYear || 1978})
               </Text>
             </View>
           )}
@@ -67,13 +69,13 @@ export default function HeritageDetailScreen() {
           <View style={styles.infoGrid}>
             <View style={styles.infoCol}>
               <Clock size={16} color={theme.colors.textMuted} />
-              <Text style={styles.infoColLabel}>Recommended Visit</Text>
+              <Text style={styles.infoColLabel}>{t('recommendedDuration')}</Text>
               <Text style={styles.infoColValue}>{site.recommendedDuration}</Text>
             </View>
             <View style={styles.infoColDivider} />
             <View style={styles.infoCol}>
               <Ticket size={16} color={theme.colors.textMuted} />
-              <Text style={styles.infoColLabel}>Estimated Entry</Text>
+              <Text style={styles.infoColLabel}>{t('entryFee')}</Text>
               <Text style={styles.infoColValue}>{formatETB(site.entryFeeETB)}</Text>
             </View>
           </View>
@@ -81,19 +83,19 @@ export default function HeritageDetailScreen() {
 
         {/* Historical Context Section */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Historical Overview</Text>
+          <Text style={styles.sectionTitle}>{t('historicalOverview')}</Text>
           <Text style={styles.bodyText}>{site.historicalOverview}</Text>
         </View>
 
         {/* Cultural Significance */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Cultural & Spiritual Significance</Text>
+          <Text style={styles.sectionTitle}>{t('categories.cultural')}</Text>
           <Text style={styles.bodyText}>{site.culturalSignificance}</Text>
         </View>
 
         {/* Key Highlights */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Key Highlights</Text>
+          <Text style={styles.sectionTitle}>{t('highlights')}</Text>
           <View style={styles.highlightsWrap}>
             {site.keyHighlights.map((hl, index) => (
               <View key={index} style={styles.highlightItem}>
@@ -106,9 +108,9 @@ export default function HeritageDetailScreen() {
 
         {/* Visiting Guidelines */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Visiting Hours & Guidelines</Text>
+          <Text style={styles.sectionTitle}>{t('visitorInfo')}</Text>
           <Text style={styles.bodyText}>
-            Open Hours: {site.visitingHours}. Modest dress is customary when entering active ecclesiastical and ceremonial grounds. Certified historical guides are recommended.
+            {site.visitingHours}. {t('guidedTourAvailable')}.
           </Text>
         </View>
 
@@ -118,12 +120,12 @@ export default function HeritageDetailScreen() {
             <Car size={24} color={theme.colors.secondary} />
           </View>
           <View style={styles.contractTextWrap}>
-            <Text style={styles.contractBannerTitle}>Need Chauffeured Transport?</Text>
+            <Text style={styles.contractBannerTitle}>{t('transportOptions')}</Text>
             <Text style={styles.contractBannerDesc}>
-              Book a dedicated private vehicle to visit {site.name} alongside other regional attractions in a full-contract package.
+              {t('customTour.subtitle')}
             </Text>
             <PrimaryButton
-              title="Add to Full-Contract Tour"
+              title={t('bookTourBtn')}
               onPress={handleStartContractWithSite}
               style={styles.addContractBtn}
             />

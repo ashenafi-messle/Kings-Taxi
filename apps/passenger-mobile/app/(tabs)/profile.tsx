@@ -28,9 +28,11 @@ import {
 import { theme } from '../../src/theme';
 import { ConfirmationModal } from '../../src/components';
 import { useAuthStore, useSettingsStore } from '../../src/stores';
+import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['profile', 'common']);
   const { user, logout } = useAuthStore();
   const {
     language,
@@ -48,15 +50,9 @@ export default function ProfileScreen() {
     router.replace('/(auth)/welcome');
   };
 
-  const getLanguageName = (lang: string) => {
-    switch (lang) {
-      case 'am':
-        return 'አማርኛ (Amharic)';
-      case 'om':
-        return 'Afaan Oromoo';
-      default:
-        return 'English';
-    }
+  const getLanguageLabel = (lang: string) => {
+    const found = SUPPORTED_LANGUAGES.find((l) => l.code === lang);
+    return found ? `${found.nativeName} (${found.name})` : 'English';
   };
 
   return (
@@ -82,14 +78,16 @@ export default function ProfileScreen() {
                 <Star size={12} color={theme.colors.primaryDark} fill={theme.colors.primary} />
                 <Text style={styles.ratingText}>{user?.rating || 4.9} ★</Text>
               </View>
-              <Text style={styles.tripsCount}>{user?.totalTrips || 38} completed trips</Text>
+              <Text style={styles.tripsCount}>
+                {t('verifiedPassenger')}
+              </Text>
             </View>
           </View>
         </View>
 
         {/* Section: Account & Preferences */}
         <View style={styles.section}>
-          <Text style={styles.sectionHeaderTitle}>Account & Services</Text>
+          <Text style={styles.sectionHeaderTitle}>{t('sections.account')}</Text>
 
           <TouchableOpacity
             style={styles.menuRow}
@@ -99,8 +97,8 @@ export default function ProfileScreen() {
               <CreditCard size={18} color={theme.colors.primaryDark} />
             </View>
             <View style={styles.menuTextWrap}>
-              <Text style={styles.menuTitle}>Payment Methods</Text>
-              <Text style={styles.menuSubtitle}>Default: Telebirr SuperApp</Text>
+              <Text style={styles.menuTitle}>{t('items.paymentMethods')}</Text>
+              <Text style={styles.menuSubtitle}>Telebirr, CBE Birr, Chapa</Text>
             </View>
             <ChevronRight size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
@@ -113,8 +111,8 @@ export default function ProfileScreen() {
               <Globe size={18} color={theme.colors.hotelAccent} />
             </View>
             <View style={styles.menuTextWrap}>
-              <Text style={styles.menuTitle}>Language</Text>
-              <Text style={styles.menuSubtitle}>{getLanguageName(language)}</Text>
+              <Text style={styles.menuTitle}>{t('items.language')}</Text>
+              <Text style={styles.menuSubtitle}>{getLanguageLabel(language)}</Text>
             </View>
             <ChevronRight size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
@@ -124,8 +122,8 @@ export default function ProfileScreen() {
               <Bell size={18} color={theme.colors.heritageAccent} />
             </View>
             <View style={styles.menuTextWrap}>
-              <Text style={styles.menuTitle}>Push Notifications</Text>
-              <Text style={styles.menuSubtitle}>Trip status & driver arrival alerts</Text>
+              <Text style={styles.menuTitle}>{t('items.notifications')}</Text>
+              <Text style={styles.menuSubtitle}>SMS & push alerts</Text>
             </View>
             <Switch
               value={notificationsEnabled}
@@ -140,8 +138,8 @@ export default function ProfileScreen() {
               <Shield size={18} color="#059669" />
             </View>
             <View style={styles.menuTextWrap}>
-              <Text style={styles.menuTitle}>Biometric Authentication</Text>
-              <Text style={styles.menuSubtitle}>Fingerprint or FaceID sign-in</Text>
+              <Text style={styles.menuTitle}>{t('items.security')}</Text>
+              <Text style={styles.menuSubtitle}>PIN & Biometrics</Text>
             </View>
             <Switch
               value={biometricLoginEnabled}
@@ -154,7 +152,7 @@ export default function ProfileScreen() {
 
         {/* Section: Support & Legal */}
         <View style={styles.section}>
-          <Text style={styles.sectionHeaderTitle}>Support & About</Text>
+          <Text style={styles.sectionHeaderTitle}>{t('sections.support')}</Text>
 
           <TouchableOpacity
             style={styles.menuRow}
@@ -164,8 +162,8 @@ export default function ProfileScreen() {
               <HelpCircle size={18} color={theme.colors.secondary} />
             </View>
             <View style={styles.menuTextWrap}>
-              <Text style={styles.menuTitle}>Help Center & Emergency Safety</Text>
-              <Text style={styles.menuSubtitle}>24/7 passenger dispatch support</Text>
+              <Text style={styles.menuTitle}>{t('items.helpSupport')}</Text>
+              <Text style={styles.menuSubtitle}>24/7 Safety & Dispatch</Text>
             </View>
             <ChevronRight size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
@@ -175,8 +173,8 @@ export default function ProfileScreen() {
               <FileText size={18} color={theme.colors.textSecondary} />
             </View>
             <View style={styles.menuTextWrap}>
-              <Text style={styles.menuTitle}>Terms & Privacy Policy</Text>
-              <Text style={styles.menuSubtitle}>Transport regulations & guest data</Text>
+              <Text style={styles.menuTitle}>{t('items.termsOfService')} & {t('items.privacyPolicy')}</Text>
+              <Text style={styles.menuSubtitle}>Kings Mobility Ethiopia</Text>
             </View>
             <ChevronRight size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
@@ -189,7 +187,7 @@ export default function ProfileScreen() {
           activeOpacity={0.8}
         >
           <LogOut size={18} color={theme.colors.danger} />
-          <Text style={styles.logoutText}>Sign Out of Kings Taxi</Text>
+          <Text style={styles.logoutText}>{t('items.logout')}</Text>
         </TouchableOpacity>
 
         <Text style={styles.versionText}>Kings Taxi Passenger Mobile v1.0.0 (Build 520)</Text>
@@ -198,10 +196,10 @@ export default function ProfileScreen() {
       {/* Confirmation Modal */}
       <ConfirmationModal
         visible={showLogoutModal}
-        title="Sign Out"
-        message="Are you sure you want to log out of your Kings Taxi account?"
-        confirmTitle="Sign Out"
-        cancelTitle="Cancel"
+        title={t('logoutModal.title')}
+        message={t('logoutModal.message')}
+        confirmTitle={t('logoutModal.confirm')}
+        cancelTitle={t('logoutModal.cancel')}
         isDestructive
         onConfirm={handleLogout}
         onCancel={() => setShowLogoutModal(false)}

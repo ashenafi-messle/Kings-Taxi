@@ -5,25 +5,47 @@ import {
   StyleSheet,
   ScrollView,
   SafeAreaView,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Crown, Car, Hotel, Compass, ShieldCheck } from 'lucide-react-native';
+import { Crown, Car, Hotel, Compass, ShieldCheck, Globe } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { PrimaryButton, SecondaryButton } from '../../src/components';
+import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
+import { useSettingsStore } from '../../src/stores';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['auth', 'home', 'payments', 'common']);
+  const { language } = useSettingsStore();
+
+  const currentLangLabel =
+    SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Language Selection Header Pill */}
+        <View style={styles.langPillRow}>
+          <TouchableOpacity
+            style={styles.langPill}
+            onPress={() => router.push('/settings/language')}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Change language"
+          >
+            <Globe size={16} color={theme.colors.primaryDark} />
+            <Text style={styles.langPillText}>{currentLangLabel}</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Crown & Brand Identity Header */}
         <View style={styles.brandHeader}>
           <View style={styles.crownCircle}>
             <Crown size={38} color={theme.colors.primary} />
           </View>
           <Text style={styles.appName}>KINGS TAXI</Text>
-          <Text style={styles.appTagline}>Royal Comfort Across Ethiopia</Text>
+          <Text style={styles.appTagline}>{t('tagline')}</Text>
         </View>
 
         {/* Feature Value Cards */}
@@ -33,9 +55,9 @@ export default function WelcomeScreen() {
               <Car size={22} color={theme.colors.primaryDark} />
             </View>
             <View style={styles.featureTextBox}>
-              <Text style={styles.featureTitle}>Urban Ride-Hailing</Text>
+              <Text style={styles.featureTitle}>{t('home:services.rideTitle')}</Text>
               <Text style={styles.featureDesc}>
-                Instant and scheduled rides with upfront ETB pricing and certified drivers.
+                {t('home:services.rideSubtitle')}
               </Text>
             </View>
           </View>
@@ -45,9 +67,9 @@ export default function WelcomeScreen() {
               <Hotel size={22} color={theme.colors.hotelAccent} />
             </View>
             <View style={styles.featureTextBox}>
-              <Text style={styles.featureTitle}>Hotel Reservations</Text>
+              <Text style={styles.featureTitle}>{t('home:services.hotelsTitle')}</Text>
               <Text style={styles.featureDesc}>
-                Verified luxury hotels and resorts from Addis Ababa to Hawassa and Bahir Dar.
+                {t('home:services.hotelsSubtitle')}
               </Text>
             </View>
           </View>
@@ -57,9 +79,9 @@ export default function WelcomeScreen() {
               <Compass size={22} color={theme.colors.heritageAccent} />
             </View>
             <View style={styles.featureTextBox}>
-              <Text style={styles.featureTitle}>Heritage & Tour Contracts</Text>
+              <Text style={styles.featureTitle}>{t('home:services.heritageTitle')}</Text>
               <Text style={styles.featureDesc}>
-                Custom chauffeured expeditions to Lalibela, Gondar, and Simien Mountains.
+                {t('home:services.heritageSubtitle')}
               </Text>
             </View>
           </View>
@@ -69,9 +91,9 @@ export default function WelcomeScreen() {
               <ShieldCheck size={22} color="#059669" />
             </View>
             <View style={styles.featureTextBox}>
-              <Text style={styles.featureTitle}>Secure Ethiopian Payments</Text>
+              <Text style={styles.featureTitle}>{t('payments:title')}</Text>
               <Text style={styles.featureDesc}>
-                Integrated with Telebirr, CBE Birr, Chapa, and verified cash handling.
+                {t('payments:subtitle')}
               </Text>
             </View>
           </View>
@@ -80,16 +102,22 @@ export default function WelcomeScreen() {
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
           <PrimaryButton
-            title="Sign In with Phone"
+            title={t('signInBtn')}
             onPress={() => router.push('/(auth)/login')}
             style={styles.signInBtn}
           />
           <SecondaryButton
-            title="Create New Account"
+            title={t('signUpBtn')}
             onPress={() => router.push('/(auth)/register')}
             style={styles.registerBtn}
           />
         </View>
+
+        <Text style={styles.termsNotice}>
+          {t('termsNotice')}{' '}
+          <Text style={styles.termsLink}>{t('termsOfService')}</Text> {t('and')}{' '}
+          <Text style={styles.termsLink}>{t('privacyPolicy')}</Text>
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -98,55 +126,75 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.background,
   },
   scrollContent: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: theme.spacing.xxl,
+    padding: theme.spacing.lg,
     justifyContent: 'space-between',
+  },
+  langPillRow: {
+    alignItems: 'flex-end',
+    marginBottom: theme.spacing.sm,
+  },
+  langPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
+  },
+  langPillText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.primaryDark,
   },
   brandHeader: {
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
+    marginVertical: theme.spacing.md,
   },
   crownCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.secondary,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: theme.spacing.md,
     borderWidth: 2,
     borderColor: theme.colors.primary,
+    marginBottom: theme.spacing.sm,
     ...theme.shadows.card,
   },
   appName: {
     ...theme.typography.h1,
-    color: theme.colors.secondary,
+    color: theme.colors.text,
     letterSpacing: 2,
   },
   appTagline: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary,
     marginTop: 4,
+    textAlign: 'center',
   },
   featuresContainer: {
-    marginBottom: theme.spacing.xl,
     gap: theme.spacing.md,
+    marginVertical: theme.spacing.md,
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.colors.surface,
     padding: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   featureIconBox: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.md,
@@ -160,16 +208,27 @@ const styles = StyleSheet.create({
   },
   featureDesc: {
     ...theme.typography.caption,
-    color: theme.colors.textSecondary,
+    color: theme.colors.textMuted,
     marginTop: 2,
   },
   buttonContainer: {
     gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
   },
   signInBtn: {
     width: '100%',
   },
   registerBtn: {
     width: '100%',
+  },
+  termsNotice: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginTop: theme.spacing.md,
+  },
+  termsLink: {
+    color: theme.colors.primaryDark,
+    fontWeight: '600',
   },
 });

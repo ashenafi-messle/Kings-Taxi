@@ -1,0 +1,46 @@
+{
+  "searchPlaceholder": "ሆቴሎችን በስም ወይም በከተማ ይፈልጉ...",
+  "allCities": "ሁሉም ከተሞች",
+  "cities": {
+    "addisAbaba": "አዲስ አበባ",
+    "bahirDar": "ባሕር ዳር",
+    "hawassa": "ሀዋሳ",
+    "lalibela": "ላሊበላ",
+    "gondar": "ጎንደር"
+  },
+  "categories": {
+    "all": "ሁሉም",
+    "luxury": "የቅንጦት",
+    "boutique": "ቡቲክ",
+    "resort": "ሪዞርት",
+    "business": "ቢዝነስ"
+  },
+  "startingFrom": "መነሻ ዋጋ",
+  "viewDetails": "ዝርዝሩንና ክፍሎችን ይመልከቱ",
+  "aboutHotel": "ስለ ሆቴሉ",
+  "amenities": "የሆቴሉ አገልግሎቶችና ምቾቶች",
+  "availableRooms": "ክፍት ክፍሎችና ስዊቶች",
+  "selectRoom": "ክፍል ይምረጡ",
+  "policies": "የሆቴሉ ደንቦች",
+  "checkInTime": "መግቢያ ከ",
+  "checkOutTime": "መውጫ እስከ",
+  "cancellationPolicy": "የስረዛ ፖሊሲ",
+  "freeCancellation": "ነፃ የስረዛ እድል አለው",
+  "contactHotel": "ቀጥታ ጥያቄዎች",
+  "reserveNow": "ክፍል ያስይዙ",
+  "reservationTitle": "የክፍል ማስያዣ ቅጽ",
+  "datesAndGuests": "የቆይታ ቀናትና እንግዶች",
+  "checkInDate": "የመግቢያ ቀን",
+  "checkOutDate": "የመውጫ ቀን",
+  "guestCount": "የእንግዶች ብዛት",
+  "selectedRoom": "የተመረጠው ክፍል",
+  "nights": "{{count}} አዳር",
+  "nights_plural": "{{count}} አዳሮች",
+  "priceSummary": "የዋጋ ማጠቃለያ",
+  "confirmReservation": "ቦታ ማስያዣውን ያረጋግጡ",
+  "bookingSuccess": "ቦታ ማስያዝ ተሳክቷል!",
+  "bookingSuccessMsg": "በ{{hotel}} ያደረጉት የሆቴል ማስያዣ በተሳካ ሁኔታ ተመዝግቧል።",
+  "noHotelsFound": "በተመረጠው ማጣሪያ ምንም ሆቴል አልተገኘም",
+  "resetFilters": "ማጣሪያውን አጽዳ"
+}
+

@@ -31,9 +31,11 @@ import {
 } from '../../src/components';
 import { useRideStore } from '../../src/stores';
 import { formatETB } from '../../src/utils/currency';
+import { useTranslation } from '../../src/i18n';
 
 export default function ActiveRideScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['transportation', 'common', 'navigation']);
   const { currentRide, simulateNextRideStep, cancelRide, completePayment, resetRide } =
     useRideStore();
 
@@ -43,12 +45,12 @@ export default function ActiveRideScreen() {
   if (!currentRide) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <AppHeader title="Active Ride" showBack />
+        <AppHeader title={t('navigation:titles.activeRide')} showBack />
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No Active Ride</Text>
-          <Text style={styles.emptySubtitle}>You do not have a ride in progress.</Text>
+          <Text style={styles.emptyTitle}>{t('tripCancelled')}</Text>
+          <Text style={styles.emptySubtitle}>{t('common:empty')}</Text>
           <PrimaryButton
-            title="Book a Ride"
+            title={t('navigation:titles.rideBooking')}
             onPress={() => router.replace('/rides/book')}
             style={styles.bookBtn}
           />
@@ -77,32 +79,32 @@ export default function ActiveRideScreen() {
   const getStatusHeadline = () => {
     switch (status) {
       case 'SEARCHING_DRIVER':
-        return 'Connecting with nearby drivers...';
+        return t('searchingDriver');
       case 'DRIVER_ASSIGNED':
-        return 'Driver Assigned & Confirmed';
+        return t('driverFound');
       case 'DRIVER_ARRIVING':
-        return 'Driver is heading to your pickup';
+        return t('driverArriving', { eta: 4 });
       case 'DRIVER_ARRIVED':
-        return 'Driver has arrived at pickup point!';
+        return t('driverArriving', { eta: 0 });
       case 'TRIP_STARTED':
-        return 'On the way to destination';
+        return t('rideInProgress');
       case 'TRIP_COMPLETED':
-        return 'Trip Completed — Ready for Payment';
+        return t('tripCompleted');
       case 'PAYMENT_PENDING':
-        return 'Payment Pending Confirmation';
+        return t('receiptTitle');
       case 'PAYMENT_COMPLETED':
-        return 'Trip & Payment Completed!';
+        return t('tripCompleted');
       case 'CANCELLED':
-        return 'Ride Cancelled';
+        return t('tripCancelled');
       default:
-        return 'Kings Taxi Service';
+        return t('rideInProgress');
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <AppHeader
-        title="Live Trip Status"
+        title={t('navigation:titles.activeRide')}
         rightAction={<StatusBadge status={status} />}
         showBack
         onBack={() => router.replace('/(tabs)')}
@@ -144,7 +146,7 @@ export default function ActiveRideScreen() {
               <View style={styles.driverInfo}>
                 <Text style={styles.driverName}>{driver.name}</Text>
                 <Text style={styles.driverStats}>
-                  ★ {driver.rating.toFixed(2)} • {driver.totalTrips} completed trips
+                  ★ {driver.rating.toFixed(2)} • {driver.totalTrips} {t('common:reviews')}
                 </Text>
                 <View style={styles.vehiclePlateRow}>
                   <Text style={styles.vehicleModel}>
@@ -164,7 +166,7 @@ export default function ActiveRideScreen() {
                 onPress={() => Linking.openURL(`tel:${driver.phone}`)}
               >
                 <Phone size={18} color={theme.colors.secondary} />
-                <Text style={styles.contactBtnText}>Call Driver</Text>
+                <Text style={styles.contactBtnText}>{t('callDriver')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -172,22 +174,22 @@ export default function ActiveRideScreen() {
                 onPress={() => Linking.openURL(`sms:${driver.phone}`)}
               >
                 <MessageSquare size={18} color={theme.colors.secondary} />
-                <Text style={styles.contactBtnText}>Send SMS</Text>
+                <Text style={styles.contactBtnText}>{t('messageDriver')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : (
           <View style={styles.searchingCard}>
-            <Text style={styles.searchingTitle}>Locating Available Fleet...</Text>
+            <Text style={styles.searchingTitle}>{t('searchingDriver')}</Text>
             <Text style={styles.searchingDesc}>
-              We are broadcasting your request to certified Kings Taxi drivers near Bole.
+              {t('common:loading')}
             </Text>
           </View>
         )}
 
         {/* Fare Overview */}
         <View style={styles.fareRow}>
-          <Text style={styles.fareLabel}>Trip Fare (Ethiopian Birr)</Text>
+          <Text style={styles.fareLabel}>{t('totalFare')}</Text>
           <Text style={styles.fareValue}>
             {formatETB(finalPrice || estimatedPrice)}
           </Text>
@@ -195,9 +197,9 @@ export default function ActiveRideScreen() {
 
         {/* Developer / Demo Simulator Control */}
         <View style={styles.simulationControl}>
-          <Text style={styles.simLabel}>Trip State Simulation Controls:</Text>
+          <Text style={styles.simLabel}>{t('common:actions')}:</Text>
           <PrimaryButton
-            title={`Advance: Step to Next Trip Status`}
+            title={`${t('common:next')} (${status})`}
             onPress={handleNextStep}
             icon={<PlayCircle size={18} color={theme.colors.text} />}
             style={styles.stepBtn}
@@ -207,7 +209,7 @@ export default function ActiveRideScreen() {
         {/* Safety & Cancellation Actions */}
         <View style={styles.bottomActions}>
           <SecondaryButton
-            title="Cancel Ride"
+            title={t('cancelRide')}
             onPress={() => setShowCancelModal(true)}
             icon={<XCircle size={18} color={theme.colors.danger} />}
             textStyle={{ color: theme.colors.danger }}
@@ -218,7 +220,7 @@ export default function ActiveRideScreen() {
             onPress={() => router.push('/support/index')}
           >
             <ShieldAlert size={16} color={theme.colors.danger} />
-            <Text style={styles.emergencyText}>Emergency & Safety Assistance</Text>
+            <Text style={styles.emergencyText}>{t('emergencySos')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -226,10 +228,10 @@ export default function ActiveRideScreen() {
       {/* Cancel Confirmation Modal */}
       <ConfirmationModal
         visible={showCancelModal}
-        title="Cancel Ride"
-        message="Are you sure you want to cancel this ride request? Frequent cancellations may affect your rating."
-        confirmTitle="Yes, Cancel"
-        cancelTitle="Keep Ride"
+        title={t('cancelConfirmTitle')}
+        message={t('cancelConfirmDesc')}
+        confirmTitle={t('common:confirm')}
+        cancelTitle={t('common:cancel')}
         isDestructive
         onConfirm={handleConfirmCancel}
         onCancel={() => setShowCancelModal(false)}

@@ -19,8 +19,10 @@ import { theme } from '../../src/theme';
 import { EmptyState } from '../../src/components';
 import { mockNotifications, AppNotification } from '../../src/mocks';
 import { formatTimeShort } from '../../src/utils/date';
+import { useTranslation } from '../../src/i18n';
 
 export default function NotificationsScreen() {
+  const { t } = useTranslation(['notifications', 'common']);
   const [notifications, setNotifications] = useState<AppNotification[]>(mockNotifications);
 
   const handleMarkAllRead = () => {
@@ -48,15 +50,15 @@ export default function NotificationsScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerTitle}>{t('title')}</Text>
           <Text style={styles.headerSubtitle}>
-            {unreadCount > 0 ? `${unreadCount} unread alert${unreadCount > 1 ? 's' : ''}` : 'All caught up'}
+            {unreadCount > 0 ? `${unreadCount} unread` : t('emptyTitle')}
           </Text>
         </View>
         {unreadCount > 0 && (
           <TouchableOpacity onPress={handleMarkAllRead} style={styles.markReadBtn}>
             <CheckCheck size={16} color={theme.colors.primaryDark} />
-            <Text style={styles.markReadText}>Mark all as read</Text>
+            <Text style={styles.markReadText}>{t('markAllRead')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -67,8 +69,8 @@ export default function NotificationsScreen() {
       >
         {notifications.length === 0 ? (
           <EmptyState
-            title="No Notifications"
-            description="You don’t have any updates right now."
+            title={t('emptyTitle')}
+            description={t('emptyDesc')}
           />
         ) : (
           notifications.map((item) => (

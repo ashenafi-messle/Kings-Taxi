@@ -1,0 +1,39 @@
+{
+  "searchPlaceholder": "የቅርስ ቦታዎችን፣ አብያተ ክርስቲያናትን ወይም ጉብኝቶችን ይፈልጉ...",
+  "allCategories": "ሁሉም ቦታዎች",
+  "categories": {
+    "all": "ሁሉም",
+    "unesco": "የዩኔስኮ የዓለም ቅርስ",
+    "historical": "ታሪካዊ ቦታዎች",
+    "nature": "የተፈጥሮና የዱር እንስሳት",
+    "cultural": "ባህላዊና ሃይማኖታዊ"
+  },
+  "highlights": "የጉብኝቱ ዋና ዋና መስህቦች",
+  "historicalOverview": "ታሪካዊ ዳራ",
+  "visitorInfo": "የጎብኚዎች መረጃ",
+  "entryFee": "የመግቢያ ክፍያ",
+  "bestTimeToVisit": "ለመጎብኘት ተመራጭ ወቅት",
+  "recommendedDuration": "የሚመከር የቆይታ ጊዜ",
+  "guidedTourAvailable": "ፈቃድ ያለው አስጎብኚ ተካቷል",
+  "transportOptions": "የትራንስፖርት አማራጮች",
+  "bookTourBtn": "የጉብኝት ፓኬጅ ይያዙ",
+  "buildCustomTourBtn": "ልዩ ጉብኝት ያዘጋጁ",
+  "customTour": {
+    "title": "ልዩ የቅርስ ጉብኝት ማዘጋጃ",
+    "subtitle": "ከግል ሹፌርና ከተመሰከረለት አስጎብኚ ጋር የተዘጋጀ የኢትዮጵያ የቅርስ ጉዞ።",
+    "stepDestination": "1. መዳረሻ ይምረጡ",
+    "stepDuration": "2. የቆይታ ቀናት",
+    "stepTransport": "3. የተሽከርካሪ ምርጫ",
+    "stepGuide": "4. የአስጎብኚ ቋንቋ",
+    "needEnglish": "እንግሊዝኛ ተናጋሪ አስጎብኚ",
+    "needAmharic": "አማርኛ ተናጋሪ አስጎብኚ",
+    "needOromo": "ኦሮምኛ ተናጋሪ አስጎብኚ",
+    "specialRequests": "ልዩ ፍላጎቶችና የጉዞ ማስታወሻዎች",
+    "specialRequestsPlaceholder": "ለምሳሌ የፎቶ ማንሳት ፈቃድ፣ የምግብ ምርጫ...",
+    "estimatedPrice": "የተገመተ የጉብኝት ዋጋ",
+    "submitInquiry": "የጉብኝት ጥያቄውን ያስገቡ",
+    "inquirySubmitted": "ጥያቄዎ ገብቷል!",
+    "inquirySuccessMsg": "የጉዞ አማካሪያችን መርሐግብርዎን ተመልክቶ በቅርቡ ያነጋግርዎታል።"
+  }
+}
+

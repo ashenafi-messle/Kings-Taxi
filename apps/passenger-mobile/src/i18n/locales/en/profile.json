@@ -1,0 +1,48 @@
+{
+  "title": "My Account",
+  "memberSince": "Member since {{year}}",
+  "verifiedPassenger": "Verified Passenger",
+  "sections": {
+    "account": "Account Settings",
+    "preferences": "Preferences",
+    "support": "Support & Legal"
+  },
+  "items": {
+    "personalInfo": "Personal Information",
+    "editProfile": "Edit Profile",
+    "language": "Language Preferences",
+    "security": "Security & Biometrics",
+    "paymentMethods": "Payment Methods",
+    "savedPlaces": "Saved Locations",
+    "notifications": "Push & SMS Notifications",
+    "helpSupport": "Help & Support",
+    "privacyPolicy": "Privacy Policy",
+    "termsOfService": "Terms of Service",
+    "logout": "Log Out"
+  },
+  "edit": {
+    "editTitle": "Edit Profile",
+    "fullName": "Full Name",
+    "email": "Email Address",
+    "phone": "Phone Number",
+    "saveChanges": "Save Changes",
+    "profileUpdated": "Profile updated successfully"
+  },
+  "language": {
+    "title": "Language Preferences",
+    "description": "Select your preferred display language for ride bookings, receipts, and menus.",
+    "english": "English",
+    "amharic": "Amharic",
+    "oromo": "Afaan Oromoo",
+    "nativeEnglish": "English",
+    "nativeAmharic": "አማርኛ",
+    "nativeOromo": "Afaan Oromoo"
+  },
+  "logoutModal": {
+    "title": "Log Out of Kings Taxi?",
+    "message": "Are you sure you want to sign out of your passenger account?",
+    "cancel": "Cancel",
+    "confirm": "Log Out"
+  }
+}
+

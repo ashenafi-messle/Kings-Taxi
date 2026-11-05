@@ -11,47 +11,40 @@ import { CheckCircle2, Globe } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { AppHeader } from '../../src/components';
 import { useSettingsStore, SupportedLanguage } from '../../src/stores';
-
-interface LanguageOption {
-  code: SupportedLanguage;
-  name: string;
-  nativeName: string;
-}
-
-const languages: LanguageOption[] = [
-  { code: 'en', name: 'English', nativeName: 'English (US)' },
-  { code: 'am', name: 'Amharic', nativeName: 'አማርኛ' },
-  { code: 'om', name: 'Afaan Oromoo', nativeName: 'Afaan Oromoo' },
-];
+import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
 
 export default function LanguageSettingsScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['profile', 'common']);
   const { language, setLanguage } = useSettingsStore();
 
-  const handleSelect = (code: SupportedLanguage) => {
-    setLanguage(code);
+  const handleSelect = async (code: SupportedLanguage) => {
+    await setLanguage(code);
     router.back();
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="Language Preferences" showBack />
+      <AppHeader title={t('language.title')} showBack />
       <View style={styles.content}>
         <View style={styles.infoBanner}>
           <Globe size={20} color={theme.colors.primaryDark} />
           <Text style={styles.infoText}>
-            Select your preferred display language for ride bookings, receipts, and menus.
+            {t('language.description')}
           </Text>
         </View>
 
         <View style={styles.listCard}>
-          {languages.map((item) => {
+          {SUPPORTED_LANGUAGES.map((item) => {
             const isSelected = language === item.code;
             return (
               <TouchableOpacity
                 key={item.code}
                 activeOpacity={0.8}
                 onPress={() => handleSelect(item.code)}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.nativeName} (${item.name})`}
+                accessibilityState={{ selected: isSelected }}
                 style={[
                   styles.languageItem,
                   isSelected && styles.languageItemSelected,
@@ -59,7 +52,9 @@ export default function LanguageSettingsScreen() {
               >
                 <View style={styles.languageTextWrap}>
                   <Text style={styles.nativeName}>{item.nativeName}</Text>
-                  <Text style={styles.englishName}>{item.name}</Text>
+                  <Text style={styles.englishName}>
+                    {item.name} • {item.sublabel}
+                  </Text>
                 </View>
                 {isSelected ? (
                   <CheckCircle2 size={22} color={theme.colors.primaryDark} fill={theme.colors.primaryLight} />
@@ -98,6 +93,7 @@ const styles = StyleSheet.create({
     ...theme.typography.caption,
     color: theme.colors.textSecondary,
     flex: 1,
+    lineHeight: 18,
   },
   listCard: {
     backgroundColor: theme.colors.surface,

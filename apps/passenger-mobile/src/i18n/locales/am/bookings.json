@@ -1,0 +1,32 @@
+{
+  "tabs": {
+    "active": "የነቃ",
+    "completed": "የተጠናቀቀ",
+    "cancelled": "የተሰረዘ"
+  },
+  "emptyState": {
+    "activeTitle": "ምንም የነቃ ቦታ ማስያዣ የለም",
+    "activeSubtitle": "በአሁኑ ሰዓት በመካሄድ ላይ ያለ ጉዞ ወይም የሆቴል ማስያዣ የለዎትም።",
+    "completedTitle": "የተጠናቀቀ ቦታ ማስያዣ የለም",
+    "completedSubtitle": "የተጠናቀቁ ጉዞዎችዎና የሆቴል ቆይታዎችዎ እዚህ ይታያሉ።",
+    "cancelledTitle": "የተሰረዘ ቦታ ማስያዣ የለም",
+    "cancelledSubtitle": "እስካሁን የተሰረዘ ምንም አይነት ቦታ ማስያዣ የለዎትም።"
+  },
+  "card": {
+    "rideType": "የታክሲ ጉዞ",
+    "hotelType": "የሆቴል ቆይታ",
+    "tourType": "የቅርስ ጉብኝት",
+    "statusActive": "በሂደት ላይ",
+    "statusCompleted": "የተጠናቀቀ",
+    "statusCancelled": "የተሰረዘ",
+    "bookingCode": "መለያ ቁጥር #{{id}}",
+    "pickup": "መነሻ",
+    "dropoff": "መድረሻ",
+    "checkIn": "መግቢያ",
+    "totalPrice": "የተከፈለ ጠቅላላ",
+    "viewReceipt": "ደረሰኝ ይመልከቱ",
+    "rebook": "እንደገና ያስይዙ",
+    "cancelBooking": "ቦታ ማስያዣውን ይሰርዙ"
+  }
+}
+

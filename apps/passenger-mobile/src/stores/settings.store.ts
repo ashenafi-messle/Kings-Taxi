@@ -1,6 +1,10 @@
 import { create } from 'zustand';
-
-export type SupportedLanguage = 'en' | 'am' | 'om';
+import {
+  SupportedLanguage,
+  changeLanguage,
+  getCurrentLanguage,
+  getPersistedLanguage,
+} from '../i18n';
 
 interface SettingsState {
   language: SupportedLanguage;
@@ -8,19 +12,30 @@ interface SettingsState {
   smsReceiptsEnabled: boolean;
   biometricLoginEnabled: boolean;
 
-  setLanguage: (lang: SupportedLanguage) => void;
+  setLanguage: (lang: SupportedLanguage) => Promise<void>;
+  initSettings: () => Promise<void>;
   toggleNotifications: () => void;
   toggleSmsReceipts: () => void;
   toggleBiometrics: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
-  language: 'en',
+  language: getCurrentLanguage(),
   notificationsEnabled: true,
   smsReceiptsEnabled: true,
   biometricLoginEnabled: false,
 
-  setLanguage: (language) => set({ language }),
+  setLanguage: async (language: SupportedLanguage) => {
+    set({ language });
+    await changeLanguage(language);
+  },
+
+  initSettings: async () => {
+    const persisted = await getPersistedLanguage();
+    set({ language: persisted });
+    await changeLanguage(persisted);
+  },
+
   toggleNotifications: () =>
     set((state) => ({ notificationsEnabled: !state.notificationsEnabled })),
   toggleSmsReceipts: () =>
@@ -28,3 +43,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   toggleBiometrics: () =>
     set((state) => ({ biometricLoginEnabled: !state.biometricLoginEnabled })),
 }));
+
+export { SupportedLanguage };

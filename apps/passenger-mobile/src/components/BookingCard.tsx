@@ -11,6 +11,7 @@ import { theme } from '../theme';
 import { StatusBadge } from './StatusBadge';
 import { formatETB } from '../utils/currency';
 import { formatDateShort } from '../utils/date';
+import { useTranslation } from '../i18n';
 
 export interface BookingSummaryItem {
   id: string;
@@ -33,6 +34,19 @@ export const BookingCard: React.FC<BookingCardProps> = ({
   onPress,
   style,
 }) => {
+  const { t } = useTranslation(['bookings', 'common']);
+
+  const getTypeName = () => {
+    switch (booking.type) {
+      case 'ride':
+        return t('card.rideType');
+      case 'hotel':
+        return t('card.hotelType');
+      case 'tour':
+        return t('card.tourType');
+    }
+  };
+
   const getIcon = () => {
     switch (booking.type) {
       case 'ride':
@@ -54,7 +68,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({
         <View style={styles.typeRow}>
           <View style={styles.iconCircle}>{getIcon()}</View>
           <View>
-            <Text style={styles.typeText}>{booking.type.toUpperCase()}</Text>
+            <Text style={styles.typeText}>{getTypeName()}</Text>
             <View style={styles.dateRow}>
               <Calendar size={12} color={theme.colors.textMuted} />
               <Text style={styles.dateText}>{formatDateShort(booking.date)}</Text>
@@ -72,7 +86,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({
       <View style={styles.bottomRow}>
         <Text style={styles.price}>{formatETB(booking.priceETB)}</Text>
         <View style={styles.detailsBtn}>
-          <Text style={styles.detailsBtnText}>Details</Text>
+          <Text style={styles.detailsBtnText}>{t('card.viewReceipt')}</Text>
           <ChevronRight size={14} color={theme.colors.secondary} />
         </View>
       </View>

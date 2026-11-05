@@ -1,0 +1,46 @@
+{
+  "searchPlaceholder": "Search hotels by name or city...",
+  "allCities": "All Cities",
+  "cities": {
+    "addisAbaba": "Addis Ababa",
+    "bahirDar": "Bahir Dar",
+    "hawassa": "Hawassa",
+    "lalibela": "Lalibela",
+    "gondar": "Gondar"
+  },
+  "categories": {
+    "all": "All",
+    "luxury": "Luxury",
+    "boutique": "Boutique",
+    "resort": "Resort",
+    "business": "Business"
+  },
+  "startingFrom": "Starting from",
+  "viewDetails": "View Details & Rooms",
+  "aboutHotel": "About the Hotel",
+  "amenities": "Hotel Amenities & Services",
+  "availableRooms": "Available Rooms & Suites",
+  "selectRoom": "Select Room",
+  "policies": "Hotel Policies",
+  "checkInTime": "Check-in from",
+  "checkOutTime": "Check-out before",
+  "cancellationPolicy": "Cancellation Policy",
+  "freeCancellation": "Free cancellation available",
+  "contactHotel": "Direct Inquiries",
+  "reserveNow": "Reserve Room",
+  "reservationTitle": "Room Reservation",
+  "datesAndGuests": "Dates & Guests",
+  "checkInDate": "Check-in Date",
+  "checkOutDate": "Check-out Date",
+  "guestCount": "Number of Guests",
+  "selectedRoom": "Selected Room",
+  "nights": "{{count}} night",
+  "nights_plural": "{{count}} nights",
+  "priceSummary": "Price Summary",
+  "confirmReservation": "Confirm Booking",
+  "bookingSuccess": "Reservation Confirmed!",
+  "bookingSuccessMsg": "Your hotel booking at {{hotel}} has been submitted.",
+  "noHotelsFound": "No hotels match your current filters",
+  "resetFilters": "Reset Filters"
+}
+

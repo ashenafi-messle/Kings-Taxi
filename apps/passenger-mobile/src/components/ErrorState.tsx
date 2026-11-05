@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { AlertCircle } from 'lucide-react-native';
 import { theme } from '../theme';
 import { SecondaryButton } from './SecondaryButton';
+import { useTranslation } from '../i18n';
 
 export interface ErrorStateProps {
   title?: string;
@@ -12,19 +13,22 @@ export interface ErrorStateProps {
 }
 
 export const ErrorState: React.FC<ErrorStateProps> = ({
-  title = 'Something went wrong',
+  title,
   message,
   onRetry,
   style,
 }) => {
+  const { t } = useTranslation('common');
+  const displayTitle = title || t('somethingWentWrong');
+
   return (
     <View style={[styles.container, style]}>
       <AlertCircle size={40} color={theme.colors.danger} style={styles.icon} />
-      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.title}>{displayTitle}</Text>
       <Text style={styles.message}>{message}</Text>
       {onRetry && (
         <SecondaryButton
-          title="Try Again"
+          title={t('tryAgain')}
           onPress={onRetry}
           style={styles.retryButton}
         />

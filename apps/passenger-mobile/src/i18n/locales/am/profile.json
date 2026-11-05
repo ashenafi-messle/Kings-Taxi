@@ -1,0 +1,48 @@
+{
+  "title": "የእኔ መለያ",
+  "memberSince": "የኪንግስ ታክሲ አባል ከ{{year}}",
+  "verifiedPassenger": "የተረጋገጠ ተሳፋሪ",
+  "sections": {
+    "account": "የመለያ ቅንብሮች",
+    "preferences": "ምርጫዎች",
+    "support": "ድጋፍና ሕጋዊ መረጃዎች"
+  },
+  "items": {
+    "personalInfo": "የግል መረጃ",
+    "editProfile": "መገለጫን አርትዕ",
+    "language": "የቋንቋ ምርጫ",
+    "security": "ደህንነትና ባዮሜትሪክስ",
+    "paymentMethods": "የክፍያ ዘዴዎች",
+    "savedPlaces": "የተቀመጡ ቦታዎች",
+    "notifications": "ማሳወቂያዎችና የኤስኤምኤስ ደረሰኞች",
+    "helpSupport": "እርዳታና ድጋፍ",
+    "privacyPolicy": "የግላዊነት ፖሊሲ",
+    "termsOfService": "የአገልግሎት ውሎች",
+    "logout": "ውጣ"
+  },
+  "edit": {
+    "editTitle": "መገለጫን አርትዕ",
+    "fullName": "ሙሉ ስም",
+    "email": "ኢሜይል አድራሻ",
+    "phone": "ስልክ ቁጥር",
+    "saveChanges": "ለውጦችን አስቀምጥ",
+    "profileUpdated": "መገለጫዎ በተሳካ ሁኔታ ተሻሽሏል"
+  },
+  "language": {
+    "title": "የቋንቋ ምርጫ",
+    "description": "ለጉዞ ጥሪ፣ ለደረሰኞችና ለማውጫዎች የሚፈልጉትን የቋንቋ ምርጫ ይምረጡ።",
+    "english": "እንግሊዝኛ",
+    "amharic": "አማርኛ",
+    "oromo": "ኦሮምኛ",
+    "nativeEnglish": "English",
+    "nativeAmharic": "አማርኛ",
+    "nativeOromo": "Afaan Oromoo"
+  },
+  "logoutModal": {
+    "title": "ከኪንግስ ታክሲ መውጣት ይፈልጋሉ?",
+    "message": "ከተሳፋሪ መለያዎ መውጣት እንደሚፈልጉ እርግጠኛ ነዎት?",
+    "cancel": "ይቅር",
+    "confirm": "ውጣ"
+  }
+}
+

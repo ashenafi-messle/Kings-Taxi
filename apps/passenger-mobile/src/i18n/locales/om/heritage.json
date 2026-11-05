@@ -1,0 +1,39 @@
+{
+  "searchPlaceholder": "Bakkeewwan dhaalaa, manneen sagadaa ykn naannawa barbaadaa...",
+  "allCategories": "Bakkeewwan Hunda",
+  "categories": {
+    "all": "Hunda",
+    "unesco": "Dhaala Addunyaa UNESCO",
+    "historical": "Bakkeewwan Seenaa",
+    "nature": "Uumamaa fi Bineensota",
+    "cultural": "Aadaa fi Amantaa"
+  },
+  "highlights": "Qabxiilee Ijoo Daawwannichaa",
+  "historicalOverview": "Seenaa Duubaa",
+  "visitorInfo": "Odeeffannoo Daawwattootaa",
+  "entryFee": "Kaffaltii Seensaa",
+  "bestTimeToVisit": "Yeroo Daawwannaa Filatamaa",
+  "recommendedDuration": "Yeroo Turtii Gorfamu",
+  "guidedTourAvailable": "Qajeelchaan Ibsaa Hayyame Qabu Ni Jira",
+  "transportOptions": "Filannoowwan Geejjibaa",
+  "bookTourBtn": "Paakeejii Daawwannaa Ajajuu",
+  "buildCustomTourBtn": "Daawwannaa Addaa Qopheessi",
+  "customTour": {
+    "title": "Imala Daawwannaa Addaa Qopheessuu",
+    "subtitle": "Konkolaachisaa dhuunfaa fi qajeelchaa hayyama qabu waliin imala dhaala Itoophiyaa qopheessaa.",
+    "stepDestination": "1. Bakka Ga'umsaa Filadhaa",
+    "stepDuration": "2. Turtii Guyyootaa",
+    "stepTransport": "3. Filannoo Konkolaataa",
+    "stepGuide": "4. Afaan Qajeelchaa",
+    "needEnglish": "Qajeelchaa Afaan Ingilizii",
+    "needAmharic": "Qajeelchaa Afaan Amaaraa",
+    "needOromo": "Qajeelchaa Afaan Oromoo",
+    "specialRequests": "Fedhii Addaa fi Yaadannoo Imalaa",
+    "specialRequestsPlaceholder": "Fkn. Hayyama suuraa kaasuu, filannoo nyaataa...",
+    "estimatedPrice": "Gatii Imalaa Tilmaamame",
+    "submitInquiry": "Gaaffii Imala Addaa Galchaa",
+    "inquirySubmitted": "Gaaffiin Galmaa'eera!",
+    "inquirySuccessMsg": "Qindeessaan imalaa keenya sagantaa keessan ilaalee dhiyootti isin qunnama."
+  }
+}
+

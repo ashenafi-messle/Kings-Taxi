@@ -11,16 +11,18 @@ import { useRouter } from 'expo-router';
 import { Phone } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { AppHeader, FormInput, PrimaryButton } from '../../src/components';
+import { useTranslation } from '../../src/i18n';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['auth', 'validation', 'common']);
   const [phone, setPhone] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = () => {
     if (!phone || phone.length < 9) {
-      setError('Please enter your registered phone number');
+      setError(t('validation:phoneRequired'));
       return;
     }
     setError('');
@@ -29,27 +31,27 @@ export default function ForgotPasswordScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="Reset Password" showBack />
+      <AppHeader title={t('forgotTitle')} showBack />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>Password Recovery</Text>
+          <Text style={styles.title}>{t('forgotTitle')}</Text>
           <Text style={styles.subtitle}>
-            Enter your Ethiopian phone number to receive a secure recovery code via SMS.
+            {t('forgotSubtitle')}
           </Text>
 
           {error ? <Text style={styles.errorBanner}>{error}</Text> : null}
 
           {submitted ? (
             <View style={styles.successBox}>
-              <Text style={styles.successTitle}>Recovery SMS Dispatched</Text>
+              <Text style={styles.successTitle}>{t('resetSent')}</Text>
               <Text style={styles.successText}>
-                We have sent an authentication link to {phone}. Please check your messages.
+                {t('verifySubtitle', { phone })}
               </Text>
               <PrimaryButton
-                title="Return to Sign In"
+                title={t('backToLogin')}
                 onPress={() => router.replace('/(auth)/login')}
                 style={styles.returnBtn}
               />
@@ -57,8 +59,8 @@ export default function ForgotPasswordScreen() {
           ) : (
             <View style={styles.form}>
               <FormInput
-                label="Registered Phone Number"
-                placeholder="+251 9X XXX XXXX"
+                label={t('phoneLabel')}
+                placeholder={t('phonePlaceholder')}
                 value={phone}
                 onChangeText={(text) => {
                   setPhone(text);
@@ -69,7 +71,7 @@ export default function ForgotPasswordScreen() {
               />
 
               <PrimaryButton
-                title="Send Recovery Code"
+                title={t('sendResetLink')}
                 onPress={handleSubmit}
                 style={styles.submitBtn}
               />

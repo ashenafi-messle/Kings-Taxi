@@ -28,10 +28,12 @@ import {
 } from '../../src/components';
 import { mockHotels } from '../../src/mocks';
 import { formatETB } from '../../src/utils/currency';
+import { useTranslation } from '../../src/i18n';
 
 export default function HotelDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { t } = useTranslation(['hotels', 'common', 'navigation']);
 
   const hotel = mockHotels.find((h) => h.id === id) || mockHotels[0];
   const [selectedRoomId, setSelectedRoomId] = useState(hotel.rooms[0]?.id || '');
@@ -92,20 +94,20 @@ export default function HotelDetailScreen() {
               onPress={() => Linking.openURL(`mailto:${hotel.email}`)}
             >
               <Mail size={14} color={theme.colors.secondary} />
-              <Text style={styles.contactText}>Email Hotel</Text>
+              <Text style={styles.contactText}>{t('contactHotel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Description Section */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Overview</Text>
+          <Text style={styles.sectionTitle}>{t('aboutHotel')}</Text>
           <Text style={styles.descriptionText}>{hotel.description}</Text>
         </View>
 
         {/* Facilities & Amenities */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Featured Amenities</Text>
+          <Text style={styles.sectionTitle}>{t('amenities')}</Text>
           <View style={styles.amenitiesWrap}>
             {hotel.amenities.map((amenity, idx) => (
               <View key={idx} style={styles.amenityChip}>
@@ -118,7 +120,7 @@ export default function HotelDetailScreen() {
 
         {/* Room Categories */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Available Room Categories</Text>
+          <Text style={styles.sectionTitle}>{t('availableRooms')}</Text>
           {hotel.rooms.map((room) => {
             const isSelected = room.id === selectedRoomId;
             return (
@@ -137,7 +139,7 @@ export default function HotelDetailScreen() {
                     <Text style={styles.roomTitle}>{room.title}</Text>
                     {isSelected && (
                       <View style={styles.selectedBadge}>
-                        <Text style={styles.selectedBadgeText}>Selected</Text>
+                        <Text style={styles.selectedBadgeText}>{t('selectRoom')}</Text>
                       </View>
                     )}
                   </View>
@@ -149,16 +151,16 @@ export default function HotelDetailScreen() {
                     </View>
                     <View style={styles.roomMeta}>
                       <Users size={14} color={theme.colors.textMuted} />
-                      <Text style={styles.roomMetaText}>Up to {room.capacityAdults} Adults</Text>
+                      <Text style={styles.roomMetaText}>{room.capacityAdults} {t('guestCount')}</Text>
                     </View>
                   </View>
                   <View style={styles.roomPriceRow}>
                     <Text style={styles.roomPrice}>
                       {formatETB(room.pricePerNight)}
-                      <Text style={styles.perNight}> / night</Text>
+                      <Text style={styles.perNight}> / {t('common:perNight')}</Text>
                     </Text>
                     <Text style={styles.availabilityText}>
-                      {room.availableCount} rooms remaining
+                      {room.availableCount} {t('common:status')}
                     </Text>
                   </View>
                 </View>
@@ -169,11 +171,11 @@ export default function HotelDetailScreen() {
 
         {/* Hotel Policies */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Booking & Cancellation Policies</Text>
+          <Text style={styles.sectionTitle}>{t('policies')}</Text>
           <View style={styles.policyRow}>
             <Clock size={16} color={theme.colors.textSecondary} />
             <Text style={styles.policyText}>
-              Check-in: {hotel.policies.checkInTime} • Check-out: {hotel.policies.checkOutTime}
+              {t('checkInTime')}: {hotel.policies.checkInTime} • {t('checkOutTime')}: {hotel.policies.checkOutTime}
             </Text>
           </View>
           <View style={styles.policyRow}>
@@ -184,7 +186,7 @@ export default function HotelDetailScreen() {
 
         {/* Reserve CTA */}
         <PrimaryButton
-          title={`Reserve ${selectedRoom?.title || 'Room'} • ${formatETB(selectedRoom?.pricePerNight)}`}
+          title={`${t('reserveNow')} • ${formatETB(selectedRoom?.pricePerNight)}`}
           onPress={handleProceedToReserve}
           style={styles.reserveBtn}
         />

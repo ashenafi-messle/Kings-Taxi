@@ -19,9 +19,11 @@ import {
 import { useRideStore } from '../../src/stores';
 import { mockLocations } from '../../src/mocks';
 import { formatETB } from '../../src/utils/currency';
+import { useTranslation } from '../../src/i18n';
 
 export default function RideBookingScreen() {
   const router = useRouter();
+  const { t } = useTranslation(['transportation', 'common', 'navigation', 'payments']);
   const {
     pickupLocation,
     destinationLocation,
@@ -47,7 +49,7 @@ export default function RideBookingScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppHeader title="Book a Kings Ride" showBack />
+      <AppHeader title={t('navigation:titles.rideBooking')} showBack />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -74,12 +76,12 @@ export default function RideBookingScreen() {
               <Navigation size={12} color="#FFFFFF" />
             </View>
             <View style={styles.locationTextContainer}>
-              <Text style={styles.locationLabel}>Pickup Location</Text>
+              <Text style={styles.locationLabel}>{t('pickupLocation')}</Text>
               <Text style={styles.locationTitle} numberOfLines={1}>
                 {pickupLocation.title}
               </Text>
             </View>
-            <Text style={styles.changeActionText}>Change</Text>
+            <Text style={styles.changeActionText}>{t('common:edit')}</Text>
           </TouchableOpacity>
 
           {/* Pickup Choices Dropdown */}
@@ -115,7 +117,7 @@ export default function RideBookingScreen() {
               <MapPin size={12} color="#FFFFFF" />
             </View>
             <View style={styles.locationTextContainer}>
-              <Text style={styles.locationLabel}>Dropoff Destination</Text>
+              <Text style={styles.locationLabel}>{t('destination')}</Text>
               <Text
                 style={[
                   styles.locationTitle,
@@ -123,11 +125,11 @@ export default function RideBookingScreen() {
                 ]}
                 numberOfLines={1}
               >
-                {destinationLocation ? destinationLocation.title : 'Select dropoff destination...'}
+                {destinationLocation ? destinationLocation.title : t('enterDestination')}
               </Text>
             </View>
             <Text style={styles.changeActionText}>
-              {destinationLocation ? 'Change' : 'Choose'}
+              {destinationLocation ? t('common:edit') : t('common:search')}
             </Text>
           </TouchableOpacity>
 
@@ -154,7 +156,7 @@ export default function RideBookingScreen() {
         </View>
 
         {/* Vehicle Selection Header */}
-        <Text style={styles.sectionTitle}>Choose Vehicle Category</Text>
+        <Text style={styles.sectionTitle}>{t('selectVehicle')}</Text>
 
         {/* Vehicle Options List */}
         <View style={styles.vehiclesList}>
@@ -175,8 +177,8 @@ export default function RideBookingScreen() {
         >
           <View style={styles.paymentLeft}>
             <CreditCard size={18} color={theme.colors.primaryDark} />
-            <Text style={styles.paymentLabel}>Payment Method:</Text>
-            <Text style={styles.paymentMethodName}>Telebirr SuperApp</Text>
+            <Text style={styles.paymentLabel}>{t('paymentMethod')}:</Text>
+            <Text style={styles.paymentMethodName}>Telebirr</Text>
           </View>
           <ChevronRight size={16} color={theme.colors.textMuted} />
         </TouchableOpacity>
@@ -185,8 +187,8 @@ export default function RideBookingScreen() {
         <PrimaryButton
           title={
             destinationLocation
-              ? `Confirm Kings ${selectedVehicle.name.replace('Kings ', '')} • ${formatETB(selectedVehicle.estimatedPrice)}`
-              : 'Please Select Destination'
+              ? `${t('bookRideBtn')} • ${formatETB(selectedVehicle.estimatedPrice)}`
+              : t('enterDestination')
           }
           onPress={handleConfirmBooking}
           disabled={!destinationLocation}

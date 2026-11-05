@@ -1,0 +1,39 @@
+{
+  "searchPlaceholder": "Search heritage sites, churches, or circuits...",
+  "allCategories": "All Sites",
+  "categories": {
+    "all": "All",
+    "unesco": "UNESCO World Heritage",
+    "historical": "Historical Sites",
+    "nature": "Nature & Wildlife",
+    "cultural": "Cultural & Religious"
+  },
+  "highlights": "Tour Highlights",
+  "historicalOverview": "Historical Overview",
+  "visitorInfo": "Visitor Information",
+  "entryFee": "Entrance Fee",
+  "bestTimeToVisit": "Best Time to Visit",
+  "recommendedDuration": "Recommended Duration",
+  "guidedTourAvailable": "Certified Local Guide Included",
+  "transportOptions": "Transportation Options",
+  "bookTourBtn": "Book Tour Package",
+  "buildCustomTourBtn": "Build Custom Tour",
+  "customTour": {
+    "title": "Custom Tour Package Builder",
+    "subtitle": "Tailor an exclusive Ethiopian heritage circuit with private chauffeur and certified guide.",
+    "stepDestination": "1. Select Destination",
+    "stepDuration": "2. Duration (Days)",
+    "stepTransport": "3. Vehicle Preference",
+    "stepGuide": "4. Guide & Language",
+    "needEnglish": "English Speaking Guide",
+    "needAmharic": "Amharic Speaking Guide",
+    "needOromo": "Afaan Oromo Speaking Guide",
+    "specialRequests": "Special Requests & Itinerary Notes",
+    "specialRequestsPlaceholder": "e.g., Photography permit, dietary preferences...",
+    "estimatedPrice": "Estimated Tour Price",
+    "submitInquiry": "Submit Custom Tour Inquiry",
+    "inquirySubmitted": "Inquiry Submitted!",
+    "inquirySuccessMsg": "Our heritage travel concierge will review your itinerary and contact you."
+  }
+}
+

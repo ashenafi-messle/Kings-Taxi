@@ -1,0 +1,19 @@
+{
+  "required": "Iddoon kun dirqama",
+  "phoneRequired": "Lakkoofsa bilbilaa galchuun dirqama",
+  "phoneInvalid": "Maaloo lakkoofsa bilbilaa Itoophiyaa sirrii galchaa (fkn. 0911234567)",
+  "nameRequired": "Maqaa guutuu galchuun dirqama",
+  "nameTooShort": "Maqaan qubee 3 gadi ta'uu hin qabu",
+  "passwordRequired": "Jecha darbii galchuun dirqama",
+  "passwordTooShort": "Jechi darbii yoo xiqqaate arfii 6 ta'uu qaba",
+  "emailInvalid": "Maaloo teessoo imeelii sirrii galchaa",
+  "otpIncomplete": "Maaloo koodii mirkaneessaa dijiitii 6 guutuu galchaa",
+  "pickupRequired": "Bakka ka'umsaa filachuun dirqama",
+  "destinationRequired": "Bakka ga'umsaa filachuun dirqama",
+  "sameLocations": "Bakki ka'umsaa fi ga'umsaa tokko ta'uu hin danda'u",
+  "checkInDateRequired": "Guyyaa seensaa filachuun dirqama",
+  "checkOutDateRequired": "Guyyaa ba'iinsaa filachuun dirqama",
+  "invalidDateRange": "Guyyaan ba'iinsaa guyyaa seensaa booda ta'uu qaba",
+  "paymentMethodRequired": "Maaloo mala kaffaltii filadhaa"
+}
+
