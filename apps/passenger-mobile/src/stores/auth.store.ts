@@ -1,9 +1,13 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PassengerProfile } from '../types';
+import { PassengerProfile, ApiResponse } from '../types';
 import { mockPassenger } from '../mocks';
 import { SecureStorageUtil } from '../utils/secureStorage';
 import { TelegramAuthService } from '../services/telegramAuth.service';
+import {
+  RegistrationAuthService,
+  RegistrationMethod,
+} from '../services/registrationAuth.service';
 
 const REMEMBERED_EMAIL_KEY = '@kings_taxi_remembered_email';
 const AUTH_TOKEN_KEY = 'kings_taxi_session_jwt';
@@ -26,6 +30,45 @@ interface AuthState {
     phone: string;
     password?: string;
   }) => Promise<boolean>;
+  initiateRegistration: (
+    method: RegistrationMethod,
+    identifier: string,
+    fullName: string
+  ) => Promise<
+    ApiResponse<{
+      sessionId: string;
+      method: RegistrationMethod;
+      maskedIdentifier: string;
+      expiresInSeconds: number;
+      resendCooldownSeconds: number;
+      devOtp?: string;
+    }>
+  >;
+  resendRegistrationOtp: (
+    sessionId: string
+  ) => Promise<
+    ApiResponse<{
+      success: boolean;
+      resendCooldownSeconds: number;
+      devOtp?: string;
+    }>
+  >;
+  verifyRegistrationOtp: (
+    sessionId: string,
+    code: string
+  ) => Promise<
+    ApiResponse<{
+      registrationToken: string;
+      fullName: string;
+      method: RegistrationMethod;
+      identifier: string;
+    }>
+  >;
+  completeRegistrationWithPassword: (
+    sessionId: string,
+    registrationToken: string,
+    password: string
+  ) => Promise<ApiResponse<{ token: string; user: PassengerProfile }>>;
   verifyOtp: (code: string) => Promise<boolean>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<PassengerProfile>) => void;
@@ -82,18 +125,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (identifier: string, _password?: string) => {
     set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-    const isEmail = identifier.includes('@');
-    const updatedUser: PassengerProfile = {
-      ...mockPassenger,
-      phone: isEmail ? mockPassenger.phone : identifier,
-      email: isEmail ? identifier : mockPassenger.email,
-    };
+    // Check if account exists in registered accounts database
+    const registered = await RegistrationAuthService.findAccountByIdentifier(identifier);
 
-    const token = 'mock_jwt_token_kings_78912';
+    let updatedUser: PassengerProfile;
+    if (registered) {
+      updatedUser = {
+        id: registered.id,
+        fullName: registered.fullName,
+        email: registered.email || identifier,
+        phone: registered.phone || identifier,
+        rating: 5.0,
+        totalTrips: 0,
+        defaultPaymentMethod: 'telebirr',
+        preferredLanguage: 'en',
+      };
+    } else {
+      const isEmail = identifier.includes('@');
+      updatedUser = {
+        ...mockPassenger,
+        phone: isEmail ? mockPassenger.phone : identifier,
+        email: isEmail ? identifier : mockPassenger.email,
+      };
+    }
 
-    // Persist securely
+    const token = `jwt_kt_session_${Date.now()}`;
     await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
     await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser));
 
@@ -108,15 +166,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   loginWithEmail: async (email: string, password?: string, remember = false) => {
     set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Handle remember email preference
     await get().setRememberedEmail(email, remember);
 
-    const updatedUser: PassengerProfile = {
-      ...mockPassenger,
-      email,
-    };
+    const registered = await RegistrationAuthService.findAccountByIdentifier(email);
+    let updatedUser: PassengerProfile;
+
+    if (registered) {
+      updatedUser = {
+        id: registered.id,
+        fullName: registered.fullName,
+        email: registered.email || email,
+        phone: registered.phone || mockPassenger.phone,
+        rating: 5.0,
+        totalTrips: 0,
+        defaultPaymentMethod: 'telebirr',
+        preferredLanguage: 'en',
+      };
+    } else {
+      updatedUser = {
+        ...mockPassenger,
+        email,
+      };
+    }
 
     const token = `jwt_kt_email_${Date.now().toString(36)}`;
     await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
@@ -137,7 +210,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const challenge = TelegramAuthService.generateChallenge();
       await TelegramAuthService.initiateTelegramAuth(challenge);
 
-      // Verify challenge session
       const verifyRes = await TelegramAuthService.verifySession(challenge);
       if (verifyRes.success && verifyRes.data) {
         const { token, user } = verifyRes.data;
@@ -159,6 +231,74 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return false;
   },
 
+  initiateRegistration: async (method, identifier, fullName) => {
+    set({ isLoading: true });
+    try {
+      const res = await RegistrationAuthService.initiateRegistration(method, identifier, fullName);
+      set({ isLoading: false });
+      return res;
+    } catch (err: any) {
+      set({ isLoading: false });
+      return {
+        success: false,
+        data: {} as any,
+        error: err.message || 'Failed to initiate registration',
+      };
+    }
+  },
+
+  resendRegistrationOtp: async (sessionId) => {
+    return await RegistrationAuthService.resendOtp(sessionId);
+  },
+
+  verifyRegistrationOtp: async (sessionId, code) => {
+    set({ isLoading: true });
+    try {
+      const res = await RegistrationAuthService.verifyOtp(sessionId, code);
+      set({ isLoading: false });
+      return res;
+    } catch (err: any) {
+      set({ isLoading: false });
+      return {
+        success: false,
+        data: {} as any,
+        error: err.message || 'Failed to verify code',
+      };
+    }
+  },
+
+  completeRegistrationWithPassword: async (sessionId, registrationToken, password) => {
+    set({ isLoading: true });
+    try {
+      const res = await RegistrationAuthService.setPasswordAndComplete(
+        sessionId,
+        registrationToken,
+        password
+      );
+      if (res.success && res.data) {
+        const { token, user } = res.data;
+        await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
+        await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user));
+        set({
+          user,
+          token,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      } else {
+        set({ isLoading: false });
+      }
+      return res;
+    } catch (err: any) {
+      set({ isLoading: false });
+      return {
+        success: false,
+        data: {} as any,
+        error: err.message || 'Failed to save password',
+      };
+    }
+  },
+
   register: async (payload: {
     fullName: string;
     email: string;
@@ -166,7 +306,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     password?: string;
   }) => {
     set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 700));
+    await new Promise((resolve) => setTimeout(resolve, 600));
 
     const newUser: PassengerProfile = {
       id: `usr_${Date.now().toString(36)}`,
@@ -194,7 +334,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   verifyOtp: async (code: string) => {
     set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     if (code.length >= 4) {
       set({
         user: mockPassenger,

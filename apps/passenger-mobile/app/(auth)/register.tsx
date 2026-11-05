@@ -11,30 +11,39 @@ import {
   StatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { User, Phone, Mail, ArrowLeft, Globe, Check } from 'lucide-react-native';
+import {
+  User,
+  Phone,
+  Mail,
+  ArrowLeft,
+  Globe,
+  Check,
+  Send,
+  ArrowRight,
+  Info,
+} from 'lucide-react-native';
 import { colors } from '../../src/theme/colors';
 import {
   KingsTaxiLogo,
   FormInput,
-  PasswordInput,
-  TelegramAuthButton,
   PrimaryButton,
   LanguageSelectorModal,
 } from '../../src/components';
 import { useAuthStore, useSettingsStore } from '../../src/stores';
 import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
+import { RegistrationMethod } from '../../src/services/registrationAuth.service';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { t } = useTranslation(['auth', 'validation', 'common']);
-  const { register, loginWithTelegram, isLoading } = useAuthStore();
+  const { initiateRegistration, isLoading } = useAuthStore();
   const { language } = useSettingsStore();
 
+  const [method, setMethod] = useState<RegistrationMethod>('email');
   const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('+251911234567');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [phone, setPhone] = useState('0911234567');
+  const [countryCode, setCountryCode] = useState('+251');
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [error, setError] = useState('');
   const [langModalVisible, setLangModalVisible] = useState(false);
@@ -43,65 +52,61 @@ export default function RegisterScreen() {
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
 
   const validateEmail = (val: string) => {
-    if (!val) return false;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(val.trim());
   };
 
-  const handleRegister = async () => {
+  const handleContinue = async () => {
     if (!fullName.trim()) {
       setError(t('validation:nameRequired'));
       return;
     }
-    if (!phone || phone.length < 9) {
-      setError(t('validation:phoneInvalid'));
-      return;
+
+    let identifier = '';
+    if (method === 'email') {
+      if (!email.trim()) {
+        setError(t('validation:emailRequired'));
+        return;
+      }
+      if (!validateEmail(email)) {
+        setError(t('validation:emailInvalid'));
+        return;
+      }
+      identifier = email.trim().toLowerCase();
+    } else {
+      const cleanPhone = phone.trim().replace(/^0/, '');
+      if (!cleanPhone || cleanPhone.length < 8) {
+        setError(t('validation:phoneInvalid'));
+        return;
+      }
+      identifier = `${countryCode}${cleanPhone}`;
     }
-    if (!email.trim()) {
-      setError(t('validation:emailRequired'));
-      return;
-    }
-    if (!validateEmail(email)) {
-      setError(t('validation:emailInvalid'));
-      return;
-    }
-    if (password.length < 6) {
-      setError(t('validation:passwordTooShort'));
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError(t('validation:passwordsMustMatch'));
-      return;
-    }
+
     if (!agreeTerms) {
       setError(t('validation:mustAgreeTerms'));
       return;
     }
 
     setError('');
-    const success = await register({
-      fullName: fullName.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      password,
-    });
 
-    if (success) {
-      // Route to verify OTP for phone verification
+    // Initiate registration and generate channel-specific OTP
+    const response = await initiateRegistration(method, identifier, fullName.trim());
+
+    if (response.success && response.data) {
+      const { sessionId, maskedIdentifier, devOtp } = response.data;
       router.push({
         pathname: '/(auth)/verify-otp',
-        params: { phone, fullName, email },
+        params: {
+          sessionId,
+          method,
+          identifier,
+          fullName: fullName.trim(),
+          maskedIdentifier,
+          devOtp: devOtp || '',
+        },
       });
-    }
-  };
-
-  const handleTelegramRegister = async () => {
-    setError('');
-    const success = await loginWithTelegram();
-    if (success) {
-      router.replace('/(tabs)');
     } else {
-      setError(t('auth:telegramNotice'));
+      setError(response.error || 'Failed to initiate registration. Please try again.');
     }
   };
 
@@ -153,6 +158,106 @@ export default function RegisterScreen() {
             <Text style={styles.subtitle}>{t('registerSubtitle')}</Text>
           </View>
 
+          {/* Step 1: Registration Method Selection Cards */}
+          <View style={styles.methodSelectionSection}>
+            <Text style={styles.sectionHeading}>{t('chooseMethod')}</Text>
+
+            <View style={styles.cardsRow}>
+              {/* Option A: Email */}
+              <TouchableOpacity
+                style={[
+                  styles.methodCard,
+                  method === 'email' && styles.methodCardActive,
+                ]}
+                onPress={() => {
+                  setMethod('email');
+                  setError('');
+                }}
+                activeOpacity={0.85}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: method === 'email' }}
+              >
+                <View style={styles.cardHeader}>
+                  <View
+                    style={[
+                      styles.iconCircle,
+                      method === 'email' ? styles.iconCircleActive : null,
+                    ]}
+                  >
+                    <Mail
+                      size={20}
+                      color={method === 'email' ? colors.primaryGold : colors.secondaryText}
+                    />
+                  </View>
+                  <View
+                    style={[
+                      styles.radioCircle,
+                      method === 'email' && styles.radioCircleActive,
+                    ]}
+                  >
+                    {method === 'email' && <Check size={11} color={colors.white} strokeWidth={3} />}
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.methodTitle,
+                    method === 'email' && styles.methodTitleActive,
+                  ]}
+                >
+                  {t('emailMethodTitle')}
+                </Text>
+                <Text style={styles.methodDesc}>{t('emailMethodDesc')}</Text>
+              </TouchableOpacity>
+
+              {/* Option B: Telegram */}
+              <TouchableOpacity
+                style={[
+                  styles.methodCard,
+                  method === 'telegram' && styles.methodCardActiveTelegram,
+                ]}
+                onPress={() => {
+                  setMethod('telegram');
+                  setError('');
+                }}
+                activeOpacity={0.85}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: method === 'telegram' }}
+              >
+                <View style={styles.cardHeader}>
+                  <View
+                    style={[
+                      styles.iconCircle,
+                      method === 'telegram' ? styles.iconCircleTelegram : null,
+                    ]}
+                  >
+                    <Send
+                      size={18}
+                      color={method === 'telegram' ? colors.telegram : colors.secondaryText}
+                      style={{ transform: [{ rotate: '-15deg' }] }}
+                    />
+                  </View>
+                  <View
+                    style={[
+                      styles.radioCircle,
+                      method === 'telegram' && styles.radioCircleTelegramActive,
+                    ]}
+                  >
+                    {method === 'telegram' && <Check size={11} color={colors.white} strokeWidth={3} />}
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.methodTitle,
+                    method === 'telegram' && styles.methodTitleTelegramActive,
+                  ]}
+                >
+                  {t('telegramMethodTitle')}
+                </Text>
+                <Text style={styles.methodDesc}>{t('telegramMethodDesc')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Error Banner */}
           {error ? (
             <View style={styles.errorBanner}>
@@ -160,8 +265,9 @@ export default function RegisterScreen() {
             </View>
           ) : null}
 
-          {/* Registration Form */}
+          {/* Step 2: Information Input Form */}
           <View style={styles.form}>
+            {/* Full Name */}
             <FormInput
               label={t('fullNameLabel')}
               placeholder={t('fullNamePlaceholder')}
@@ -175,59 +281,59 @@ export default function RegisterScreen() {
               leftIcon={<User size={18} color={colors.secondaryText} />}
             />
 
-            <FormInput
-              label={t('phoneLabel')}
-              placeholder={t('phonePlaceholder')}
-              value={phone}
-              onChangeText={(text) => {
-                setPhone(text);
-                setError('');
-              }}
-              keyboardType="phone-pad"
-              autoComplete="tel"
-              textContentType="telephoneNumber"
-              leftIcon={<Phone size={18} color={colors.secondaryText} />}
-            />
+            {/* Option A: Email Input */}
+            {method === 'email' ? (
+              <FormInput
+                label={t('emailAddressLabel')}
+                placeholder={t('emailAddressPlaceholder')}
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setError('');
+                }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                leftIcon={<Mail size={18} color={colors.secondaryText} />}
+              />
+            ) : (
+              /* Option B: Telegram Phone Input */
+              <View style={styles.phoneSection}>
+                <Text style={styles.inputLabel}>{t('phoneLabel')}</Text>
+                <View style={styles.phoneInputRow}>
+                  <View style={styles.countryCodeBadge}>
+                    <Text style={styles.flagEmoji}>🇪🇹</Text>
+                    <Text style={styles.countryCodeText}>{countryCode}</Text>
+                  </View>
+                  <View style={styles.phoneFieldContainer}>
+                    <FormInput
+                      placeholder={t('phonePlaceholder')}
+                      value={phone}
+                      onChangeText={(text) => {
+                        setPhone(text);
+                        setError('');
+                      }}
+                      keyboardType="phone-pad"
+                      autoComplete="tel"
+                      textContentType="telephoneNumber"
+                      leftIcon={<Phone size={18} color={colors.secondaryText} />}
+                      style={{ marginBottom: 0 }}
+                    />
+                  </View>
+                </View>
 
-            <FormInput
-              label={t('emailAddressLabel')}
-              placeholder={t('emailAddressPlaceholder')}
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setError('');
-              }}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              textContentType="emailAddress"
-              leftIcon={<Mail size={18} color={colors.secondaryText} />}
-            />
+                {/* Telegram Explanatory Banner */}
+                <View style={styles.telegramNoticeBox}>
+                  <Info size={16} color={colors.telegram} style={{ marginTop: 2 }} />
+                  <Text style={styles.telegramNoticeText}>
+                    {t('telegramNoticePrompt')}
+                  </Text>
+                </View>
+              </View>
+            )}
 
-            <PasswordInput
-              label={t('passwordLabel')}
-              placeholder={t('passwordPlaceholder')}
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                setError('');
-              }}
-              isNewPassword
-              showStrengthMeter
-            />
-
-            <PasswordInput
-              label={t('confirmPasswordLabel')}
-              placeholder={t('confirmPasswordPlaceholder')}
-              value={confirmPassword}
-              onChangeText={(text) => {
-                setConfirmPassword(text);
-                setError('');
-              }}
-              isNewPassword
-            />
-
-            {/* Terms and Conditions Checkbox */}
+            {/* Terms and Privacy Agreement */}
             <TouchableOpacity
               style={styles.termsRow}
               onPress={() => setAgreeTerms(!agreeTerms)}
@@ -241,28 +347,16 @@ export default function RegisterScreen() {
               <Text style={styles.termsText}>{t('agreeToTerms')}</Text>
             </TouchableOpacity>
 
-            {/* Create Account Primary CTA */}
+            {/* Continue Primary CTA Button */}
             <PrimaryButton
-              title={t('signUpBtn')}
-              onPress={handleRegister}
+              title={t('continueBtn')}
+              onPress={handleContinue}
               loading={isLoading}
-              style={styles.signUpBtn}
+              icon={<ArrowRight size={18} color={colors.white} />}
+              style={styles.continueBtn}
             />
 
-            {/* Divider */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>{t('orContinueWith')}</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Telegram Social Auth CTA */}
-            <TelegramAuthButton
-              onPress={handleTelegramRegister}
-              isLoading={isLoading}
-            />
-
-            {/* Login Link */}
+            {/* Footer Login Link */}
             <View style={styles.footerRow}>
               <Text style={styles.footerPrompt}>{t('alreadyAccount')}</Text>
               <TouchableOpacity
@@ -330,23 +424,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 40,
     alignItems: 'center',
   },
   logoContainer: {
-    marginVertical: 12,
+    marginVertical: 10,
     alignItems: 'center',
   },
   formHeader: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 440,
     marginBottom: 16,
     alignItems: 'center',
   },
   title: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.dark,
     letterSpacing: -0.3,
     marginBottom: 4,
@@ -357,9 +451,107 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
+  methodSelectionSection: {
+    width: '100%',
+    maxWidth: 440,
+    marginBottom: 18,
+  },
+  sectionHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.dark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  cardsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  methodCard: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1.8,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  methodCardActive: {
+    borderColor: colors.primaryGold,
+    backgroundColor: '#FFFEFA',
+    shadowColor: colors.primaryGold,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  methodCardActiveTelegram: {
+    borderColor: colors.telegram,
+    backgroundColor: '#F8FCFF',
+    shadowColor: colors.telegram,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconCircleActive: {
+    backgroundColor: colors.lightGold,
+  },
+  iconCircleTelegram: {
+    backgroundColor: '#E8F5FD',
+  },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioCircleActive: {
+    backgroundColor: colors.primaryGold,
+    borderColor: colors.primaryGold,
+  },
+  radioCircleTelegramActive: {
+    backgroundColor: colors.telegram,
+    borderColor: colors.telegram,
+  },
+  methodTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.dark,
+    marginBottom: 4,
+  },
+  methodTitleActive: {
+    color: colors.deepGold,
+  },
+  methodTitleTelegramActive: {
+    color: colors.telegram,
+  },
+  methodDesc: {
+    fontSize: 11,
+    color: colors.secondaryText,
+    lineHeight: 15,
+  },
   errorBanner: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 440,
     backgroundColor: '#FEE2E2',
     borderColor: colors.error,
     borderWidth: 1,
@@ -375,14 +567,65 @@ const styles = StyleSheet.create({
   },
   form: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 440,
+  },
+  phoneSection: {
+    marginBottom: 14,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.dark,
+    marginBottom: 6,
+  },
+  phoneInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  countryCodeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 52,
+  },
+  flagEmoji: {
+    fontSize: 16,
+  },
+  countryCodeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.dark,
+  },
+  phoneFieldContainer: {
+    flex: 1,
+  },
+  telegramNoticeBox: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 8,
+  },
+  telegramNoticeText: {
+    fontSize: 11.5,
+    color: '#0369A1',
+    lineHeight: 16,
+    flex: 1,
   },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 20,
-    marginTop: -4,
+    marginTop: 4,
   },
   checkbox: {
     width: 20,
@@ -404,35 +647,17 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 16,
   },
-  signUpBtn: {
+  continueBtn: {
     height: 52,
     borderRadius: 14,
     marginBottom: 18,
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 18,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.secondaryText,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    marginTop: 24,
+    marginTop: 16,
   },
   footerPrompt: {
     fontSize: 14,

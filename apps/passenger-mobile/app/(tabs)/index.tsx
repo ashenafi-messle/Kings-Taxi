@@ -61,7 +61,7 @@ export default function HomeScreen() {
         {/* Top Branding & Greeting Bar */}
         <View style={styles.topHeader}>
           <View>
-            <KingsTaxiLogo variant="header" showTagline={false} showText={true} />
+            <KingsTaxiLogo variant="header" showTagline={true} showText={true} />
             <Text style={styles.greetingText}>{getGreeting()}</Text>
           </View>
           <TouchableOpacity

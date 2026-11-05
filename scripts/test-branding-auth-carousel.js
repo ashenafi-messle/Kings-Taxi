@@ -141,3 +141,4 @@ console.log('  -> Passwords strictly excluded from persistent storage.');
 console.log('  -> PASSED: Security and password handling verified.\n');
 
 console.log('>>> ALL 6 BRANDING, AUTH & ADVERTISING VERIFICATION TESTS PASSED SUCCESSFULLY! <<<');
+
