@@ -4,14 +4,20 @@
   "private": true,
   "description": "Kings Taxi Mobile & Mobility Services Platform",
   "workspaces": [
-    "apps/*"
+    "apps/passenger-mobile",
+    "backend",
+    "shared"
   ],
   "scripts": {
-    "start": "npm run start --workspace=apps/passenger-mobile",
-    "android": "npm run android --workspace=apps/passenger-mobile",
-    "ios": "npm run ios --workspace=apps/passenger-mobile",
-    "web": "npm run web --workspace=apps/passenger-mobile",
-    "typecheck": "npm run typecheck --workspace=apps/passenger-mobile",
+    "start": "npm run start --prefix apps/passenger-mobile",
+    "android": "npm run android --prefix apps/passenger-mobile",
+    "ios": "npm run ios --prefix apps/passenger-mobile",
+    "web": "npm run web --prefix apps/passenger-mobile",
+    "typecheck": "npm run typecheck --prefix apps/passenger-mobile",
+    "backend:dev": "npm run dev --prefix backend",
+    "backend:build": "npm run build --prefix backend",
+    "backend:test": "npm run test --prefix backend",
+    "backend:lint": "npm run lint --prefix backend",
     "audit:i18n": "node scripts/audit-translations.js",
     "test:i18n": "node scripts/test-multilingual-runtime.js",
     "build:android": "cd apps/passenger-mobile && eas build --platform android --profile preview",

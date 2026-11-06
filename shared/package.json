@@ -1,7 +1,9 @@
 {
   "name": "@kings-taxi/shared",
   "version": "1.0.0",
+  "description": "Shared domain types, constants and utilities for Kings Taxi platform",
   "main": "index.ts",
   "types": "index.ts",
   "private": true
 }
+

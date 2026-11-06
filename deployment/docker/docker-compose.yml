@@ -1,0 +1,51 @@
+# ==============================================================================
+# Kings Taxi Platform — Docker Compose (Production VPS & Staging)
+# ==============================================================================
+# Project: kings-taxi
+# Host: Zergaw VPS (coexists with Erkab platform without interference)
+# ==============================================================================
+
+name: kings-taxi
+
+services:
+  kings-taxi-backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    container_name: kings-taxi-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - API_PREFIX=/api/v1
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - ACCESS_TOKEN_EXPIRY=15m
+      - REFRESH_TOKEN_EXPIRY=7d
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://taxi-api.erkabskill.com,https://api.kingstaxi.com}
+      - LOG_LEVEL=info
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX=300
+    ports:
+      # Bound locally to loopback; exposed to the internet strictly via Nginx reverse proxy
+      - "127.0.0.1:3005:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/v1/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - kings-taxi-network
+      # Connect to existing PostgreSQL container network on VPS (read-only/scoped)
+      - erkab-network
+
+networks:
+  kings-taxi-network:
+    driver: bridge
+  # External network where existing PostgreSQL container resides
+  erkab-network:
+    external: true
+    name: ${VPS_DATABASE_NETWORK:-bridge}
+
