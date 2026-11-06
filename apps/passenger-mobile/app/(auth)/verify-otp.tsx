@@ -156,7 +156,13 @@ export default function VerifyOtpScreen() {
       {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(auth)/welcome');
+            }
+          }}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={styles.backButton}
           accessibilityRole="button"

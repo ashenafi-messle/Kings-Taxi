@@ -20,7 +20,11 @@ export default function LanguageSettingsScreen() {
 
   const handleSelect = async (code: SupportedLanguage) => {
     await setLanguage(code);
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/profile');
+    }
   };
 
   return (

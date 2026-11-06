@@ -77,7 +77,11 @@ export default function CheckoutPaymentScreen() {
         showBack
         onBack={() => {
           if (paymentStatus === 'PROCESSING') return; // Do not interrupt in flight
-          router.back();
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(tabs)');
+          }
         }}
       />
       <ScrollView
