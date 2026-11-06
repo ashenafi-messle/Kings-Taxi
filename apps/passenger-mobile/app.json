@@ -28,7 +28,8 @@
         "NSPhotoLibraryUsageDescription": "Kings Taxi requires photo library access to upload profile pictures and identity documents.",
         "UIBackgroundModes": [
           "remote-notification"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
