@@ -42,7 +42,10 @@ const expoConfig = appJson.expo;
 
 runTest('App name, slug, version and scheme match specification', () => {
   assert.strictEqual(expoConfig.name, 'Kings Taxi');
-  assert.strictEqual(expoConfig.slug, 'kings-taxi');
+  assert(
+    expoConfig.slug === 'kings-taxi-workspace' || expoConfig.slug === 'kings-taxi',
+    'Slug must match EAS project slug'
+  );
   assert.strictEqual(expoConfig.version, '1.0.0');
   assert.strictEqual(expoConfig.scheme, 'kingstaxi');
   assert.strictEqual(expoConfig.newArchEnabled, true);

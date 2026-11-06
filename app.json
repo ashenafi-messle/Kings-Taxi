@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Kings Taxi",
-    "slug": "kings-taxi",
+    "slug": "kings-taxi-workspace",
     "owner": "ardab-tech-solutions-22",
     "extra": {
       "eas": {
@@ -10,3 +10,4 @@
     }
   }
 }
+
