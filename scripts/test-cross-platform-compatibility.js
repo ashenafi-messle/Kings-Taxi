@@ -46,6 +46,8 @@ runTest('App name, slug, version and scheme match specification', () => {
   assert.strictEqual(expoConfig.version, '1.0.0');
   assert.strictEqual(expoConfig.scheme, 'kingstaxi');
   assert.strictEqual(expoConfig.newArchEnabled, true);
+  assert.strictEqual(expoConfig.owner, 'ardab-tech-solutions-22');
+  assert.strictEqual(expoConfig.extra?.eas?.projectId, 'dea6e1f4-dcc5-4129-b016-cd36af49c3bf');
 });
 
 runTest('iOS bundleIdentifier and Android package name are strictly identical', () => {
@@ -135,6 +137,7 @@ runTest('eas.json contains development, preview, and production profiles', () =>
   assert(eas.build?.development, 'development profile missing');
   assert(eas.build?.preview, 'preview profile missing');
   assert(eas.build?.production, 'production profile missing');
+  assert.strictEqual(eas.cli?.appVersionSource, 'remote');
 
   // Preview must build APK on Android for easy testing
   assert.strictEqual(eas.build.preview.android?.buildType, 'apk');

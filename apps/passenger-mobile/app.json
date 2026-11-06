@@ -2,12 +2,18 @@
   "expo": {
     "name": "Kings Taxi",
     "slug": "kings-taxi",
+    "owner": "ardab-tech-solutions-22",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kingstaxi",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "dea6e1f4-dcc5-4129-b016-cd36af49c3bf"
+      }
+    },
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",

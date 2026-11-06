@@ -13,7 +13,10 @@
     "web": "npm run web --workspace=apps/passenger-mobile",
     "typecheck": "npm run typecheck --workspace=apps/passenger-mobile",
     "audit:i18n": "node scripts/audit-translations.js",
-    "test:i18n": "node scripts/test-multilingual-runtime.js"
+    "test:i18n": "node scripts/test-multilingual-runtime.js",
+    "build:android": "cd apps/passenger-mobile && eas build --platform android --profile preview",
+    "build:ios": "cd apps/passenger-mobile && eas build --platform ios --profile preview",
+    "build:production": "cd apps/passenger-mobile && eas build --platform all --profile production"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
