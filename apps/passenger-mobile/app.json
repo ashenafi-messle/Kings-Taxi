@@ -80,6 +80,14 @@
         {
           "locationWhenInUsePermission": "Kings Taxi uses your location to pinpoint your pickup position and connect you with nearby drivers."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
       ]
     ]
   }

@@ -107,7 +107,7 @@ runTest('Android intentFilters configure deep link scheme for payment callbacks'
   assert(hasScheme, 'Intent filter must specify scheme: kingstaxi');
 });
 
-runTest('Plugins include expo-router, expo-secure-store, expo-localization, expo-font, expo-location', () => {
+runTest('Plugins include expo-router, expo-secure-store, expo-localization, expo-font, expo-location, expo-build-properties', () => {
   const plugins = expoConfig.plugins || [];
   const hasRouter = plugins.includes('expo-router');
   const hasSecureStore = plugins.includes('expo-secure-store');
@@ -116,12 +116,44 @@ runTest('Plugins include expo-router, expo-secure-store, expo-localization, expo
   const hasLocation = plugins.some(
     (p) => (typeof p === 'string' && p === 'expo-location') || (Array.isArray(p) && p[0] === 'expo-location')
   );
+  const buildPropertiesPlugin = plugins.find(
+    (p) => Array.isArray(p) && p[0] === 'expo-build-properties'
+  );
 
   assert(hasRouter, 'expo-router plugin missing');
   assert(hasSecureStore, 'expo-secure-store plugin missing');
   assert(hasLocalization, 'expo-localization plugin missing');
   assert(hasFont, 'expo-font plugin missing');
   assert(hasLocation, 'expo-location plugin missing');
+  assert(buildPropertiesPlugin, 'expo-build-properties plugin missing');
+  assert.strictEqual(
+    buildPropertiesPlugin[1]?.android?.kotlinVersion,
+    '1.9.25',
+    'expo-build-properties must enforce kotlinVersion 1.9.25'
+  );
+});
+
+runTest('Android native gradle.properties and build.gradle align Kotlin 1.9.25 with Compose Compiler 1.5.15', () => {
+  const gradlePropertiesPath = path.join(__dirname, '../apps/passenger-mobile/android/gradle.properties');
+  const buildGradlePath = path.join(__dirname, '../apps/passenger-mobile/android/build.gradle');
+
+  assert(fs.existsSync(gradlePropertiesPath), 'android/gradle.properties missing');
+  const gradleProps = fs.readFileSync(gradlePropertiesPath, 'utf8');
+  assert(
+    gradleProps.includes('android.kotlinVersion=1.9.25'),
+    'android.kotlinVersion=1.9.25 missing in gradle.properties'
+  );
+
+  assert(fs.existsSync(buildGradlePath), 'android/build.gradle missing');
+  const buildGradle = fs.readFileSync(buildGradlePath, 'utf8');
+  assert(
+    buildGradle.includes("kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.25'"),
+    'kotlinVersion fallback must be 1.9.25'
+  );
+  assert(
+    buildGradle.includes('org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion'),
+    'kotlin-gradle-plugin must use $kotlinVersion'
+  );
 });
 
 // 2. eas.json Build Profiles
@@ -135,12 +167,17 @@ runTest('eas.json exists in root and mobile directories', () => {
   assert(fs.existsSync(mobileEasPath), 'Mobile package eas.json missing');
 });
 
-runTest('eas.json contains development, preview, and production profiles', () => {
+runTest('eas.json contains development, preview, and production profiles with NODE_ENV configured', () => {
   const eas = JSON.parse(fs.readFileSync(rootEasPath, 'utf8'));
   assert(eas.build?.development, 'development profile missing');
   assert(eas.build?.preview, 'preview profile missing');
   assert(eas.build?.production, 'production profile missing');
   assert.strictEqual(eas.cli?.appVersionSource, 'remote');
+
+  // Verify NODE_ENV variables prevent EAS build warnings
+  assert.strictEqual(eas.build.development.env?.NODE_ENV, 'development');
+  assert.strictEqual(eas.build.preview.env?.NODE_ENV, 'production');
+  assert.strictEqual(eas.build.production.env?.NODE_ENV, 'production');
 
   // Preview must build APK on Android for easy testing
   assert.strictEqual(eas.build.preview.android?.buildType, 'apk');
