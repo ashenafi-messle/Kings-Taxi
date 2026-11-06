@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Image,
   TouchableOpacity,
   Linking,
+  BackHandler,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -40,6 +42,37 @@ export default function ActiveRideScreen() {
     useRideStore();
 
   const [showCancelModal, setShowCancelModal] = useState(false);
+
+  // Android hardware back handler for active trip
+  useEffect(() => {
+    const onBackPress = () => {
+      if (showCancelModal) {
+        setShowCancelModal(false);
+        return true;
+      }
+
+      if (currentRide && currentRide.status !== 'TRIP_COMPLETED' && currentRide.status !== 'CANCELLED') {
+        Alert.alert(
+          'Active Ride in Progress',
+          'Your ride is currently active. Return to main tabs without cancelling?',
+          [
+            { text: 'Stay Here', style: 'cancel' },
+            {
+              text: 'Go to Tabs',
+              onPress: () => router.replace('/(tabs)'),
+            },
+          ]
+        );
+        return true;
+      }
+      return false;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => {
+      backSub.remove();
+    };
+  }, [showCancelModal, currentRide, router]);
 
   // If no ride exists, render fallback
   if (!currentRide) {

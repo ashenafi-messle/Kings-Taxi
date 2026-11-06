@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Kings Taxi",
+    "slug": "kings-taxi-workspace",
+    "owner": "ardab-tech-solutions-22",
+    "extra": {
+      "eas": {
+        "projectId": "dea6e1f4-dcc5-4129-b016-cd36af49c3bf"
+      }
+    }
+  }
+}
+

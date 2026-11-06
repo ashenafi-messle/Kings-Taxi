@@ -135,6 +135,48 @@ export class RegistrationAuthService {
   }
 
   /**
+   * Updates an existing account password (for password recovery)
+   */
+  static async updateAccountPassword(
+    accountId: string,
+    newPassword: string
+  ): Promise<boolean> {
+    await loadRegisteredDb();
+    const index = registeredAccounts.findIndex((acc) => acc.id === accountId);
+    if (index === -1) return false;
+
+    const newSalt = `usr_salt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const newPasswordHash = hashPassword(newPassword, newSalt);
+
+    registeredAccounts[index] = {
+      ...registeredAccounts[index],
+      passwordHash: newPasswordHash,
+      passwordSalt: newSalt,
+    };
+
+    await saveRegisteredDb();
+    return true;
+  }
+
+  /**
+   * Verifies account credentials using the salted password hash
+   */
+  static async verifyAccountCredentials(
+    identifier: string,
+    passwordAttempt: string
+  ): Promise<RegisteredAccountRecord | null> {
+    await loadRegisteredDb();
+    const account = await this.findAccountByIdentifier(identifier);
+    if (!account) return null;
+
+    const attemptHash = hashPassword(passwordAttempt, account.passwordSalt);
+    if (attemptHash === account.passwordHash) {
+      return account;
+    }
+    return null;
+  }
+
+  /**
    * Step 1 & 2: Initiate Registration & Generate Channel-Specific OTP
    */
   static async initiateRegistration(

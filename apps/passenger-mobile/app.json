@@ -1,26 +1,71 @@
 {
   "expo": {
     "name": "Kings Taxi",
-    "slug": "kings-taxi",
+    "slug": "kings-taxi-workspace",
+    "owner": "ardab-tech-solutions-22",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kingstaxi",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "dea6e1f4-dcc5-4129-b016-cd36af49c3bf"
+      }
+    },
     "splash": {
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1A1D20"
+      "backgroundColor": "#111516"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "et.kingstaxi.passenger"
+      "bundleIdentifier": "et.kingstaxi.passenger",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Kings Taxi uses your location to pinpoint your pickup position and connect you with nearby drivers.",
+        "NSCameraUsageDescription": "Kings Taxi requires camera access for document and profile photo verification.",
+        "NSPhotoLibraryUsageDescription": "Kings Taxi requires photo library access to upload profile pictures and identity documents.",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "et.kingstaxi.passenger",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#1A1D20"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#111516"
       },
-      "package": "et.kingstaxi.passenger"
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "INTERNET",
+        "VIBRATE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "kingstaxi"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#D4AF37",
+      "androidMode": "default",
+      "androidCollapsedTitle": "#{unread_notifications} new notifications from Kings Taxi"
     },
     "web": {
       "bundler": "metro"
@@ -29,10 +74,19 @@
       "expo-router",
       "expo-secure-store",
       "expo-localization",
+      "expo-font",
       [
         "expo-location",
         {
           "locationWhenInUsePermission": "Kings Taxi uses your location to pinpoint your pickup position and connect you with nearby drivers."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
         }
       ]
     ]

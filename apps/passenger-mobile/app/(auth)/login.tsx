@@ -10,6 +10,7 @@ import {
   Platform,
   StatusBar,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Mail, ArrowLeft, Globe } from 'lucide-react-native';
@@ -60,6 +61,25 @@ export default function LoginScreen() {
     }
   }, [rememberedEmail, isEmailRemembered]);
 
+  // Android BackHandler
+  useEffect(() => {
+    const onBackPress = () => {
+      if (langModalVisible) {
+        setLangModalVisible(false);
+        return true;
+      }
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(auth)/welcome');
+      }
+      return true;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [langModalVisible, router]);
+
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
 
@@ -108,7 +128,13 @@ export default function LoginScreen() {
       {/* Header Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(auth)/welcome');
+            }
+          }}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={styles.backButton}
           accessibilityRole="button"

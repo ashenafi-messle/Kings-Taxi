@@ -4,11 +4,17 @@
   "verifiedPassenger": "Verified Passenger",
   "sections": {
     "account": "Account Settings",
+    "kingsTaxi": "Kings Taxi",
     "preferences": "Preferences",
     "support": "Support & Legal"
   },
   "items": {
     "personalInfo": "Personal Information",
+    "myBookings": "My Bookings",
+    "resetPassword": "Reset Password",
+    "aboutUs": "About Us",
+    "shareApp": "Share App",
+    "rateApp": "Rate App",
     "editProfile": "Edit Profile",
     "language": "Language Preferences",
     "security": "Security & Biometrics",

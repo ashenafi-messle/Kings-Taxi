@@ -71,12 +71,20 @@ export default function RootLayout() {
             options={{ presentation: 'modal' }}
           />
           <Stack.Screen
+            name="payments/callback"
+            options={{ presentation: 'modal', animation: 'fade' }}
+          />
+          <Stack.Screen
             name="support/index"
             options={{ presentation: 'card' }}
           />
           <Stack.Screen
             name="settings/language"
             options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="profile/about"
+            options={{ presentation: 'card', animation: 'slide_from_right' }}
           />
         </Stack>
       </QueryClientProvider>

@@ -34,13 +34,15 @@ export default function SetPasswordScreen() {
   const { t } = useTranslation(['auth', 'validation', 'common']);
   const params = useLocalSearchParams();
 
+  const flow = (params.flow as string) || 'registration';
   const sessionId = (params.sessionId as string) || '';
   const registrationToken = (params.registrationToken as string) || '';
+  const recoveryToken = (params.recoveryToken as string) || '';
   const method = (params.method as string) || 'email';
   const identifier = (params.identifier as string) || '';
   const fullName = (params.fullName as string) || '';
 
-  const { completeRegistrationWithPassword, isLoading } = useAuthStore();
+  const { completeRegistrationWithPassword, resetPassword, isLoading } = useAuthStore();
   const { language } = useSettingsStore();
 
   const [password, setPassword] = useState('');
@@ -78,6 +80,26 @@ export default function SetPasswordScreen() {
     }
 
     setError('');
+
+    if (flow === 'recovery') {
+      const response = await resetPassword(
+        sessionId,
+        recoveryToken,
+        password
+      );
+
+      if (response.success) {
+        setSuccessToast(true);
+        // Brief celebration pause before navigating to login
+        setTimeout(() => {
+          router.replace('/(auth)/login');
+        }, 1200);
+      } else {
+        setError(response.error || 'Failed to reset password. Please try again.');
+      }
+      return;
+    }
+
     const response = await completeRegistrationWithPassword(
       sessionId,
       registrationToken,
@@ -102,7 +124,13 @@ export default function SetPasswordScreen() {
       {/* Top Header Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(auth)/welcome');
+            }
+          }}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={styles.backButton}
           accessibilityRole="button"
@@ -139,8 +167,14 @@ export default function SetPasswordScreen() {
 
           {/* Form Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>{t('setPasswordTitle')}</Text>
-            <Text style={styles.subtitle}>{t('setPasswordSubtitle')}</Text>
+            <Text style={styles.title}>
+              {flow === 'recovery' ? 'Set New Password' : t('setPasswordTitle')}
+            </Text>
+            <Text style={styles.subtitle}>
+              {flow === 'recovery'
+                ? 'Choose a strong new password for your Kings Taxi passenger account.'
+                : t('setPasswordSubtitle')}
+            </Text>
           </View>
 
           {/* Success Banner */}
@@ -148,8 +182,16 @@ export default function SetPasswordScreen() {
             <View style={styles.successBanner}>
               <ShieldCheck size={20} color={colors.success} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.successTitle}>{t('registrationSuccessTitle')}</Text>
-                <Text style={styles.successDesc}>{t('registrationSuccessDesc')}</Text>
+                <Text style={styles.successTitle}>
+                  {flow === 'recovery'
+                    ? 'Password Reset Successfully'
+                    : t('registrationSuccessTitle')}
+                </Text>
+                <Text style={styles.successDesc}>
+                  {flow === 'recovery'
+                    ? 'Your password has been updated. Redirecting to sign in...'
+                    : t('registrationSuccessDesc')}
+                </Text>
               </View>
             </View>
           ) : null}
@@ -278,7 +320,7 @@ export default function SetPasswordScreen() {
 
             {/* Save Password CTA */}
             <PrimaryButton
-              title={t('savePasswordBtn')}
+              title={flow === 'recovery' ? 'Save New Password' : t('savePasswordBtn')}
               onPress={handleSavePassword}
               loading={isLoading}
               disabled={!isFormValid}
