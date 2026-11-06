@@ -78,6 +78,10 @@ export default function RootLayout() {
             name="settings/language"
             options={{ presentation: 'card' }}
           />
+          <Stack.Screen
+            name="profile/about"
+            options={{ presentation: 'card', animation: 'slide_from_right' }}
+          />
         </Stack>
       </QueryClientProvider>
     </SafeAreaProvider>

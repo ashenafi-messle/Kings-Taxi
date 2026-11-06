@@ -4,11 +4,17 @@
   "verifiedPassenger": "የተረጋገጠ ተሳፋሪ",
   "sections": {
     "account": "የመለያ ቅንብሮች",
+    "kingsTaxi": "ኪንግስ ታክሲ",
     "preferences": "ምርጫዎች",
     "support": "ድጋፍና ሕጋዊ መረጃዎች"
   },
   "items": {
     "personalInfo": "የግል መረጃ",
+    "myBookings": "የእኔ ጉዞዎችና ቦታ ማስያዣዎች",
+    "resetPassword": "የይለፍ ቃል ቀይር",
+    "aboutUs": "ስለ እኛ",
+    "shareApp": "መተግበሪያውን አጋራ",
+    "rateApp": "መተግበሪያውን ደረጃ ይስጡ",
     "editProfile": "መገለጫን አርትዕ",
     "language": "የቋንቋ ምርጫ",
     "security": "ደህንነትና ባዮሜትሪክስ",

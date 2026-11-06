@@ -4,11 +4,17 @@
   "verifiedPassenger": "Imaltuu Mirkanaa'e",
   "sections": {
     "account": "Qindaa'ina Akkaawuntii",
+    "kingsTaxi": "Kings Taxi",
     "preferences": "Filannoowwan",
     "support": "Deeggarsaa fi Seeraa"
   },
   "items": {
     "personalInfo": "Odeeffannoo Dhuunfaa",
+    "myBookings": "Ajajawwan Koo",
+    "resetPassword": "Jecha Darbii Haaromsi",
+    "aboutUs": "Waa'ee Keenya",
+    "shareApp": "Appilikeeshinii Qoodi",
+    "rateApp": "Sadarkaa Kenni",
     "editProfile": "Odeeffannoo Gulaali",
     "language": "Filannoo Afaanii",
     "security": "Nageenyaa fi Baayoomeetiriiksii",

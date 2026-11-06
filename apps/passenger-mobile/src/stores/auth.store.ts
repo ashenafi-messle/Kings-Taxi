@@ -8,6 +8,10 @@ import {
   RegistrationAuthService,
   RegistrationMethod,
 } from '../services/registrationAuth.service';
+import {
+  PasswordRecoveryService,
+  RecoveryMethod,
+} from '../services/passwordRecovery.service';
 
 const REMEMBERED_EMAIL_KEY = '@kings_taxi_remembered_email';
 const AUTH_TOKEN_KEY = 'kings_taxi_session_jwt';
@@ -70,6 +74,18 @@ interface AuthState {
     password: string
   ) => Promise<ApiResponse<{ token: string; user: PassengerProfile }>>;
   verifyOtp: (code: string) => Promise<boolean>;
+  initiatePasswordRecovery: (
+    method: RecoveryMethod,
+    identifier: string
+  ) => Promise<ApiResponse<any>>;
+  resendRecoveryOtp: (sessionId: string) => Promise<ApiResponse<any>>;
+  verifyRecoveryOtp: (sessionId: string, code: string) => Promise<ApiResponse<any>>;
+  resetPassword: (
+    sessionId: string,
+    recoveryToken: string,
+    newPassword: string
+  ) => Promise<ApiResponse<any>>;
+  checkSessionValidity: () => Promise<boolean>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<PassengerProfile>) => void;
   loadInitialAuth: () => Promise<void>;
@@ -123,12 +139,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  login: async (identifier: string, _password?: string) => {
+  login: async (identifier: string, password?: string) => {
     set({ isLoading: true });
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Check if account exists in registered accounts database
     const registered = await RegistrationAuthService.findAccountByIdentifier(identifier);
+    if (registered && password) {
+      const verified = await RegistrationAuthService.verifyAccountCredentials(identifier, password);
+      if (!verified) {
+        set({ isLoading: false });
+        return false;
+      }
+    }
 
     let updatedUser: PassengerProfile;
     if (registered) {
@@ -171,6 +194,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await get().setRememberedEmail(email, remember);
 
     const registered = await RegistrationAuthService.findAccountByIdentifier(email);
+    if (registered && password) {
+      const verified = await RegistrationAuthService.verifyAccountCredentials(email, password);
+      if (!verified) {
+        set({ isLoading: false });
+        return false;
+      }
+    }
+
     let updatedUser: PassengerProfile;
 
     if (registered) {
@@ -346,6 +377,76 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     set({ isLoading: false });
     return false;
+  },
+
+  initiatePasswordRecovery: async (method, identifier) => {
+    set({ isLoading: true });
+    try {
+      const res = await PasswordRecoveryService.initiateRecovery(method, identifier);
+      set({ isLoading: false });
+      return res;
+    } catch (err: any) {
+      set({ isLoading: false });
+      return {
+        success: false,
+        data: {} as any,
+        error: err.message || 'Failed to initiate password recovery',
+      };
+    }
+  },
+
+  resendRecoveryOtp: async (sessionId) => {
+    return await PasswordRecoveryService.resendOtp(sessionId);
+  },
+
+  verifyRecoveryOtp: async (sessionId, code) => {
+    set({ isLoading: true });
+    try {
+      const res = await PasswordRecoveryService.verifyRecoveryOtp(sessionId, code);
+      set({ isLoading: false });
+      return res;
+    } catch (err: any) {
+      set({ isLoading: false });
+      return {
+        success: false,
+        data: {} as any,
+        error: err.message || 'Failed to verify recovery code',
+      };
+    }
+  },
+
+  resetPassword: async (sessionId, recoveryToken, newPassword) => {
+    set({ isLoading: true });
+    try {
+      const res = await PasswordRecoveryService.setNewPasswordAndReset(
+        sessionId,
+        recoveryToken,
+        newPassword
+      );
+      set({ isLoading: false });
+      return res;
+    } catch (err: any) {
+      set({ isLoading: false });
+      return {
+        success: false,
+        data: {} as any,
+        error: err.message || 'Failed to reset password',
+      };
+    }
+  },
+
+  checkSessionValidity: async () => {
+    try {
+      const storedToken = await SecureStorageUtil.getItem(AUTH_TOKEN_KEY);
+      if (!storedToken) {
+        set({ isAuthenticated: false, token: null });
+        return false;
+      }
+      return true;
+    } catch {
+      set({ isAuthenticated: false, token: null });
+      return false;
+    }
   },
 
   logout: async () => {

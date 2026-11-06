@@ -19,12 +19,13 @@ import {
   SecondaryButton,
 } from '../../src/components';
 import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
-import { useSettingsStore } from '../../src/stores';
+import { useSettingsStore, useAuthStore } from '../../src/stores';
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const { t } = useTranslation(['auth', 'common']);
   const { language } = useSettingsStore();
+  const { isAuthenticated, user } = useAuthStore();
   const [langModalVisible, setLangModalVisible] = useState(false);
 
   const currentLangLabel =
@@ -89,36 +90,100 @@ export default function WelcomeScreen() {
         </View>
 
         {/* Main Action CTAs */}
-        <View style={styles.actionsSection}>
-          <PrimaryButton
-            title={t('getStarted')}
-            onPress={() => router.push('/(auth)/register')}
-            icon={<ArrowRight size={18} color={colors.white} />}
-            style={styles.getStartedBtn}
-          />
+        {isAuthenticated && user ? (
+          <View style={styles.actionsSection}>
+            {/* Authenticated Active Passenger Card */}
+            <View style={styles.authSessionCard}>
+              <View style={styles.authSessionHeader}>
+                <View style={styles.authAvatarCircle}>
+                  <Text style={styles.authAvatarText}>
+                    {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'K'}
+                  </Text>
+                </View>
+                <View style={styles.authSessionDetails}>
+                  <Text style={styles.authWelcomeSub}>Active Passenger Session</Text>
+                  <Text style={styles.authWelcomeName} numberOfLines={1}>
+                    {user.fullName || 'Valued Passenger'}
+                  </Text>
+                </View>
+              </View>
 
-          <SecondaryButton
-            title={t('signInBtn')}
-            onPress={() => router.push('/(auth)/login')}
-            style={styles.secondaryBtn}
-          />
+              <PrimaryButton
+                title="Continue to App"
+                onPress={() => router.replace('/(tabs)')}
+                icon={<ArrowRight size={18} color={colors.white} />}
+                style={styles.continueBtn}
+              />
 
-          <TouchableOpacity
-            style={styles.guestLink}
-            onPress={() => router.replace('/(tabs)')}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={t('exploreAsGuest')}
-          >
-            <Text style={styles.guestLinkText}>{t('exploreAsGuest')}</Text>
-          </TouchableOpacity>
+              <View style={styles.authSessionActionsRow}>
+                <TouchableOpacity
+                  style={styles.authSwitchBtn}
+                  onPress={() => router.push('/(auth)/login')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Switch account or log in"
+                >
+                  <Text style={styles.authSwitchText}>Switch Account</Text>
+                </TouchableOpacity>
+                <Text style={styles.authDividerDot}>•</Text>
+                <TouchableOpacity
+                  style={styles.authSwitchBtn}
+                  onPress={() => router.push('/(auth)/register')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create another account"
+                >
+                  <Text style={styles.authSwitchText}>Create Account</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
-          <Text style={styles.termsNotice}>
-            {t('termsNotice')}{' '}
-            <Text style={styles.termsLink}>{t('termsOfService')}</Text> {t('and')}{' '}
-            <Text style={styles.termsLink}>{t('privacyPolicy')}</Text>.
-          </Text>
-        </View>
+            <TouchableOpacity
+              style={styles.guestLink}
+              onPress={() => router.replace('/(tabs)')}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('exploreAsGuest')}
+            >
+              <Text style={styles.guestLinkText}>{t('exploreAsGuest')}</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.termsNotice}>
+              {t('termsNotice')}{' '}
+              <Text style={styles.termsLink}>{t('termsOfService')}</Text> {t('and')}{' '}
+              <Text style={styles.termsLink}>{t('privacyPolicy')}</Text>.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.actionsSection}>
+            <PrimaryButton
+              title={t('getStarted')}
+              onPress={() => router.push('/(auth)/register')}
+              icon={<ArrowRight size={18} color={colors.white} />}
+              style={styles.getStartedBtn}
+            />
+
+            <SecondaryButton
+              title={t('signInBtn')}
+              onPress={() => router.push('/(auth)/login')}
+              style={styles.secondaryBtn}
+            />
+
+            <TouchableOpacity
+              style={styles.guestLink}
+              onPress={() => router.replace('/(tabs)')}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('exploreAsGuest')}
+            >
+              <Text style={styles.guestLinkText}>{t('exploreAsGuest')}</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.termsNotice}>
+              {t('termsNotice')}{' '}
+              <Text style={styles.termsLink}>{t('termsOfService')}</Text> {t('and')}{' '}
+              <Text style={styles.termsLink}>{t('privacyPolicy')}</Text>.
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Language Selector Modal */}
@@ -246,5 +311,80 @@ const styles = StyleSheet.create({
   termsLink: {
     color: colors.deepGold,
     fontWeight: '600',
+  },
+  authSessionCard: {
+    width: '100%',
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: colors.borderGold,
+    shadowColor: colors.primaryGold,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+    gap: 14,
+  },
+  authSessionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  authAvatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.lightGold,
+    borderWidth: 1.5,
+    borderColor: colors.primaryGold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authAvatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.deepGold,
+  },
+  authSessionDetails: {
+    flex: 1,
+  },
+  authWelcomeSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primaryGold,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  authWelcomeName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.dark,
+    marginTop: 2,
+  },
+  continueBtn: {
+    width: '100%',
+    height: 52,
+    borderRadius: 14,
+  },
+  authSessionActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingTop: 4,
+  },
+  authSwitchBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  authSwitchText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.deepGold,
+  },
+  authDividerDot: {
+    fontSize: 14,
+    color: colors.borderGold,
   },
 });

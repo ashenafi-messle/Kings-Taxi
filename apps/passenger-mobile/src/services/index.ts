@@ -1,6 +1,7 @@
 export * from './auth.service';
 export * from './telegramAuth.service';
 export * from './registrationAuth.service';
+export * from './passwordRecovery.service';
 export * from './ride.service';
 export * from './hotel.service';
 export * from './heritage.service';

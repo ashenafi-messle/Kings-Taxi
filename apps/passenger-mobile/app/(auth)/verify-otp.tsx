@@ -29,6 +29,7 @@ export default function VerifyOtpScreen() {
   const { t } = useTranslation(['auth', 'validation', 'common']);
   const params = useLocalSearchParams();
 
+  const flow = (params.flow as string) || 'registration';
   const sessionId = (params.sessionId as string) || '';
   const method = (params.method as RegistrationMethod) || 'email';
   const identifier = (params.identifier as string) || '';
@@ -36,7 +37,13 @@ export default function VerifyOtpScreen() {
   const maskedIdentifier = (params.maskedIdentifier as string) || identifier;
   const initialDevOtp = (params.devOtp as string) || '';
 
-  const { verifyRegistrationOtp, resendRegistrationOtp, isLoading } = useAuthStore();
+  const {
+    verifyRegistrationOtp,
+    resendRegistrationOtp,
+    verifyRecoveryOtp,
+    resendRecoveryOtp,
+    isLoading,
+  } = useAuthStore();
   const { language } = useSettingsStore();
 
   const [code, setCode] = useState('');
@@ -63,6 +70,28 @@ export default function VerifyOtpScreen() {
     }
 
     setError('');
+
+    if (flow === 'recovery') {
+      const response = await verifyRecoveryOtp(sessionId, code);
+      if (response.success && response.data) {
+        const { recoveryToken } = response.data;
+        router.push({
+          pathname: '/(auth)/set-password',
+          params: {
+            flow: 'recovery',
+            sessionId,
+            recoveryToken,
+            method,
+            identifier,
+            fullName,
+          },
+        });
+      } else {
+        setError(response.error || t('invalidOtp'));
+      }
+      return;
+    }
+
     const response = await verifyRegistrationOtp(sessionId, code);
 
     if (response.success && response.data) {
@@ -86,6 +115,20 @@ export default function VerifyOtpScreen() {
   const handleResend = async () => {
     if (timer > 0) return;
     setError('');
+
+    if (flow === 'recovery') {
+      const res = await resendRecoveryOtp(sessionId);
+      if (res.success && res.data) {
+        setTimer(res.data.resendCooldownSeconds || 60);
+        if (res.data.devOtp) {
+          setDevOtp(res.data.devOtp);
+        }
+      } else {
+        setError(res.error || 'Failed to resend code');
+      }
+      return;
+    }
+
     const res = await resendRegistrationOtp(sessionId);
     if (res.success && res.data) {
       setTimer(res.data.resendCooldownSeconds || 60);
@@ -150,7 +193,9 @@ export default function VerifyOtpScreen() {
 
           {/* Verification Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>{t('verifyTitle')}</Text>
+            <Text style={styles.title}>
+              {flow === 'recovery' ? 'Password Recovery Code' : t('verifyTitle')}
+            </Text>
 
             {/* Delivery Channel Badge */}
             <View
