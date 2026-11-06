@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -47,6 +48,25 @@ export default function RegisterScreen() {
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [error, setError] = useState('');
   const [langModalVisible, setLangModalVisible] = useState(false);
+
+  // Android BackHandler
+  useEffect(() => {
+    const onBackPress = () => {
+      if (langModalVisible) {
+        setLangModalVisible(false);
+        return true;
+      }
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(auth)/welcome');
+      }
+      return true;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [langModalVisible, router]);
 
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';

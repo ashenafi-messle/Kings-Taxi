@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
   StatusBar,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Globe, ArrowRight, ShieldCheck, Star } from 'lucide-react-native';
@@ -27,6 +28,20 @@ export default function WelcomeScreen() {
   const { language } = useSettingsStore();
   const { isAuthenticated, user } = useAuthStore();
   const [langModalVisible, setLangModalVisible] = useState(false);
+
+  // Android BackHandler closes modal if open
+  useEffect(() => {
+    const onBackPress = () => {
+      if (langModalVisible) {
+        setLangModalVisible(false);
+        return true;
+      }
+      return false;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [langModalVisible]);
 
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';

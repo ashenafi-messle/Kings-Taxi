@@ -6,3 +6,5 @@ export * from './ride.service';
 export * from './hotel.service';
 export * from './heritage.service';
 export * from './payment.service';
+export * from './location.service';
+export * from './notification.service';

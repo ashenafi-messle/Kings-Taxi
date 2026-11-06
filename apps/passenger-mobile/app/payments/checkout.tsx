@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   SafeAreaView,
   ScrollView,
   ActivityIndicator,
+  BackHandler,
+  Linking,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -25,6 +27,7 @@ import {
 } from '../../src/components';
 import { mockPaymentMethods } from '../../src/mocks';
 import { PaymentMethodType, PaymentStatus } from '../../src/types';
+import { PaymentService } from '../../src/services/payment.service';
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
 
@@ -47,18 +50,66 @@ export default function CheckoutPaymentScreen() {
     { label: 'Payment Processing Fee', amount: 0 },
   ];
 
-  const handleProcessPayment = () => {
+  // Intercept Android hardware back press during payment
+  useEffect(() => {
+    const onBackPress = () => {
+      if (paymentStatus === 'PROCESSING') {
+        // Prevent accidental cancellation while transaction is in flight
+        return true;
+      }
+      return false;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+    // Listen for incoming deep link callbacks (e.g. from Telebirr / Chapa redirect)
+    const urlSub = Linking.addEventListener('url', (event) => {
+      if (event.url && event.url.includes('payments/callback')) {
+        const parsed = PaymentService.parseCallbackUrl(event.url);
+        if (parsed.transactionReference) {
+          setTransactionRef(parsed.transactionReference);
+        }
+        setPaymentStatus(parsed.status);
+        setIsSubmitting(false);
+      }
+    });
+
+    return () => {
+      backSub.remove();
+      urlSub.remove();
+    };
+  }, [paymentStatus]);
+
+  const handleProcessPayment = async () => {
     if (isSubmitting) return; // Prevent duplicate submission (idempotency check)
     setIsSubmitting(true);
     setPaymentStatus('PROCESSING');
 
-    // Simulate backend payment gateway handshake (Telebirr / Chapa / CBE Birr)
+    const handshake = PaymentService.initiateGatewayHandshake(
+      amount,
+      selectedMethod,
+      description,
+      serviceCategory as any
+    );
+    setTransactionRef(handshake.transactionReference);
+
+    if (selectedMethod === 'cash') {
+      // Cash on Arrival completes immediately
+      setTimeout(() => {
+        setPaymentStatus('COMPLETED');
+        setIsSubmitting(false);
+      }, 900);
+      return;
+    }
+
+    // Try opening external native app or web gateway (Telebirr / Chapa / CBE)
+    const launchedExternal = await PaymentService.openPaymentGateway(handshake);
+
+    // If external app could not launch or in simulator/dev, complete after simulation
     setTimeout(() => {
-      const ref = `KT-TXN-${Date.now().toString().slice(-6)}`;
-      setTransactionRef(ref);
       setPaymentStatus('COMPLETED');
       setIsSubmitting(false);
-    }, 2000);
+    }, launchedExternal ? 4000 : 2000);
   };
 
   const handleRetry = () => {

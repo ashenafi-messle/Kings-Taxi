@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MapPin, Navigation, CreditCard, ChevronRight } from 'lucide-react-native';
@@ -18,6 +19,7 @@ import {
 } from '../../src/components';
 import { useRideStore } from '../../src/stores';
 import { mockLocations } from '../../src/mocks';
+import { LocationService } from '../../src/services/location.service';
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
 
@@ -37,6 +39,56 @@ export default function RideBookingScreen() {
 
   const [isSelectingPickup, setIsSelectingPickup] = useState(false);
   const [isSelectingDestination, setIsSelectingDestination] = useState(false);
+  const [hasLocationPermission, setHasLocationPermission] = useState(true);
+
+  // Android BackHandler & GPS initialization
+  useEffect(() => {
+    const onBackPress = () => {
+      if (isSelectingPickup || isSelectingDestination) {
+        setIsSelectingPickup(false);
+        setIsSelectingDestination(false);
+        return true;
+      }
+      return false;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+    // Acquire current GPS position if permission is granted
+    LocationService.checkPermissions().then((perm) => {
+      setHasLocationPermission(perm.granted);
+      if (perm.granted) {
+        LocationService.getCurrentLocation().then(async (coords) => {
+          const rev = await LocationService.reverseGeocode(coords);
+          setPickup({
+            id: 'current_user_location',
+            title: rev.title,
+            address: rev.address,
+            coordinates: coords,
+          });
+        });
+      }
+    });
+
+    return () => {
+      backSub.remove();
+    };
+  }, [isSelectingPickup, isSelectingDestination, setPickup]);
+
+  const handleRequestGpsPermission = async () => {
+    const res = await LocationService.requestPermissions();
+    setHasLocationPermission(res.granted);
+    if (res.granted) {
+      const coords = await LocationService.getCurrentLocation();
+      const rev = await LocationService.reverseGeocode(coords);
+      setPickup({
+        id: 'current_user_location',
+        title: rev.title,
+        address: rev.address,
+        coordinates: coords,
+      });
+    }
+  };
 
   const selectedVehicle =
     availableVehicles.find((v) => v.id === selectedCategory) || availableVehicles[0];
@@ -58,6 +110,8 @@ export default function RideBookingScreen() {
         <InteractiveMap
           pickupCoords={pickupLocation.coordinates}
           destinationCoords={destinationLocation?.coordinates}
+          permissionGranted={hasLocationPermission}
+          onRequestPermission={handleRequestGpsPermission}
           height={210}
           style={styles.mapContainer}
         />

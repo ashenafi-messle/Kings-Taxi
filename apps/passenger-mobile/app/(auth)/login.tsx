@@ -10,6 +10,7 @@ import {
   Platform,
   StatusBar,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Mail, ArrowLeft, Globe } from 'lucide-react-native';
@@ -59,6 +60,25 @@ export default function LoginScreen() {
       setEmail('passenger@kingstaxi.et');
     }
   }, [rememberedEmail, isEmailRemembered]);
+
+  // Android BackHandler
+  useEffect(() => {
+    const onBackPress = () => {
+      if (langModalVisible) {
+        setLangModalVisible(false);
+        return true;
+      }
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(auth)/welcome');
+      }
+      return true;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [langModalVisible, router]);
 
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';

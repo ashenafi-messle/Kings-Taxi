@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   StatusBar,
   TextInput,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -54,6 +55,29 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState('');
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+
+  // Android BackHandler
+  useEffect(() => {
+    const onBackPress = () => {
+      if (langModalVisible) {
+        setLangModalVisible(false);
+        return true;
+      }
+      if (showCountryPicker) {
+        setShowCountryPicker(false);
+        return true;
+      }
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(auth)/login');
+      }
+      return true;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [langModalVisible, showCountryPicker, router]);
 
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
