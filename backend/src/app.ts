@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import pinoHttp from 'pino-http';
 import { env } from './config/env';
+import { getCorsOptions } from './config/cors';
 import { logger } from './core/logging/logger';
 import { requestIdMiddleware } from './core/middleware/requestId';
 import { globalRateLimiter } from './core/middleware/rateLimiter';
@@ -29,20 +30,7 @@ export function createApp(): Express {
   );
 
   // 4. CORS configuration
-  const allowedOrigins =
-    env.CORS_ORIGINS === '*'
-      ? '*'
-      : env.CORS_ORIGINS.split(',').map((origin) => origin.trim());
-
-  app.use(
-    cors({
-      origin: allowedOrigins,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'Idempotency-Key'],
-      exposedHeaders: ['x-request-id'],
-    })
-  );
+  app.use(cors(getCorsOptions()));
 
   // 5. Structured HTTP logging with Pino
   if (env.NODE_ENV !== 'test') {

@@ -9,7 +9,9 @@ export interface EnvelopeMeta {
 
 export interface StandardApiResponse<T = any> {
   success: boolean;
+  message: string;
   data: T | null;
+  code?: string;
   error: {
     code: string;
     message: string;
@@ -22,13 +24,24 @@ export class ApiResponse {
   static success<T>(
     res: Response,
     data: T,
+    messageOrStatus: string | number = 'Operation completed successfully',
     statusCode = 200,
     additionalMeta: Record<string, any> = {}
   ): Response<StandardApiResponse<T>> {
     const requestId = (res.req?.headers['x-request-id'] as string) || (res.locals?.requestId as string) || 'unknown';
 
+    let message = 'Operation completed successfully';
+    let status = statusCode;
+
+    if (typeof messageOrStatus === 'number') {
+      status = messageOrStatus;
+    } else if (typeof messageOrStatus === 'string') {
+      message = messageOrStatus;
+    }
+
     const envelope: StandardApiResponse<T> = {
       success: true,
+      message,
       data,
       error: null,
       meta: {
@@ -39,13 +52,13 @@ export class ApiResponse {
       },
     };
 
-    return res.status(statusCode).json(envelope);
+    return res.status(status).json(envelope);
   }
 
   static error(
     res: Response,
     code: string,
-    message: string,
+    message = 'An error occurred',
     statusCode = 500,
     details?: any,
     additionalMeta: Record<string, any> = {}
@@ -54,6 +67,8 @@ export class ApiResponse {
 
     const envelope: StandardApiResponse<null> = {
       success: false,
+      message,
+      code,
       data: null,
       error: {
         code,

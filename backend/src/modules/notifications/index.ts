@@ -1,3 +1,6 @@
+import { Router, Request, Response } from 'express';
+import { ApiResponse } from '../../core/response/apiResponse';
+
 /**
  * Kings Taxi — Push & In-App Notification Module
  *
@@ -7,7 +10,20 @@
  * - Multilingual template localization (Amharic, English, Tigrinya, Afaan Oromoo)
  */
 
+export const notificationRouter = Router();
+
+notificationRouter.get('/status', (_req: Request, res: Response) => {
+  ApiResponse.success(
+    res,
+    {
+      module: 'notifications',
+      status: 'operational',
+      description: 'Push notification dispatch and multilingual alert services',
+    },
+    'Notification service status operational'
+  );
+});
+
 export interface INotificationService {
   // Subsequent phase contract
 }
-

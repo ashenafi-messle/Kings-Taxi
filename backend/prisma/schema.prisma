@@ -1,5 +1,8 @@
 // ==============================================================================
-// Kings Taxi Central Backend — Database Schema (PostgreSQL + Prisma)
+// Kings Taxi Central Backend — Production Database Schema (PostgreSQL 14-18+)
+// ==============================================================================
+// Target Database: kings_taxi_dev (via SSH tunnel 127.0.0.1:5433)
+// Production VPS: Zergaw VPS (Isolated from Erkab platform)
 // ==============================================================================
 
 generator client {
@@ -16,11 +19,38 @@ datasource db {
 // Enums
 // ------------------------------------------------------------------------------
 
-enum PassengerStatus {
+enum AccountStatus {
   PENDING_VERIFICATION
   ACTIVE
   SUSPENDED
   DELETED
+}
+
+enum DriverVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DriverAvailabilityStatus {
+  OFFLINE
+  ONLINE
+  BUSY
+  ON_TRIP
+}
+
+enum VehicleVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum VehicleType {
+  STANDARD_SEDAN
+  COMFORT_VAN
+  EXECUTIVE
+  MINIVAN_TOUR
 }
 
 enum SupportedLanguage {
@@ -77,6 +107,56 @@ enum BookingStatus {
   CANCELLED
 }
 
+enum TripStatus {
+  ACCEPTED
+  ARRIVED_AT_PICKUP
+  IN_TRANSIT
+  COMPLETED
+  ABORTED
+}
+
+enum PaymentMethod {
+  TELEBIRR
+  CBE_BIRR
+  CHAPA
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum RecipientType {
+  PASSENGER
+  DRIVER
+  ADMIN
+}
+
+enum NotificationType {
+  TRIP_UPDATE
+  PAYMENT_RECEIPT
+  SECURITY_ALERT
+  SYSTEM_NOTICE
+}
+
+enum SupportStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum SupportPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 enum CancellationActor {
   PASSENGER
   DRIVER
@@ -84,55 +164,62 @@ enum CancellationActor {
   ADMIN
 }
 
+enum UserRoleType {
+  PASSENGER
+  DRIVER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ActorType {
+  PASSENGER
+  DRIVER
+  ADMIN
+  SYSTEM
+}
+
 // ------------------------------------------------------------------------------
-// Core Passenger & Authentication Entities
+// 1. Passenger Entity
 // ------------------------------------------------------------------------------
 
 model Passenger {
-  id           String          @id @default(uuid()) @db.Uuid
-  phone        String?         @unique @db.VarChar(32)
-  email        String?         @unique @db.VarChar(255)
-  status       PassengerStatus @default(PENDING_VERIFICATION)
-  passwordHash String          @db.VarChar(255)
-  passwordSalt String?         @db.VarChar(128)
+  id           String        @id @default(uuid()) @db.Uuid
+  fullName     String        @map("full_name") @db.VarChar(128)
+  email        String?       @unique @db.VarChar(255)
+  phoneNumber  String?       @unique @map("phone_number") @db.VarChar(32)
+  passwordHash String        @map("password_hash") @db.VarChar(255)
+  profileImage String?       @map("profile_image") @db.VarChar(512)
+  isVerified   Boolean       @default(false) @map("is_verified")
+  accountStatus AccountStatus @default(PENDING_VERIFICATION) @map("account_status")
+  language     SupportedLanguage @default(EN) @map("preferred_language")
+  city         String        @default("Gondar") @db.VarChar(64)
+
+  emergencyContactName  String? @map("emergency_contact_name") @db.VarChar(128)
+  emergencyContactPhone String? @map("emergency_contact_phone") @db.VarChar(32)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relationships
-  profile          PassengerProfile?
   authIdentities   PassengerAuthIdentity[]
-  sessions         PassengerSession[]
-  refreshTokens    RefreshToken[]
-  otpVerifications OTPVerification[]
   bookings         Booking[]
+  payments         Payment[]
+  supportRequests  SupportRequest[]
+  notifications    Notification[]
+  refreshTokens    RefreshToken[]
+  sessions         PassengerSession[]
+  otpVerifications OTPVerification[]
   auditLogs        AuditLog[]
 
-  @@index([status])
+  @@index([accountStatus])
+  @@index([phoneNumber])
+  @@index([email])
   @@index([createdAt])
   @@map("passengers")
 }
 
-model PassengerProfile {
-  id          String   @id @default(uuid()) @db.Uuid
-  passengerId String   @unique @map("passenger_id") @db.Uuid
-  fullName    String   @map("full_name") @db.VarChar(128)
-  avatarUrl   String?  @map("avatar_url") @db.VarChar(512)
-  language    SupportedLanguage @default(EN) @map("preferred_language")
-  city        String   @default("Gondar") @db.VarChar(64)
-
-  emergencyContactName  String? @map("emergency_contact_name") @db.VarChar(128)
-  emergencyContactPhone String? @map("emergency_contact_phone") @db.VarChar(32)
-
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Cascade)
-
-  @@map("passenger_profiles")
-}
-
+// Multi-channel auth identity supporting email, Telegram, and phone
 model PassengerAuthIdentity {
   id          String       @id @default(uuid()) @db.Uuid
   passengerId String       @map("passenger_id") @db.Uuid
@@ -151,6 +238,298 @@ model PassengerAuthIdentity {
   @@index([passengerId])
   @@map("passenger_auth_identities")
 }
+
+// ------------------------------------------------------------------------------
+// 2. Driver Entity
+// ------------------------------------------------------------------------------
+
+model Driver {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  fullName           String                   @map("full_name") @db.VarChar(128)
+  email              String?                  @unique @db.VarChar(255)
+  phoneNumber        String                   @unique @map("phone_number") @db.VarChar(32)
+  passwordHash       String                   @map("password_hash") @db.VarChar(255)
+  profileImage       String?                  @map("profile_image") @db.VarChar(512)
+  verificationStatus DriverVerificationStatus @default(PENDING) @map("verification_status")
+  availabilityStatus DriverAvailabilityStatus @default(OFFLINE) @map("availability_status")
+
+  currentLatitude    Float?    @map("current_latitude")
+  currentLongitude   Float?    @map("current_longitude")
+  lastLocationUpdate DateTime? @map("last_location_update") @db.Timestamptz(6)
+  rating             Float     @default(5.0)
+  totalTrips         Int       @default(0) @map("total_trips")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relationships
+  vehicles         Vehicle[]
+  assignedBookings Booking[]
+  trips            Trip[]
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
+
+  @@index([verificationStatus])
+  @@index([availabilityStatus])
+  @@index([phoneNumber])
+  @@index([createdAt])
+  @@map("drivers")
+}
+
+// ------------------------------------------------------------------------------
+// 3. Vehicle Entity
+// ------------------------------------------------------------------------------
+
+model Vehicle {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  driverId           String                    @map("driver_id") @db.Uuid
+  plateNumber        String                    @unique @map("plate_number") @db.VarChar(32)
+  vehicleModel       String                    @map("vehicle_model") @db.VarChar(64)
+  vehicleColor       String                    @map("vehicle_color") @db.VarChar(32)
+  vehicleType        VehicleType               @default(STANDARD_SEDAN) @map("vehicle_type")
+  seatingCapacity    Int                       @default(4) @map("seating_capacity") @db.SmallInt
+  verificationStatus VehicleVerificationStatus @default(PENDING) @map("verification_status")
+  isActive           Boolean                   @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  driver   Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+  trips    Trip[]
+
+  @@index([driverId])
+  @@index([plateNumber])
+  @@index([verificationStatus, isActive])
+  @@map("vehicles")
+}
+
+// ------------------------------------------------------------------------------
+// 4. Booking Entity
+// ------------------------------------------------------------------------------
+
+model Booking {
+  id                  String             @id @default(uuid()) @db.Uuid
+  bookingReference    String             @unique @map("booking_reference") @db.VarChar(32)
+  passengerId         String             @map("passenger_id") @db.Uuid
+  driverId            String?            @map("driver_id") @db.Uuid
+  vehicleId           String?            @map("vehicle_id") @db.Uuid
+  serviceType         BookingServiceType @default(RIDE_HAILING) @map("service_type")
+  bookingStatus       BookingStatus      @default(REQUESTED) @map("booking_status")
+
+  pickupLocation      String @map("pickup_location") @db.VarChar(255)
+  destinationLocation String @map("destination_location") @db.VarChar(255)
+  pickupLatitude      Float  @map("pickup_latitude")
+  pickupLongitude     Float  @map("pickup_longitude")
+  destinationLatitude Float  @map("destination_latitude")
+  destinationLongitude Float @map("destination_longitude")
+
+  estimatedDistanceMeters  Int?     @map("estimated_distance_meters")
+  estimatedDurationSeconds Int?     @map("estimated_duration_seconds")
+  estimatedFare            Decimal  @map("estimated_fare") @db.Decimal(10, 2)
+  finalFare                Decimal? @map("final_fare") @db.Decimal(10, 2)
+  currency                 String   @default("ETB") @db.VarChar(8)
+
+  cancellationReason String?            @map("cancellation_reason") @db.VarChar(255)
+  cancelledBy        CancellationActor? @map("cancelled_by")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  driver    Driver?   @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle   Vehicle?  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  trip      Trip?
+  payment   Payment?
+
+  @@index([passengerId, bookingStatus])
+  @@index([driverId, bookingStatus])
+  @@index([bookingReference])
+  @@index([createdAt])
+  @@map("bookings")
+}
+
+// ------------------------------------------------------------------------------
+// 5. Trip Entity
+// ------------------------------------------------------------------------------
+
+model Trip {
+  id         String     @id @default(uuid()) @db.Uuid
+  bookingId  String     @unique @map("booking_id") @db.Uuid
+  driverId   String     @map("driver_id") @db.Uuid
+  vehicleId  String?    @map("vehicle_id") @db.Uuid
+  tripStatus TripStatus @default(ACCEPTED) @map("trip_status")
+
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  routePolyline         String? @map("route_polyline") @db.Text
+  actualDistanceMeters  Int?    @map("actual_distance_meters")
+  actualDurationSeconds Int?    @map("actual_duration_seconds")
+
+  passengerRating   Int?    @map("passenger_rating") @db.SmallInt
+  passengerFeedback String? @map("passenger_feedback") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  driver  Driver   @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@index([driverId, tripStatus])
+  @@index([bookingId])
+  @@index([createdAt])
+  @@map("trips")
+}
+
+// ------------------------------------------------------------------------------
+// 6. Payment Entity
+// ------------------------------------------------------------------------------
+
+model Payment {
+  id                   String        @id @default(uuid()) @db.Uuid
+  bookingId            String        @unique @map("booking_id") @db.Uuid
+  passengerId          String        @map("passenger_id") @db.Uuid
+  amount               Decimal       @db.Decimal(10, 2)
+  currency             String        @default("ETB") @db.VarChar(8)
+  paymentMethod        PaymentMethod @default(CASH) @map("payment_method")
+  paymentStatus        PaymentStatus @default(PENDING) @map("payment_status")
+  transactionReference String        @unique @map("transaction_reference") @db.VarChar(64)
+  gatewayReference     String?       @map("gateway_reference") @db.VarChar(128)
+  paidAt               DateTime?     @map("paid_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+
+  @@index([passengerId, paymentStatus])
+  @@index([transactionReference])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+// ------------------------------------------------------------------------------
+// 7. Notification Entity
+// ------------------------------------------------------------------------------
+
+model Notification {
+  id               String           @id @default(uuid()) @db.Uuid
+  recipientId      String           @map("recipient_id") @db.Uuid
+  recipientType    RecipientType    @map("recipient_type")
+  title            String           @db.VarChar(128)
+  message          String           @db.Text
+  notificationType NotificationType @map("notification_type")
+  isRead           Boolean          @default(false) @map("is_read")
+  readAt           DateTime?        @map("read_at") @db.Timestamptz(6)
+  metadata         Json?            @db.JsonB
+
+  passengerId String? @map("passenger_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  passenger Passenger? @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, isRead])
+  @@index([recipientType, recipientId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ------------------------------------------------------------------------------
+// 8. SupportRequest Entity
+// ------------------------------------------------------------------------------
+
+model SupportRequest {
+  id            String          @id @default(uuid()) @db.Uuid
+  passengerId   String          @map("passenger_id") @db.Uuid
+  bookingId     String?         @map("booking_id") @db.Uuid
+  subject       String          @db.VarChar(128)
+  message       String          @db.Text
+  status        SupportStatus   @default(OPEN)
+  priority      SupportPriority @default(MEDIUM)
+  responseNotes String?         @map("response_notes") @db.Text
+  resolvedAt    DateTime?       @map("resolved_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+
+  @@index([passengerId, status])
+  @@index([status])
+  @@index([createdAt])
+  @@map("support_requests")
+}
+
+// ------------------------------------------------------------------------------
+// 9. RefreshToken Entity
+// ------------------------------------------------------------------------------
+
+model RefreshToken {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @map("user_id") @db.Uuid
+  userType    UserRoleType @default(PASSENGER) @map("user_type")
+  tokenHash   String       @unique @map("token_hash") @db.VarChar(255)
+  familyId    String       @map("family_id") @db.VarChar(64)
+  isRevoked   Boolean      @default(false) @map("is_revoked")
+  revokedAt   DateTime?    @map("revoked_at") @db.Timestamptz(6)
+  expiresAt   DateTime     @map("expires_at") @db.Timestamptz(6)
+
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.VarChar(512)
+
+  passengerId String? @map("passenger_id") @db.Uuid
+  driverId    String? @map("driver_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  passenger Passenger? @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+  driver    Driver?    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRevoked])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ------------------------------------------------------------------------------
+// 10. AuditLog Entity
+// ------------------------------------------------------------------------------
+
+model AuditLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  actorId     String?   @map("actor_id") @db.VarChar(64)
+  actorType   ActorType @map("actor_type")
+  action      String    @db.VarChar(64)
+  entityType  String    @map("entity_type") @db.VarChar(64)
+  entityId    String    @map("entity_id") @db.VarChar(64)
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.VarChar(512)
+  metadata    Json?     @db.JsonB
+
+  passengerId String? @map("passenger_id") @db.Uuid
+  driverId    String? @map("driver_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  passenger Passenger? @relation(fields: [passengerId], references: [id], onDelete: SetNull)
+  driver    Driver?    @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([actorId, actorType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ------------------------------------------------------------------------------
+// 11. OTPVerification Entity (Email & Telegram Auth Workflows)
+// ------------------------------------------------------------------------------
 
 model OTPVerification {
   id                  String     @id @default(uuid()) @db.Uuid
@@ -179,42 +558,22 @@ model OTPVerification {
   @@map("otp_verifications")
 }
 
-model RefreshToken {
-  id                  String    @id @default(uuid()) @db.Uuid
-  passengerId         String    @map("passenger_id") @db.Uuid
-  tokenHash           String    @unique @map("token_hash") @db.VarChar(255)
-  familyId            String    @map("family_id") @db.VarChar(64)
-  sessionId           String?   @map("session_id") @db.Uuid
-  isRevoked           Boolean   @default(false) @map("is_revoked")
-  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(6)
-  replacedByTokenHash String?   @map("replaced_by_token_hash") @db.VarChar(255)
-  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
-
-  ipAddress String? @map("ip_address") @db.VarChar(45)
-  userAgent String? @map("user_agent") @db.VarChar(512)
-
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Cascade)
-
-  @@index([passengerId])
-  @@index([familyId])
-  @@index([expiresAt])
-  @@map("refresh_tokens")
-}
+// ------------------------------------------------------------------------------
+// 12. PassengerSession Entity (Active Device Inspection)
+// ------------------------------------------------------------------------------
 
 model PassengerSession {
-  id          String         @id @default(uuid()) @db.Uuid
-  passengerId String         @map("passenger_id") @db.Uuid
-  deviceId    String?        @map("device_id") @db.VarChar(128)
-  deviceName  String?        @map("device_name") @db.VarChar(128)
-  platform    ClientPlatform @default(UNKNOWN)
-  appVersion  String?        @map("app_version") @db.VarChar(32)
-  ipAddress   String?        @map("ip_address") @db.VarChar(45)
-  userAgent   String?        @map("user_agent") @db.VarChar(512)
-  isActive    Boolean        @default(true) @map("is_active")
-  lastActiveAt DateTime      @default(now()) @map("last_active_at") @db.Timestamptz(6)
-  expiresAt   DateTime       @map("expires_at") @db.Timestamptz(6)
+  id           String         @id @default(uuid()) @db.Uuid
+  passengerId  String         @map("passenger_id") @db.Uuid
+  deviceId     String?        @map("device_id") @db.VarChar(128)
+  deviceName   String?        @map("device_name") @db.VarChar(128)
+  platform     ClientPlatform @default(UNKNOWN)
+  appVersion   String?        @map("app_version") @db.VarChar(32)
+  ipAddress    String?        @map("ip_address") @db.VarChar(45)
+  userAgent    String?        @map("user_agent") @db.VarChar(512)
+  isActive     Boolean        @default(true) @map("is_active")
+  lastActiveAt DateTime       @default(now()) @map("last_active_at") @db.Timestamptz(6)
+  expiresAt    DateTime       @map("expires_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -223,74 +582,3 @@ model PassengerSession {
   @@index([passengerId, isActive])
   @@map("passenger_sessions")
 }
-
-// ------------------------------------------------------------------------------
-// Transportation & Booking Domain (Future-Compatible Foundation)
-// ------------------------------------------------------------------------------
-
-model Booking {
-  id               String             @id @default(uuid()) @db.Uuid
-  bookingReference String             @unique @map("booking_reference") @db.VarChar(32)
-  passengerId      String             @map("passenger_id") @db.Uuid
-  driverId         String?            @map("driver_id") @db.Uuid
-  vehicleId        String?            @map("vehicle_id") @db.Uuid
-  serviceType      BookingServiceType @default(RIDE_HAILING) @map("service_type")
-  status           BookingStatus      @default(DRAFT)
-
-  pickupAddress   String @map("pickup_address") @db.VarChar(255)
-  pickupLatitude  Float  @map("pickup_latitude")
-  pickupLongitude Float  @map("pickup_longitude")
-
-  dropoffAddress   String @map("dropoff_address") @db.VarChar(255)
-  dropoffLatitude  Float  @map("dropoff_latitude")
-  dropoffLongitude Float  @map("dropoff_longitude")
-
-  estimatedDistanceMeters  Int?     @map("estimated_distance_meters")
-  estimatedDurationSeconds Int?     @map("estimated_duration_seconds")
-  estimatedFare            Decimal? @map("estimated_fare") @db.Decimal(10, 2)
-  finalFare                Decimal? @map("final_fare") @db.Decimal(10, 2)
-  currency                 String   @default("ETB") @db.VarChar(8)
-
-  cancellationReason String?            @map("cancellation_reason") @db.VarChar(255)
-  cancelledBy        CancellationActor? @map("cancelled_by")
-
-  passengerRating   Int?    @map("passenger_rating") @db.SmallInt
-  passengerFeedback String? @map("passenger_feedback") @db.Text
-
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
-  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
-
-  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Restrict)
-
-  @@index([passengerId, status])
-  @@index([bookingReference])
-  @@index([createdAt])
-  @@map("bookings")
-}
-
-// ------------------------------------------------------------------------------
-// Security & System Audit Logs
-// ------------------------------------------------------------------------------
-
-model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  entityType  String   @map("entity_type") @db.VarChar(64)
-  entityId    String   @map("entity_id") @db.VarChar(64)
-  action      String   @db.VarChar(64)
-  performedBy String?  @map("performed_by") @db.VarChar(64)
-  passengerId String?  @map("passenger_id") @db.Uuid
-  ipAddress   String?  @map("ip_address") @db.VarChar(45)
-  userAgent   String?  @map("user_agent") @db.VarChar(512)
-  metadata    Json?    @db.JsonB
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  passenger Passenger? @relation(fields: [passengerId], references: [id], onDelete: SetNull)
-
-  @@index([entityType, entityId])
-  @@index([action])
-  @@index([createdAt])
-  @@map("audit_logs")
-}
-
