@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { AppError } from './appError';
 import { ApiResponse } from '../response/apiResponse';
 import { logger } from '../logging/logger';
@@ -13,6 +14,7 @@ export function errorHandler(
 ): void {
   const requestId = (req.headers['x-request-id'] as string) || (res.locals?.requestId as string) || 'unknown';
 
+  // Handle explicit operational application errors
   if (err instanceof AppError) {
     if (err.statusCode >= 500) {
       logger.error({ err, requestId, path: req.path, method: req.method }, `[Operational Error 5xx]: ${err.message}`);
@@ -26,6 +28,23 @@ export function errorHandler(
       err.message,
       err.statusCode,
       err.details
+    );
+    return;
+  }
+
+  // Handle Zod schema validation errors
+  if (err instanceof z.ZodError) {
+    const fieldErrors = err.errors.map((e) => ({
+      field: e.path.join('.'),
+      message: e.message,
+    }));
+
+    ApiResponse.error(
+      res,
+      'VALIDATION_ERROR',
+      err.errors[0]?.message || 'Input validation failed',
+      400,
+      fieldErrors
     );
     return;
   }
@@ -68,4 +87,3 @@ export function errorHandler(
     500
   );
 }
-
