@@ -45,8 +45,34 @@ export interface PasswordRecoverySessionData {
   devOtp?: string;
 }
 
-function hashPasswordUtil(password: string, salt: string): string {
-  return crypto.scryptSync(password, salt, 64).toString('hex');
+
+// OWASP Recommended Scrypt parameters for interactive login: N=16384, r=8, p=1, keylen=64
+const SCRYPT_OPTIONS: crypto.ScryptOptions = {
+  N: 16384,
+  r: 8,
+  p: 1,
+  maxmem: 32 * 1024 * 1024,
+};
+
+function hashPasswordAsync(password: string, salt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, SCRYPT_OPTIONS, (err, derivedKey) => {
+      if (err) return reject(err);
+      resolve(derivedKey.toString('hex'));
+    });
+  });
+}
+
+function hashPasswordSync(password: string, salt: string): string {
+  return crypto.scryptSync(password, salt, 64, SCRYPT_OPTIONS).toString('hex');
+}
+
+function normalizeIdentifier(identifier: string): string {
+  const clean = identifier.trim().toLowerCase();
+  if (clean.includes('@')) {
+    return clean;
+  }
+  return clean.replace(/[^0-9]/g, '');
 }
 
 async function withDbTimeout<T>(queryPromise: Promise<T>, timeoutMs = 1200): Promise<T> {
@@ -65,7 +91,34 @@ async function withDbTimeout<T>(queryPromise: Promise<T>, timeoutMs = 1200): Pro
 const activeRegSessions = new Map<string, RegistrationSessionData>();
 const activeRecSessions = new Map<string, PasswordRecoverySessionData>();
 
-// In-memory registered user cache (fallback for tests/dev when database is offline)
+// Sliding window tracker for identifier rate limiting (5 OTP requests per hour per normalized identifier)
+const identifierRateLimitWindow = new Map<string, number[]>();
+
+export function checkIdentifierRateLimit(identifier: string, maxPerHour = 5): void {
+  const normalized = normalizeIdentifier(identifier);
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000; // 1 hour rolling window
+  const timestamps = identifierRateLimitWindow.get(normalized) || [];
+  const validTimestamps = timestamps.filter((t) => now - t < windowMs);
+
+  if (validTimestamps.length >= maxPerHour) {
+    throw new AppError(
+      'Too many verification codes requested for this destination. Please try again after 1 hour.',
+      429,
+      'IDENTIFIER_RATE_LIMIT_EXCEEDED'
+    );
+  }
+
+  validTimestamps.push(now);
+  identifierRateLimitWindow.set(normalized, validTimestamps);
+}
+
+// Clear in-memory tracker (for unit/integration testing resets)
+export function resetIdentifierRateLimitTracker(): void {
+  identifierRateLimitWindow.clear();
+}
+
+// In-memory registered user cache (strictly restricted to non-production dev/testing when database is offline)
 const fallbackUsers = new Map<string, any>([
   [
     'dawit@kingstaxi.et',
@@ -74,7 +127,7 @@ const fallbackUsers = new Map<string, any>([
       fullName: 'Dawit Haile',
       email: 'dawit@kingstaxi.et',
       phoneNumber: '+251911234567',
-      passwordHash: hashPasswordUtil('Password123!', 'salt_dawit_haile'),
+      passwordHash: hashPasswordSync('Password123!', 'salt_dawit_haile'),
       passwordSalt: 'salt_dawit_haile',
       language: 'EN',
       city: 'Gondar',
@@ -89,7 +142,7 @@ const fallbackUsers = new Map<string, any>([
       fullName: 'Dawit Haile',
       email: 'dawit@kingstaxi.et',
       phoneNumber: '+251911234567',
-      passwordHash: hashPasswordUtil('Password123!', 'salt_dawit_haile'),
+      passwordHash: hashPasswordSync('Password123!', 'salt_dawit_haile'),
       passwordSalt: 'salt_dawit_haile',
       language: 'EN',
       city: 'Gondar',
@@ -99,6 +152,20 @@ const fallbackUsers = new Map<string, any>([
   ],
 ]);
 
+interface FallbackRefreshToken {
+  id: string;
+  tokenHash: string;
+  userId: string;
+  familyId: string;
+  expiresAt: Date;
+  isRevoked: boolean;
+  revokedAt?: Date;
+  passenger?: any;
+}
+
+// In-memory fallback refresh token cache (strictly for non-production environments)
+const fallbackRefreshTokens = new Map<string, FallbackRefreshToken>();
+
 export class AuthService {
   private emailService = EmailService.getInstance();
   private telegramService = TelegramService.getInstance();
@@ -107,17 +174,27 @@ export class AuthService {
   // Cryptographic Utilities
   // ----------------------------------------------------------------------------
 
-  public hashPassword(password: string, salt: string): string {
-    return hashPasswordUtil(password, salt);
+  public async hashPassword(password: string, salt: string): Promise<string> {
+    return hashPasswordAsync(password, salt);
+  }
+
+  public hashPasswordSync(password: string, salt: string): string {
+    return hashPasswordSync(password, salt);
   }
 
   public generateSalt(): string {
     return crypto.randomBytes(16).toString('hex');
   }
 
-  public verifyPassword(password: string, storedHash: string, salt: string): boolean {
-    const computedHash = this.hashPassword(password, salt);
+  public async verifyPassword(password: string, storedHash: string, salt: string): Promise<boolean> {
     try {
+      if (!storedHash || !salt) {
+        return false;
+      }
+      const computedHash = await this.hashPassword(password, salt);
+      if (computedHash.length !== storedHash.length) {
+        return false;
+      }
       return crypto.timingSafeEqual(Buffer.from(computedHash, 'hex'), Buffer.from(storedHash, 'hex'));
     } catch {
       return false;
@@ -171,6 +248,7 @@ export class AuthService {
     const rawToken = `rt_${Date.now()}_${crypto.randomBytes(32).toString('hex')}`;
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const tokenFamily = familyId || `fam_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+    const id = `rt_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
@@ -178,6 +256,7 @@ export class AuthService {
       await withDbTimeout(
         prisma.refreshToken.create({
           data: {
+            id,
             userId: passengerId,
             userType: 'PASSENGER',
             tokenHash,
@@ -190,7 +269,29 @@ export class AuthService {
         })
       );
     } catch (err) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Session persistence unavailable. Please try again later.', 503, 'SERVICE_UNAVAILABLE');
+      }
       logger.warn({ err }, '[AuthService] Could not persist refresh token to database, operating in session memory');
+    }
+
+    if (env.NODE_ENV !== 'production') {
+      let passengerObj = null;
+      for (const val of fallbackUsers.values()) {
+        if (val.id === passengerId) {
+          passengerObj = val;
+          break;
+        }
+      }
+      fallbackRefreshTokens.set(tokenHash, {
+        id,
+        tokenHash,
+        userId: passengerId,
+        familyId: tokenFamily,
+        expiresAt,
+        isRevoked: false,
+        passenger: passengerObj || { id: passengerId },
+      });
     }
 
     return rawToken;
@@ -217,8 +318,12 @@ export class AuthService {
   public async initiateRegistration(method: RegistrationMethod, identifier: string, fullName: string) {
     const cleanIdentifier = identifier.trim().toLowerCase();
     const cleanFullName = fullName.trim();
+    const normalized = normalizeIdentifier(cleanIdentifier);
 
-    // Check duplicate in database
+    // 1. Identifier-level rate limiting (max 5 per rolling hour)
+    checkIdentifierRateLimit(normalized, 5);
+
+    // 2. Check duplicate in database
     try {
       const existing = await withDbTimeout(
         prisma.passenger.findFirst({
@@ -239,7 +344,10 @@ export class AuthService {
       }
     } catch (err: any) {
       if (err instanceof AppError) throw err;
-      // If DB is offline, check fallback map
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
+      // If DB is offline in non-production, check fallback map
       if (fallbackUsers.has(cleanIdentifier)) {
         throw new AppError('An account with this identifier already exists. Please sign in.', 409, 'ACCOUNT_ALREADY_EXISTS');
       }
@@ -271,6 +379,28 @@ export class AuthService {
 
     activeRegSessions.set(sessionId, session);
 
+    // Persist OTP record in database for multi-instance distributed rate limiting and auditing
+    try {
+      await withDbTimeout(
+        prisma.oTPVerification.create({
+          data: {
+            identifier: normalized,
+            purpose: 'REGISTRATION',
+            channel: method === 'email' ? 'EMAIL' : 'TELEGRAM',
+            codeHash: otpHash,
+            salt: sessionSalt,
+            expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+            maxAttempts: 5,
+            resendCooldownUntil: new Date(Date.now() + cooldownSeconds * 1000),
+          },
+        })
+      );
+    } catch (err: any) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
+    }
+
     // Dispatch via channel
     if (method === 'email') {
       await this.emailService.sendOtpEmail(cleanIdentifier, plainOtp, cleanFullName);
@@ -299,6 +429,9 @@ export class AuthService {
       throw new AppError(`Please wait ${remainingSeconds}s before requesting a new code.`, 429, 'COOLDOWN_ACTIVE');
     }
 
+    // Check identifier rate limit
+    checkIdentifierRateLimit(normalizeIdentifier(session.identifier), 5);
+
     const newOtp = this.generateOtp();
     session.otpHash = this.hashOtp(newOtp, session.sessionSalt);
     session.otpExpiresAt = Date.now() + 300 * 1000;
@@ -307,6 +440,28 @@ export class AuthService {
     session.devOtp = env.NODE_ENV !== 'production' ? newOtp : undefined;
 
     activeRegSessions.set(sessionId, session);
+
+    // Persist OTP in database
+    try {
+      await withDbTimeout(
+        prisma.oTPVerification.create({
+          data: {
+            identifier: normalizeIdentifier(session.identifier),
+            purpose: 'REGISTRATION',
+            channel: session.method === 'email' ? 'EMAIL' : 'TELEGRAM',
+            codeHash: session.otpHash,
+            salt: session.sessionSalt,
+            expiresAt: new Date(session.otpExpiresAt),
+            maxAttempts: 5,
+            resendCooldownUntil: new Date(session.resendCooldownUntil),
+          },
+        })
+      );
+    } catch (err: any) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
+    }
 
     if (session.method === 'email') {
       await this.emailService.sendOtpEmail(session.identifier, newOtp, session.fullName);
@@ -344,6 +499,8 @@ export class AuthService {
       throw new AppError(`Invalid verification code. ${remaining} attempt(s) remaining.`, 400, 'INVALID_OTP');
     }
 
+    // Invalidate OTP hash immediately to prevent replay attacks
+    session.otpHash = '';
     session.isVerified = true;
     session.registrationToken = `tok_${Date.now()}_${crypto.randomBytes(16).toString('hex')}`;
     activeRegSessions.set(sessionId, session);
@@ -369,7 +526,7 @@ export class AuthService {
     }
 
     const salt = this.generateSalt();
-    const passwordHash = this.hashPassword(password, salt);
+    const passwordHash = await this.hashPassword(password, salt);
 
     const isEmail = session.method === 'email';
     const emailVal = isEmail ? session.identifier : null;
@@ -401,7 +558,10 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      logger.warn({ err }, '[AuthService] Database write bypassed or failed; creating in-memory fallback user');
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Unable to complete registration. Service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
+      logger.warn({ err }, '[AuthService] Database write bypassed in non-production; creating in-memory fallback user');
       createdPassenger = {
         id: `usr_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
         fullName: session.fullName,
@@ -446,12 +606,15 @@ export class AuthService {
           },
         })
       );
-    } catch {
+    } catch (err: any) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Authentication service temporarily unavailable. Please try again later.', 503, 'SERVICE_UNAVAILABLE');
+      }
       passenger = null;
     }
 
-    // Check fallback if not in DB
-    if (!passenger && fallbackUsers.has(clean)) {
+    // Strictly restrict in-memory fallback to non-production environments
+    if (!passenger && env.NODE_ENV !== 'production' && fallbackUsers.has(clean)) {
       passenger = fallbackUsers.get(clean);
     }
 
@@ -462,9 +625,9 @@ export class AuthService {
     let isValid = false;
     if (passenger.passwordHash.includes(':')) {
       const [hash, salt] = passenger.passwordHash.split(':');
-      isValid = this.verifyPassword(passwordAttempt, hash, salt);
+      isValid = await this.verifyPassword(passwordAttempt, hash, salt);
     } else {
-      isValid = this.verifyPassword(passwordAttempt, passenger.passwordHash, passenger.passwordSalt || '');
+      isValid = await this.verifyPassword(passwordAttempt, passenger.passwordHash, passenger.passwordSalt || '');
     }
 
     if (!isValid) {
@@ -487,6 +650,10 @@ export class AuthService {
 
   public async initiateRecovery(method: RegistrationMethod, identifier: string) {
     const clean = identifier.trim().toLowerCase();
+    const normalized = normalizeIdentifier(clean);
+
+    // 1. Identifier-level rate limiting
+    checkIdentifierRateLimit(normalized, 5);
 
     let passenger: any = null;
     try {
@@ -497,11 +664,14 @@ export class AuthService {
           },
         })
       );
-    } catch {
+    } catch (err: any) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Password recovery service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
       passenger = null;
     }
 
-    if (!passenger && fallbackUsers.has(clean)) {
+    if (!passenger && env.NODE_ENV !== 'production' && fallbackUsers.has(clean)) {
       passenger = fallbackUsers.get(clean);
     }
 
@@ -543,6 +713,28 @@ export class AuthService {
 
     activeRecSessions.set(sessionId, session);
 
+    // Persist OTP in database
+    try {
+      await withDbTimeout(
+        prisma.oTPVerification.create({
+          data: {
+            identifier: normalized,
+            purpose: 'PASSWORD_RESET',
+            channel: method === 'email' ? 'EMAIL' : 'TELEGRAM',
+            codeHash: otpHash,
+            salt: sessionSalt,
+            expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+            maxAttempts: 5,
+            resendCooldownUntil: new Date(Date.now() + cooldownSeconds * 1000),
+          },
+        })
+      );
+    } catch (err: any) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Password recovery service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
+    }
+
     if (method === 'email') {
       await this.emailService.sendOtpEmail(clean, plainOtp, passenger.fullName);
     } else {
@@ -574,6 +766,9 @@ export class AuthService {
       const remaining = Math.ceil((session.resendCooldownUntil - Date.now()) / 1000);
       throw new AppError(`Please wait ${remaining}s before requesting a new code.`, 429, 'COOLDOWN_ACTIVE');
     }
+
+    // Check identifier rate limit
+    checkIdentifierRateLimit(normalizeIdentifier(session.identifier), 5);
 
     const newOtp = this.generateOtp();
     session.otpHash = this.hashOtp(newOtp, session.sessionSalt);
@@ -620,6 +815,8 @@ export class AuthService {
       throw new AppError(`Invalid verification code. ${remaining} attempt(s) remaining.`, 400, 'INVALID_OTP');
     }
 
+    // Invalidate OTP immediately to prevent replay
+    session.otpHash = '';
     session.isVerified = true;
     session.recoveryToken = `rec_tok_${Date.now()}_${crypto.randomBytes(16).toString('hex')}`;
     activeRecSessions.set(sessionId, session);
@@ -638,25 +835,30 @@ export class AuthService {
       throw new AppError('Invalid or unverified recovery session. Please verify your OTP code first.', 400, 'UNVERIFIED_SESSION');
     }
 
+    // Invalidate recovery token and session immediately to prevent replay attacks
+    activeRecSessions.delete(sessionId);
+
     const salt = this.generateSalt();
-    const passwordHash = this.hashPassword(newPassword, salt);
+    const passwordHash = await this.hashPassword(newPassword, salt);
     const combinedHash = `${passwordHash}:${salt}`;
 
     try {
       await withDbTimeout(
-        prisma.passenger.update({
-          where: { id: session.passengerId },
-          data: { passwordHash: combinedHash },
-        })
+        prisma.$transaction([
+          prisma.passenger.update({
+            where: { id: session.passengerId },
+            data: { passwordHash: combinedHash },
+          }),
+          prisma.refreshToken.updateMany({
+            where: { userId: session.passengerId, isRevoked: false },
+            data: { isRevoked: true, revokedAt: new Date() },
+          }),
+        ])
       );
-      // Revoke old refresh tokens
-      await withDbTimeout(
-        prisma.refreshToken.updateMany({
-          where: { userId: session.passengerId },
-          data: { isRevoked: true, revokedAt: new Date() },
-        })
-      );
-    } catch {
+    } catch (err: any) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Unable to reset password. Service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
       if (fallbackUsers.has(session.identifier)) {
         const u = fallbackUsers.get(session.identifier);
         u.passwordHash = passwordHash;
@@ -664,7 +866,14 @@ export class AuthService {
       }
     }
 
-    activeRecSessions.delete(sessionId);
+    if (env.NODE_ENV !== 'production') {
+      for (const token of fallbackRefreshTokens.values()) {
+        if (token.userId === session.passengerId) {
+          token.isRevoked = true;
+          token.revokedAt = new Date();
+        }
+      }
+    }
 
     return {
       message: 'Password successfully updated. You may now sign in with your new password.',
@@ -672,13 +881,13 @@ export class AuthService {
   }
 
   // ----------------------------------------------------------------------------
-  // Refresh & Logout
+  // Refresh & Logout with Atomic Token Family Reuse Detection
   // ----------------------------------------------------------------------------
 
   public async refreshTokens(rawRefreshToken: string) {
     const tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
 
-    let storedToken: any;
+    let storedToken: any = null;
     try {
       storedToken = await withDbTimeout(
         prisma.refreshToken.findUnique({
@@ -686,23 +895,125 @@ export class AuthService {
           include: { passenger: true },
         })
       );
-    } catch {
+    } catch (err: any) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
       storedToken = null;
     }
 
-    if (!storedToken || storedToken.isRevoked || new Date() > storedToken.expiresAt) {
-      throw new AppError('Refresh token is invalid, expired, or has been revoked', 401, 'INVALID_REFRESH_TOKEN');
+    if (!storedToken && env.NODE_ENV !== 'production' && fallbackRefreshTokens.has(tokenHash)) {
+      storedToken = fallbackRefreshTokens.get(tokenHash);
     }
 
-    // Invalidate used refresh token (token rotation)
+    if (!storedToken) {
+      throw new AppError('Refresh token is invalid or expired', 401, 'INVALID_REFRESH_TOKEN');
+    }
+
+    // 1. REUSE DETECTION: If the token is ALREADY revoked, an attack / replay is occurring!
+    if (storedToken.isRevoked) {
+      logger.warn(
+        { familyId: storedToken.familyId, userId: storedToken.userId },
+        '[SecurityAlert] Revoked refresh token replay detected. Revoking entire token family.'
+      );
+
+      try {
+        await withDbTimeout(
+          prisma.refreshToken.updateMany({
+            where: { familyId: storedToken.familyId, isRevoked: false },
+            data: { isRevoked: true, revokedAt: new Date() },
+          })
+        );
+      } catch (err) {
+        if (env.NODE_ENV === 'production') {
+          logger.error({ err }, '[SecurityAlert] Failed to revoke compromised token family');
+        }
+      }
+
+      if (env.NODE_ENV !== 'production') {
+        for (const token of fallbackRefreshTokens.values()) {
+          if (token.familyId === storedToken.familyId) {
+            token.isRevoked = true;
+            token.revokedAt = new Date();
+          }
+        }
+      }
+
+      throw new AppError(
+        'Compromised session token replayed. All sessions in this family have been terminated for security.',
+        401,
+        'TOKEN_FAMILY_REVOKED'
+      );
+    }
+
+    // 2. Check expiration
+    if (new Date() > storedToken.expiresAt) {
+      throw new AppError('Refresh token has expired', 401, 'EXPIRED_REFRESH_TOKEN');
+    }
+
+    // 3. ATOMIC TOKEN ROTATION & CONCURRENCY PROTECTION
+    // Conditionally update isRevoked: true ONLY IF isRevoked is currently false.
+    let rotationSucceeded = false;
     try {
-      await withDbTimeout(
-        prisma.refreshToken.update({
-          where: { id: storedToken.id },
+      const updateResult = await withDbTimeout(
+        prisma.refreshToken.updateMany({
+          where: { id: storedToken.id, isRevoked: false },
           data: { isRevoked: true, revokedAt: new Date() },
         })
       );
-    } catch {}
+      rotationSucceeded = updateResult.count === 1;
+    } catch {
+      // In non-production fallback store:
+      if (env.NODE_ENV !== 'production') {
+        const memToken = fallbackRefreshTokens.get(tokenHash);
+        if (memToken && !memToken.isRevoked) {
+          memToken.isRevoked = true;
+          memToken.revokedAt = new Date();
+          rotationSucceeded = true;
+        } else {
+          rotationSucceeded = false;
+        }
+      }
+    }
+
+    // Also sync the fallback store in non-production even if DB succeeded
+    if (env.NODE_ENV !== 'production') {
+      const memToken = fallbackRefreshTokens.get(tokenHash);
+      if (memToken) {
+        if (memToken.isRevoked && !rotationSucceeded) {
+          // Already marked as revoked
+        } else if (!memToken.isRevoked) {
+          memToken.isRevoked = true;
+          memToken.revokedAt = new Date();
+        }
+      }
+    }
+
+    if (!rotationSucceeded) {
+      logger.warn(
+        { familyId: storedToken.familyId, userId: storedToken.userId },
+        '[SecurityAlert] Concurrent refresh token consumption detected. Revoking family.'
+      );
+      try {
+        await withDbTimeout(
+          prisma.refreshToken.updateMany({
+            where: { familyId: storedToken.familyId, isRevoked: false },
+            data: { isRevoked: true, revokedAt: new Date() },
+          })
+        );
+      } catch {}
+
+      if (env.NODE_ENV !== 'production') {
+        for (const token of fallbackRefreshTokens.values()) {
+          if (token.familyId === storedToken.familyId) {
+            token.isRevoked = true;
+            token.revokedAt = new Date();
+          }
+        }
+      }
+
+      throw new AppError('Concurrent token refresh detected. Session has been revoked.', 401, 'CONCURRENT_REFRESH_REVOKED');
+    }
 
     const passenger = storedToken.passenger || { id: storedToken.userId };
     const newAccessToken = this.generateAccessToken(passenger);
@@ -725,6 +1036,14 @@ export class AuthService {
           })
         );
       } catch {}
+
+      if (env.NODE_ENV !== 'production') {
+        const memToken = fallbackRefreshTokens.get(tokenHash);
+        if (memToken) {
+          memToken.isRevoked = true;
+          memToken.revokedAt = new Date();
+        }
+      }
     }
     return { success: true };
   }
@@ -737,11 +1056,14 @@ export class AuthService {
           where: { id: passengerId },
         })
       );
-    } catch {
+    } catch (err: any) {
+      if (env.NODE_ENV === 'production') {
+        throw new AppError('Passenger service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
       passenger = null;
     }
 
-    if (!passenger) {
+    if (!passenger && env.NODE_ENV !== 'production') {
       for (const val of fallbackUsers.values()) {
         if (val.id === passengerId) {
           passenger = val;

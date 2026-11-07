@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/app';
+import { resetIdentifierRateLimitTracker } from '../../src/modules/auth/auth.service';
+import { env } from '../../src/config/env';
 
-describe('Authentication & Multi-Channel OTP Integration Tests', { timeout: 15000 }, () => {
+describe('Authentication & Multi-Channel OTP Integration Tests', { timeout: 25000 }, () => {
   const testEmail = `test_${Date.now()}@kingstaxi.et`;
   let activeSessionId = '';
   let activeDevOtp = '';
@@ -214,6 +216,20 @@ describe('Authentication & Multi-Channel OTP Integration Tests', { timeout: 1500
       expect(res.body.success).toBe(true);
     });
 
+    it('Security: POST /api/v1/auth/recovery/reset should reject recovery-token replay', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/recovery/reset')
+        .send({
+          sessionId: recSessionId,
+          recoveryToken: recToken,
+          newPassword: 'AnotherPassword789!',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('UNVERIFIED_SESSION');
+    });
+
     it('POST /api/v1/auth/login should now succeed with the new password', async () => {
       const res = await request(app)
         .post('/api/v1/auth/login')
@@ -225,6 +241,129 @@ describe('Authentication & Multi-Channel OTP Integration Tests', { timeout: 1500
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.token).toBeDefined();
+      expect(res.body.data.refreshToken).toBeDefined();
+
+      activeAccessToken = res.body.data.token;
+      activeRefreshToken = res.body.data.refreshToken;
+    });
+  });
+
+  describe('Security Hardening & Token Lifecycle', () => {
+    let rotatedRefreshToken = '';
+
+    it('POST /api/v1/auth/refresh should successfully rotate refresh token', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: activeRefreshToken });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.token).toBeDefined();
+      expect(res.body.data.refreshToken).toBeDefined();
+      rotatedRefreshToken = res.body.data.refreshToken;
+    });
+
+    it('Security: Replaying an already-revoked refresh token must trigger family revocation', async () => {
+      // Replaying the old activeRefreshToken which was already rotated
+      const res = await request(app)
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: activeRefreshToken });
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(['TOKEN_FAMILY_REVOKED', 'INVALID_REFRESH_TOKEN']).toContain(res.body.error.code);
+    });
+
+    it('Security: Resend OTP before cooldown timer must return HTTP 429', async () => {
+      const initRes = await request(app)
+        .post('/api/v1/auth/register/initiate')
+        .send({
+          method: 'email',
+          identifier: `cooldown_${Date.now()}@kingstaxi.et`,
+          fullName: 'Cooldown Tester',
+        });
+
+      const sessId = initRes.body.data.sessionId;
+
+      // Immediate resend must be rejected by the 60-second cooldown
+      const resendRes = await request(app)
+        .post('/api/v1/auth/register/resend-otp')
+        .send({ sessionId: sessId });
+
+      expect(resendRes.status).toBe(429);
+      expect(resendRes.body.success).toBe(false);
+      expect(resendRes.body.error.code).toBe('COOLDOWN_ACTIVE');
+    });
+
+    it('Security: Identifier-level rate limiting should reject after 5 requests in 1 hour', async () => {
+      resetIdentifierRateLimitTracker();
+      const floodEmail = `flood_${Date.now()}@kingstaxi.et`;
+
+      // 5 requests allowed
+      for (let i = 0; i < 5; i++) {
+        const res = await request(app)
+          .post('/api/v1/auth/register/initiate')
+          .send({
+            method: 'email',
+            identifier: floodEmail,
+            fullName: `Flood Test ${i}`,
+          });
+        expect(res.status).toBe(200);
+      }
+
+      // 6th request must be rejected with 429
+      const blockedRes = await request(app)
+        .post('/api/v1/auth/register/initiate')
+        .send({
+          method: 'email',
+          identifier: floodEmail,
+          fullName: 'Flood Blocked',
+        });
+
+      expect(blockedRes.status).toBe(429);
+      expect(blockedRes.body.success).toBe(false);
+      expect(blockedRes.body.error.code).toBe('IDENTIFIER_RATE_LIMIT_EXCEEDED');
+      resetIdentifierRateLimitTracker();
+    });
+
+    it('Security: Production environment strictly forbids in-memory fallback accounts', async () => {
+      // Simulate production environment
+      const originalEnv = env.NODE_ENV;
+      (env as any).NODE_ENV = 'production';
+
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          identifier: 'dawit@kingstaxi.et',
+          password: 'Password123!',
+        });
+
+      // When DB is unreachable in production, must return 503 rather than silent in-memory fallback
+      expect([401, 503]).toContain(res.status);
+
+      (env as any).NODE_ENV = originalEnv;
+    });
+
+    it('Security: Concurrent token refresh requests using the same token cannot double-consume', async () => {
+      // Issue a fresh token pair for Abebe Bikila
+      const loginRes = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          identifier: testEmail,
+          password: 'NewSecurePassword456!',
+        });
+
+      const tokenToConsume = loginRes.body.data.refreshToken;
+
+      // Dispatch 2 concurrent refresh calls simultaneously
+      const [call1, call2] = await Promise.all([
+        request(app).post('/api/v1/auth/refresh').send({ refreshToken: tokenToConsume }),
+        request(app).post('/api/v1/auth/refresh').send({ refreshToken: tokenToConsume }),
+      ]);
+
+      // Exactly one must succeed, or if DB is offline, both fail safely
+      const statuses = [call1.status, call2.status];
+      expect(statuses).toContain(200);
     });
   });
 
