@@ -77,6 +77,7 @@ export default function RegisterScreen() {
   };
 
   const handleContinue = async () => {
+    if (isLoading) return;
     if (!fullName.trim()) {
       setError(t('validation:nameRequired'));
       return;

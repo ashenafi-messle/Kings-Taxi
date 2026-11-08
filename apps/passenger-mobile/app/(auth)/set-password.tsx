@@ -70,6 +70,7 @@ export default function SetPasswordScreen() {
     passwordsMatch;
 
   const handleSavePassword = async () => {
+    if (isLoading) return;
     if (!hasMinChars || !hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
       setError(t('validation:passwordTooShort'));
       return;

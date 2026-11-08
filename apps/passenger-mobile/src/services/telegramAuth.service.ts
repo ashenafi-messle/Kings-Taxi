@@ -17,6 +17,7 @@
 
 import { Linking, Platform } from 'react-native';
 import { ApiResponse, PassengerProfile } from '../types';
+import { API_CONFIG } from '../config/api';
 
 export interface TelegramAuthPayload {
   id: string | number;
@@ -36,7 +37,6 @@ export interface TelegramAuthSession {
 }
 
 const TELEGRAM_BOT_USERNAME = 'KingsTaxiAuthBot';
-const BACKEND_AUTH_ENDPOINT = 'https://api.kingstaxi.et/api/v1/auth/telegram';
 
 export class TelegramAuthService {
   /**
@@ -75,11 +75,9 @@ export class TelegramAuthService {
         await Linking.openURL(nativeUrl);
         return true;
       }
-      // Fallback to web URL
       await Linking.openURL(webUrl);
       return true;
     } catch {
-      // In case native handler throws, fallback to browser link
       try {
         await Linking.openURL(webUrl);
         return true;
@@ -92,35 +90,67 @@ export class TelegramAuthService {
 
   /**
    * Verifies the Telegram authentication status with backend
-   * Fallback simulator provided for offline / preview environments
+   * When real API mode is active: verifies against POST /api/v1/auth/telegram/verify
+   * When mock mode is explicitly configured: provides development simulator
    */
   static async verifySession(
-    challenge: string
+    challenge: string,
+    telegramUser?: TelegramAuthPayload
   ): Promise<ApiResponse<{ token: string; user: PassengerProfile }>> {
-    try {
-      // If a real backend server is running, attempt actual endpoint
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2000);
-
-      const response = await fetch(`${BACKEND_AUTH_ENDPOINT}/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challenge }),
-        signal: controller.signal,
-      }).catch(() => null);
-
-      clearTimeout(timeout);
-
-      if (response && response.ok) {
-        const json = await response.json();
-        return json;
+    if (!API_CONFIG.isMockAuth) {
+      if (!telegramUser) {
+        return {
+          success: false,
+          data: {} as any,
+          error:
+            'Telegram authentication is pending. Please complete login inside the Telegram bot and retry.',
+        };
       }
-    } catch {
-      // Fall through to development simulation
+
+      try {
+        const response = await fetch(
+          `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.telegramVerify}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ challenge, telegramUser }),
+          }
+        );
+
+        const json = await response.json().catch(() => null);
+
+        if (response.ok && json?.success) {
+          return {
+            success: true,
+            data: {
+              token: json.data?.token || `jwt_kt_tg_${challenge}`,
+              user: json.data?.user || {
+                id: `tg_${telegramUser.id}`,
+                fullName: telegramUser.first_name || 'Telegram Passenger',
+                rating: 5.0,
+                totalTrips: 0,
+                preferredLanguage: 'en',
+              },
+            },
+          };
+        }
+
+        return {
+          success: false,
+          data: {} as any,
+          error: json?.message || 'Telegram verification failed. Please try again.',
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          data: {} as any,
+          error:
+            err.message || 'Unable to connect to Kings Taxi server for Telegram verification.',
+        };
+      }
     }
 
     // Development fallback simulation
-    // Simulates an authorized response with mock user data
     await new Promise((resolve) => setTimeout(resolve, 600));
 
     const simulatedUser: PassengerProfile = {

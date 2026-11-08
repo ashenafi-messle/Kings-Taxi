@@ -64,6 +64,7 @@ export default function VerifyOtpScreen() {
   }, [timer]);
 
   const handleVerify = async () => {
+    if (isLoading) return;
     if (code.length < 6) {
       setError(t('validation:otpIncomplete'));
       return;

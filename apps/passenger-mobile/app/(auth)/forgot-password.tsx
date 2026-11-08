@@ -87,6 +87,7 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleInitiateRecovery = async () => {
+    if (isLoading) return;
     let identifier = '';
     if (method === 'email') {
       if (!email.trim()) {

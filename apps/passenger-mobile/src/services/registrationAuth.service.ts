@@ -40,8 +40,8 @@ export interface RegistrationSession {
 export interface RegisteredAccountRecord {
   id: string;
   fullName: string;
-  email?: string;
-  phone?: string;
+  email?: string | null;
+  phone?: string | null;
   passwordHash: string;
   passwordSalt: string;
   emailVerified: boolean;

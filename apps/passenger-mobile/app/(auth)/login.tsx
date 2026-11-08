@@ -83,17 +83,23 @@ export default function LoginScreen() {
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
 
-  const validateEmail = (val: string) => {
+  const validateIdentifier = (val: string) => {
+    const trimmed = val.trim();
+    if (!trimmed) return false;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(val.trim());
+    if (emailRegex.test(trimmed)) return true;
+    const digits = trimmed.replace(/[^0-9]/g, '');
+    return digits.length >= 8;
   };
 
   const handleLogin = async () => {
+    if (isLoading) return;
+
     if (!email.trim()) {
       setError(t('validation:emailRequired'));
       return;
     }
-    if (!validateEmail(email)) {
+    if (!validateIdentifier(email)) {
       setError(t('validation:emailInvalid'));
       return;
     }
@@ -103,15 +109,16 @@ export default function LoginScreen() {
     }
 
     setError('');
-    const success = await loginWithEmail(email.trim(), password, rememberEmail);
-    if (success) {
+    const result = await loginWithEmail(email.trim(), password, rememberEmail);
+    if (result.success) {
       router.replace('/(tabs)');
     } else {
-      setError(t('validation:passwordRequired'));
+      setError(result.error || t('validation:passwordRequired'));
     }
   };
 
   const handleTelegramLogin = async () => {
+    if (isLoading) return;
     setError('');
     const success = await loginWithTelegram();
     if (success) {
