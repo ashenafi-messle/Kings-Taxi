@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -12,6 +11,7 @@ import {
   StatusBar,
   Linking,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Mail, Send, Globe, RefreshCw, ExternalLink } from 'lucide-react-native';
 import { colors } from '../../src/theme/colors';
@@ -26,6 +26,7 @@ import { RegistrationMethod } from '../../src/services/registrationAuth.service'
 
 export default function VerifyOtpScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation(['auth', 'validation', 'common']);
   const params = useLocalSearchParams();
 
@@ -36,6 +37,7 @@ export default function VerifyOtpScreen() {
   const fullName = (params.fullName as string) || '';
   const maskedIdentifier = (params.maskedIdentifier as string) || identifier;
   const initialDevOtp = (params.devOtp as string) || '';
+  const initialTelegramBotUrl = (params.telegramBotUrl as string) || '';
 
   const {
     verifyRegistrationOtp,
@@ -50,6 +52,7 @@ export default function VerifyOtpScreen() {
   const [timer, setTimer] = useState(60);
   const [error, setError] = useState('');
   const [devOtp, setDevOtp] = useState(initialDevOtp);
+  const [telegramBotUrl, setTelegramBotUrl] = useState(initialTelegramBotUrl);
   const [langModalVisible, setLangModalVisible] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
@@ -124,6 +127,9 @@ export default function VerifyOtpScreen() {
         if (res.data.devOtp) {
           setDevOtp(res.data.devOtp);
         }
+        if ((res.data as any).telegramBotUrl) {
+          setTelegramBotUrl((res.data as any).telegramBotUrl);
+        }
       } else {
         setError(res.error || 'Failed to resend code');
       }
@@ -136,13 +142,16 @@ export default function VerifyOtpScreen() {
       if (res.data.devOtp) {
         setDevOtp(res.data.devOtp);
       }
+      if ((res.data as any).telegramBotUrl) {
+        setTelegramBotUrl((res.data as any).telegramBotUrl);
+      }
     } else {
       setError(res.error || 'Failed to resend code');
     }
   };
 
   const handleOpenTelegram = async () => {
-    const tgUrl = 'https://t.me/KingsTaxiAuthBot';
+    const tgUrl = telegramBotUrl || 'https://t.me/KingstaxiBot';
     try {
       await Linking.openURL(tgUrl);
     } catch {
@@ -151,7 +160,7 @@ export default function VerifyOtpScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       {/* Top Bar */}
@@ -189,7 +198,10 @@ export default function VerifyOtpScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -247,14 +259,6 @@ export default function VerifyOtpScreen() {
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Dev Hint Box (Assists Testing & Verification) */}
-          {devOtp ? (
-            <View style={styles.devHintBox}>
-              <Text style={styles.devHintLabel}>TESTING VERIFICATION CODE:</Text>
-              <Text style={styles.devHintCode}>{devOtp}</Text>
-            </View>
-          ) : null}
 
           {/* Error Banner */}
           {error ? (

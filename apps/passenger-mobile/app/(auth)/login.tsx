@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
@@ -12,6 +11,7 @@ import {
   Alert,
   BackHandler,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Mail, ArrowLeft, Globe } from 'lucide-react-native';
 import { colors } from '../../src/theme/colors';
@@ -29,6 +29,7 @@ import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation(['auth', 'validation', 'common']);
   const {
     loginWithEmail,
@@ -129,7 +130,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       {/* Header Bar */}
@@ -167,7 +168,10 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >

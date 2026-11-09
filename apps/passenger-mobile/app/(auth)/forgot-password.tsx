@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
@@ -11,7 +10,10 @@ import {
   StatusBar,
   TextInput,
   BackHandler,
+  Linking,
+  useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   ArrowLeft,
@@ -22,6 +24,7 @@ import {
   KeyRound,
   Check,
   Phone,
+  ExternalLink,
 } from 'lucide-react-native';
 import { colors } from '../../src/theme/colors';
 import {
@@ -44,9 +47,13 @@ const COUNTRY_CODES = [
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const { t } = useTranslation(['auth', 'validation', 'common']);
   const { initiatePasswordRecovery, isLoading } = useAuthStore();
   const { language } = useSettingsStore();
+
+  const isSmallDevice = height < 700;
 
   const [method, setMethod] = useState<RecoveryMethod>('email');
   const [email, setEmail] = useState('');
@@ -86,6 +93,28 @@ export default function ForgotPasswordScreen() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
   };
 
+  const normalizePhoneInput = (raw: string, cCode: string): string => {
+    const clean = raw.trim().replace(/[\s\-\(\)\.]/g, '');
+    if (clean.startsWith('+')) {
+      return clean;
+    }
+    if (clean.startsWith('251')) {
+      return `+${clean}`;
+    }
+    if (clean.startsWith('0')) {
+      return `${cCode}${clean.slice(1)}`;
+    }
+    return `${cCode}${clean}`;
+  };
+
+  const handleOpenTelegramBot = async () => {
+    try {
+      await Linking.openURL('https://t.me/KingstaxiBot');
+    } catch (err) {
+      console.warn('Could not open Telegram bot URL:', err);
+    }
+  };
+
   const handleInitiateRecovery = async () => {
     if (isLoading) return;
     let identifier = '';
@@ -100,12 +129,12 @@ export default function ForgotPasswordScreen() {
       }
       identifier = email.trim().toLowerCase();
     } else {
-      const cleanPhone = phone.trim().replace(/^0/, '');
-      if (!cleanPhone || cleanPhone.length < 8) {
+      const cleanDigits = phone.trim().replace(/[^0-9]/g, '');
+      if (cleanDigits.length < 8) {
         setError(t('validation:phoneInvalid'));
         return;
       }
-      identifier = `${countryCode}${cleanPhone}`;
+      identifier = normalizePhoneInput(phone, countryCode);
     }
 
     setError('');
@@ -119,6 +148,7 @@ export default function ForgotPasswordScreen() {
         fullName,
         devOtp,
         telegramBotUrl,
+        telegramChatRequired,
       } = res.data;
 
       router.push({
@@ -129,23 +159,33 @@ export default function ForgotPasswordScreen() {
           method,
           identifier,
           fullName: fullName || '',
-          maskedIdentifier,
+          maskedIdentifier: maskedIdentifier || identifier,
           telegramBotUrl: telegramBotUrl || '',
           devOtp: devOtp || '',
         },
       });
+
+      // Automatically redirect to official Telegram Bot if Telegram OTP requested
+      if (method === 'telegram') {
+        const botUrl = telegramBotUrl || `https://t.me/KingstaxiBot?start=rec_${sessionId}`;
+        try {
+          await Linking.openURL(botUrl);
+        } catch (err) {
+          console.warn('Could not auto-open Telegram URL:', err);
+        }
+      }
     } else {
       setError(
         res.error ||
           (method === 'email'
-            ? 'No registered passenger account found with this email.'
-            : 'No registered passenger account found with this Telegram phone.')
+            ? 'Unable to send recovery code. Please check your email and try again.'
+            : 'Unable to send recovery code. Please check your Telegram phone number and try again.')
       );
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       {/* Top Header Bar */}
@@ -183,16 +223,19 @@ export default function ForgotPasswordScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           {/* Header Branding */}
-          <View style={styles.brandHero}>
+          <View style={[styles.brandHero, isSmallDevice && { marginVertical: 8 }]}>
             <KingsTaxiLogo variant="header" showTagline={false} showText={false} />
-            <Text style={styles.screenTitle}>Reset Password</Text>
+            <Text style={styles.screenTitle}>Forgot Password?</Text>
             <Text style={styles.screenSubtitle}>
-              Recover your Kings Taxi account without knowing your old password.
+              Recover access to your Kings Taxi account securely.
             </Text>
           </View>
 
@@ -204,7 +247,7 @@ export default function ForgotPasswordScreen() {
             </View>
           ) : null}
 
-          {/* Step 2: Channel Selector */}
+          {/* SCREEN 1: Recovery Channel Selector */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Select Recovery Method</Text>
             <View style={styles.methodsRow}>
@@ -251,7 +294,7 @@ export default function ForgotPasswordScreen() {
                     method === 'email' && styles.methodTitleActive,
                   ]}
                 >
-                  Email Address
+                  Continue with Email
                 </Text>
                 <Text style={styles.methodDesc}>Receive OTP via registered email</Text>
               </TouchableOpacity>
@@ -300,14 +343,14 @@ export default function ForgotPasswordScreen() {
                     method === 'telegram' && styles.methodTitleActiveTelegram,
                   ]}
                 >
-                  Telegram Phone
+                  Continue with Telegram
                 </Text>
-                <Text style={styles.methodDesc}>Receive OTP via @KingsTaxiAuthBot</Text>
+                <Text style={styles.methodDesc}>Receive OTP via @KingstaxiBot</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Step 3: Input Form */}
+          {/* SCREEN 2: Account Identifier Form */}
           <View style={styles.formCard}>
             {method === 'email' ? (
               <View>
@@ -326,7 +369,7 @@ export default function ForgotPasswordScreen() {
                   leftIcon={<Mail size={18} color={colors.secondaryText} />}
                 />
                 <Text style={styles.helperNotice}>
-                  A secure 6-digit one-time code will be dispatched to this email address.
+                  A secure 6-digit verification code will be dispatched to this email address.
                 </Text>
               </View>
             ) : (
@@ -355,7 +398,7 @@ export default function ForgotPasswordScreen() {
                         setError('');
                       }}
                       keyboardType="phone-pad"
-                      maxLength={12}
+                      maxLength={14}
                     />
                   </View>
                 </View>
@@ -382,13 +425,25 @@ export default function ForgotPasswordScreen() {
                   </View>
                 )}
 
-                <Text style={styles.helperNotice}>
-                  Our official verified bot (@KingsTaxiAuthBot) will dispatch your recovery code.
-                </Text>
+                {/* Telegram Bot Linking Notice */}
+                <View style={styles.telegramNoticeBox}>
+                  <Text style={styles.telegramNoticeText}>
+                    Your phone number must be linked with our official Telegram bot (<Text style={styles.botBoldText}>@KingstaxiBot</Text>) to receive recovery codes.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.botLinkBtn}
+                    onPress={handleOpenTelegramBot}
+                    activeOpacity={0.8}
+                  >
+                    <Send size={13} color={colors.telegram} style={{ transform: [{ rotate: '-15deg' }] }} />
+                    <Text style={styles.botLinkText}>Open @KingstaxiBot</Text>
+                    <ExternalLink size={12} color={colors.telegram} />
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 
-            {/* Submit Action */}
+            {/* SCREEN 3: Request Recovery OTP Action */}
             <PrimaryButton
               title="Send Verification Code"
               onPress={handleInitiateRecovery}
@@ -685,6 +740,42 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 8,
     marginBottom: 16,
+  },
+  telegramNoticeBox: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 16,
+    gap: 8,
+  },
+  telegramNoticeText: {
+    fontSize: 12,
+    color: '#0369A1',
+    lineHeight: 17,
+  },
+  botBoldText: {
+    fontWeight: '700',
+    color: colors.telegram,
+  },
+  botLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.white,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+  },
+  botLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.telegram,
   },
   submitBtn: {
     width: '100%',

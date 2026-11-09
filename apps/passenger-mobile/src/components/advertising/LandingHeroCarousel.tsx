@@ -52,14 +52,14 @@ export const LANDING_AD_SLIDES: LandingAdSlide[] = [
 ];
 
 export const LandingHeroCarousel: React.FC = () => {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const isInteracting = useRef(false);
 
-  // Exact preserved card dimensions
+  // Responsive card dimensions adapting cleanly to small Android screens and large iOS phablets
   const cardWidth = Math.min(width - 32, 440);
-  const cardHeight = 200;
+  const cardHeight = height < 680 ? 150 : height < 760 ? 175 : 200;
 
   // Auto-play timer (4.5s transition)
   useEffect(() => {

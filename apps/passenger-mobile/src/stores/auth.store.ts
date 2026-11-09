@@ -30,6 +30,15 @@ export interface AuthActionResult {
   code?: string;
 }
 
+export interface RecoveryStateData {
+  sessionId: string;
+  recoveryToken: string | null;
+  identifier: string;
+  method: RecoveryMethod;
+  fullName?: string;
+  maskedIdentifier?: string;
+}
+
 interface AuthState {
   user: PassengerProfile | null;
   token: string | null;
@@ -39,6 +48,10 @@ interface AuthState {
   error: string | null;
   rememberedEmail: string;
   isEmailRemembered: boolean;
+  recoveryState: RecoveryStateData | null;
+
+  setRecoveryState: (state: RecoveryStateData | null) => void;
+  clearRecoveryState: () => void;
 
   login: (identifier: string, password: string) => Promise<AuthActionResult>;
   loginWithEmail: (
@@ -117,8 +130,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
   rememberedEmail: '',
   isEmailRemembered: false,
+  recoveryState: null,
 
   clearError: () => set({ error: null }),
+  setRecoveryState: (state) => set({ recoveryState: state }),
+  clearRecoveryState: () => set({ recoveryState: null }),
 
   loadInitialAuth: async () => {
     try {
@@ -367,6 +383,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await AuthService.initiateRecovery(method, identifier);
+      if (res.success && res.data) {
+        set({
+          recoveryState: {
+            sessionId: res.data.sessionId,
+            recoveryToken: null,
+            identifier,
+            method,
+            fullName: res.data.fullName,
+            maskedIdentifier: res.data.maskedIdentifier,
+          },
+        });
+      }
       set({ isLoading: false });
       return res;
     } catch (err: any) {
@@ -388,6 +416,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await AuthService.verifyRecoveryOtp(sessionId, code);
+      if (res.success && res.data) {
+        set((state) => ({
+          recoveryState: state.recoveryState
+            ? { ...state.recoveryState, recoveryToken: res.data.recoveryToken }
+            : {
+                sessionId,
+                recoveryToken: res.data.recoveryToken,
+                identifier: res.data.identifier,
+                method: res.data.method as any,
+                fullName: res.data.fullName,
+              },
+        }));
+      }
       set({ isLoading: false });
       return res;
     } catch (err: any) {
@@ -405,6 +446,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await AuthService.resetPassword(sessionId, recoveryToken, newPassword);
+      if (res.success) {
+        get().clearRecoveryState();
+      }
       set({ isLoading: false });
       return res;
     } catch (err: any) {

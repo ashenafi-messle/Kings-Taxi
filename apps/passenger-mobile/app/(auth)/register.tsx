@@ -3,14 +3,15 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
   BackHandler,
+  Linking,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   User,
@@ -36,6 +37,7 @@ import { RegistrationMethod } from '../../src/services/registrationAuth.service'
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation(['auth', 'validation', 'common']);
   const { initiateRegistration, isLoading } = useAuthStore();
   const { language } = useSettingsStore();
@@ -114,7 +116,7 @@ export default function RegisterScreen() {
     const response = await initiateRegistration(method, identifier, fullName.trim());
 
     if (response.success && response.data) {
-      const { sessionId, maskedIdentifier, devOtp } = response.data;
+      const { sessionId, maskedIdentifier, devOtp, telegramBotUrl } = response.data;
       router.push({
         pathname: '/(auth)/verify-otp',
         params: {
@@ -124,15 +126,26 @@ export default function RegisterScreen() {
           fullName: fullName.trim(),
           maskedIdentifier,
           devOtp: devOtp || '',
+          telegramBotUrl: telegramBotUrl || '',
         },
       });
+
+      // Automatically redirect to the Telegram Bot to generate and receive OTP
+      if (method === 'telegram') {
+        const botUrl = telegramBotUrl || `https://t.me/KingstaxiBot?start=reg_${sessionId}`;
+        try {
+          await Linking.openURL(botUrl);
+        } catch (err) {
+          console.warn('Could not automatically redirect to Telegram bot:', err);
+        }
+      }
     } else {
       setError(response.error || 'Failed to initiate registration. Please try again.');
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       {/* Top Header Bar */}
@@ -170,7 +183,10 @@ export default function RegisterScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >

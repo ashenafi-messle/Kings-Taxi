@@ -17,6 +17,7 @@ import {
   RegisteredAccountRecord,
 } from './registrationAuth.service';
 import { APP_CONFIG } from '../config/appLinks';
+import { API_CONFIG } from '../config/api';
 
 export type RecoveryMethod = 'email' | 'telegram';
 
@@ -39,7 +40,7 @@ export interface PasswordRecoverySession {
   lastDevOtp?: string;
 }
 
-const BACKEND_API_BASE = 'https://api.kingstaxi.et/api/v1/auth/recovery';
+const getBackendApiBase = () => `${API_CONFIG.baseUrl}/auth/recovery`;
 
 // Active in-memory recovery sessions
 const activeRecoverySessions = new Map<string, PasswordRecoverySession>();
@@ -106,7 +107,7 @@ export class PasswordRecoveryService {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 1800);
-      const res = await fetch(`${BACKEND_API_BASE}/initiate`, {
+      const res = await fetch(`${getBackendApiBase()}/initiate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ method, identifier: cleanIdentifier }),
@@ -358,7 +359,7 @@ export class PasswordRecoveryService {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 1800);
-      const res = await fetch(`${BACKEND_API_BASE}/reset`, {
+      const res = await fetch(`${getBackendApiBase()}/reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

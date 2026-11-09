@@ -6,6 +6,8 @@ import { AppError } from '../../core/errors/appError';
 import { logger } from '../../core/logging/logger';
 import { EmailService } from '../../integrations/email/email.service';
 import { TelegramService } from '../../integrations/telegram/telegram.service';
+import { TelegramIdentityStore } from '../../integrations/telegram/telegramIdentity.store';
+import { normalizeEthiopianPhone } from '../../utils/phone';
 
 export type RegistrationMethod = 'email' | 'telegram';
 
@@ -16,6 +18,8 @@ export interface RegistrationSessionData {
   fullName: string;
   otpHash: string;
   sessionSalt: string;
+  plainOtp?: string;
+  telegramChatId?: string;
   otpExpiresAt: number;
   attempts: number;
   maxAttempts: number;
@@ -35,6 +39,8 @@ export interface PasswordRecoverySessionData {
   fullName: string;
   otpHash: string;
   sessionSalt: string;
+  plainOtp?: string;
+  telegramChatId?: string;
   otpExpiresAt: number;
   attempts: number;
   maxAttempts: number;
@@ -118,6 +124,11 @@ export function resetIdentifierRateLimitTracker(): void {
   identifierRateLimitWindow.clear();
 }
 
+export function resetAuthSessions(): void {
+  activeRegSessions.clear();
+  activeRecSessions.clear();
+}
+
 // In-memory registered user cache (strictly restricted to non-production dev/testing when database is offline)
 const fallbackUsers = new Map<string, any>([
   [
@@ -169,6 +180,64 @@ const fallbackRefreshTokens = new Map<string, FallbackRefreshToken>();
 export class AuthService {
   private emailService = EmailService.getInstance();
   private telegramService = TelegramService.getInstance();
+
+  constructor() {
+    this.telegramService.setSessionResolver(async (sessionOrPhone: string, chatId: string) => {
+      // 1. Check registration session (by sessionId or by matching phone number)
+      let regSession = activeRegSessions.get(sessionOrPhone);
+      if (!regSession) {
+        for (const s of activeRegSessions.values()) {
+          const sNorm = normalizeEthiopianPhone(s.identifier);
+          const pNorm = normalizeEthiopianPhone(sessionOrPhone);
+          if (
+            (sNorm.isValid && pNorm.isValid && sNorm.normalized === pNorm.normalized) ||
+            s.identifier === sessionOrPhone
+          ) {
+            regSession = s;
+            break;
+          }
+        }
+      }
+
+      if (regSession && !regSession.isVerified && Date.now() < regSession.otpExpiresAt) {
+        regSession.telegramChatId = chatId;
+        await this.telegramService.linkPhoneToChat(regSession.identifier, chatId);
+        return {
+          otp: regSession.plainOtp || '',
+          purpose: 'REGISTRATION',
+          recipientName: regSession.fullName,
+        };
+      }
+
+      // 2. Check password recovery session (by sessionId or by matching phone number)
+      let recSession = activeRecSessions.get(sessionOrPhone);
+      if (!recSession) {
+        for (const s of activeRecSessions.values()) {
+          const sNorm = normalizeEthiopianPhone(s.identifier);
+          const pNorm = normalizeEthiopianPhone(sessionOrPhone);
+          if (
+            (sNorm.isValid && pNorm.isValid && sNorm.normalized === pNorm.normalized) ||
+            s.identifier === sessionOrPhone
+          ) {
+            recSession = s;
+            break;
+          }
+        }
+      }
+
+      if (recSession && !recSession.isVerified && Date.now() < recSession.otpExpiresAt) {
+        recSession.telegramChatId = chatId;
+        await this.telegramService.linkPhoneToChat(recSession.identifier, chatId);
+        return {
+          otp: recSession.plainOtp || '',
+          purpose: 'PASSWORD_RESET',
+          recipientName: recSession.fullName,
+        };
+      }
+
+      return null;
+    });
+  }
 
   // ----------------------------------------------------------------------------
   // Cryptographic Utilities
@@ -316,8 +385,22 @@ export class AuthService {
   // ----------------------------------------------------------------------------
 
   public async initiateRegistration(method: RegistrationMethod, identifier: string, fullName: string) {
-    const cleanIdentifier = identifier.trim().toLowerCase();
+    const isEmail = method === 'email';
+    let cleanIdentifier = identifier.trim().toLowerCase();
     const cleanFullName = fullName.trim();
+
+    if (!isEmail) {
+      const phoneRes = normalizeEthiopianPhone(cleanIdentifier);
+      if (!phoneRes.isValid) {
+        throw new AppError(
+          phoneRes.error || 'Invalid Ethiopian phone number. Please enter a valid number (e.g. 0911234567 or 0712345678).',
+          400,
+          'INVALID_PHONE_NUMBER'
+        );
+      }
+      cleanIdentifier = phoneRes.normalized;
+    }
+
     const normalized = normalizeIdentifier(cleanIdentifier);
 
     // 1. Identifier-level rate limiting (max 5 per rolling hour)
@@ -325,10 +408,17 @@ export class AuthService {
 
     // 2. Check duplicate in database
     try {
+      const searchConditions: any[] = [{ email: cleanIdentifier }, { phoneNumber: cleanIdentifier }];
+      if (!isEmail) {
+        const phoneRes = normalizeEthiopianPhone(cleanIdentifier);
+        if (phoneRes.nationalNumber) searchConditions.push({ phoneNumber: phoneRes.nationalNumber });
+        searchConditions.push({ phoneNumber: cleanIdentifier.replace('+', '') });
+      }
+
       const existing = await withDbTimeout(
         prisma.passenger.findFirst({
           where: {
-            OR: [{ email: cleanIdentifier }, { phoneNumber: cleanIdentifier }],
+            OR: searchConditions,
           },
         })
       );
@@ -348,7 +438,13 @@ export class AuthService {
         throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
       }
       // If DB is offline in non-production, check fallback map
-      if (fallbackUsers.has(cleanIdentifier)) {
+      const phoneRes = !isEmail ? normalizeEthiopianPhone(cleanIdentifier) : null;
+      if (
+        fallbackUsers.has(cleanIdentifier) ||
+        (phoneRes?.isValid &&
+          (fallbackUsers.has(phoneRes.normalized) ||
+            (phoneRes.nationalNumber && fallbackUsers.has(phoneRes.nationalNumber))))
+      ) {
         throw new AppError('An account with this identifier already exists. Please sign in.', 409, 'ACCOUNT_ALREADY_EXISTS');
       }
     }
@@ -367,6 +463,7 @@ export class AuthService {
       fullName: cleanFullName,
       otpHash,
       sessionSalt,
+      plainOtp,
       otpExpiresAt: Date.now() + ttlSeconds * 1000,
       attempts: 0,
       maxAttempts: 5,
@@ -401,11 +498,45 @@ export class AuthService {
       }
     }
 
+    let telegramBotUrl: string | undefined;
+    let telegramChatLinked = false;
+    let telegramChatRequired = false;
+
     // Dispatch via channel
     if (method === 'email') {
-      await this.emailService.sendOtpEmail(cleanIdentifier, plainOtp, cleanFullName);
+      const emailSent = await this.emailService.sendOtpEmail(cleanIdentifier, plainOtp, cleanFullName);
+      if (!emailSent) {
+        throw new AppError(
+          'Failed to deliver verification code to your email address. Please verify your email and try again.',
+          502,
+          'EMAIL_DELIVERY_FAILED'
+        );
+      }
     } else {
-      await this.telegramService.sendOtpMessage(cleanIdentifier, plainOtp);
+      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=reg_${sessionId}`;
+      const tgRes = await this.telegramService.sendOtpMessage(cleanIdentifier, plainOtp, {
+        sessionId,
+        purpose: 'REGISTRATION',
+        recipientName: cleanFullName,
+      });
+
+      if (tgRes.success) {
+        telegramChatLinked = true;
+      } else if (tgRes.reason === 'CHAT_NOT_FOUND') {
+        telegramChatRequired = true;
+      } else if (tgRes.reason === 'BOT_BLOCKED') {
+        throw new AppError(
+          `You have blocked @${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'} on Telegram. Please unblock the bot and try again.`,
+          403,
+          'TELEGRAM_BOT_BLOCKED'
+        );
+      } else {
+        throw new AppError(
+          tgRes.error || 'Failed to dispatch Telegram verification message. Please try again.',
+          502,
+          'TELEGRAM_DELIVERY_FAILED'
+        );
+      }
     }
 
     return {
@@ -414,6 +545,12 @@ export class AuthService {
       maskedIdentifier: this.maskIdentifier(cleanIdentifier),
       expiresInSeconds: ttlSeconds,
       resendCooldownSeconds: cooldownSeconds,
+      telegramBotUrl,
+      telegramChatLinked,
+      telegramChatRequired,
+      message: telegramChatRequired
+        ? `Please open @${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'} on Telegram to receive your verification code.`
+        : undefined,
       devOtp: env.NODE_ENV !== 'production' ? plainOtp : undefined,
     };
   }
@@ -433,6 +570,7 @@ export class AuthService {
     checkIdentifierRateLimit(normalizeIdentifier(session.identifier), 5);
 
     const newOtp = this.generateOtp();
+    session.plainOtp = newOtp;
     session.otpHash = this.hashOtp(newOtp, session.sessionSalt);
     session.otpExpiresAt = Date.now() + 300 * 1000;
     session.resendCooldownUntil = Date.now() + 60 * 1000;
@@ -463,15 +601,52 @@ export class AuthService {
       }
     }
 
+    let telegramBotUrl: string | undefined;
+    let telegramChatLinked = false;
+    let telegramChatRequired = false;
+
     if (session.method === 'email') {
-      await this.emailService.sendOtpEmail(session.identifier, newOtp, session.fullName);
+      const emailSent = await this.emailService.sendOtpEmail(session.identifier, newOtp, session.fullName);
+      if (!emailSent) {
+        throw new AppError(
+          'Failed to deliver verification code to your email address. Please try again.',
+          502,
+          'EMAIL_DELIVERY_FAILED'
+        );
+      }
     } else {
-      await this.telegramService.sendOtpMessage(session.identifier, newOtp);
+      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=reg_${sessionId}`;
+      const tgRes = await this.telegramService.sendOtpMessage(session.identifier, newOtp, {
+        sessionId,
+        purpose: 'REGISTRATION',
+        recipientName: session.fullName,
+      });
+
+      if (tgRes.success) {
+        telegramChatLinked = true;
+      } else if (tgRes.reason === 'CHAT_NOT_FOUND') {
+        telegramChatRequired = true;
+      } else if (tgRes.reason === 'BOT_BLOCKED') {
+        throw new AppError(
+          `You have blocked @${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'} on Telegram. Please unblock the bot and try again.`,
+          403,
+          'TELEGRAM_BOT_BLOCKED'
+        );
+      } else {
+        throw new AppError(
+          tgRes.error || 'Failed to dispatch Telegram verification message. Please try again.',
+          502,
+          'TELEGRAM_DELIVERY_FAILED'
+        );
+      }
     }
 
     return {
       success: true,
       resendCooldownSeconds: 60,
+      telegramBotUrl,
+      telegramChatLinked,
+      telegramChatRequired,
       devOtp: env.NODE_ENV !== 'production' ? newOtp : undefined,
     };
   }
@@ -532,6 +707,16 @@ export class AuthService {
     const emailVal = isEmail ? session.identifier : null;
     const phoneVal = !isEmail ? session.identifier : null;
 
+    const linkedTelegram = !isEmail ? TelegramIdentityStore.getInstance().getLinkByPhone(session.identifier) : null;
+    const tgProviderId = linkedTelegram?.telegramUserId || session.identifier;
+    const tgMetadata = linkedTelegram
+      ? {
+          chatId: linkedTelegram.chatId,
+          phone: linkedTelegram.phone,
+          username: linkedTelegram.username || null,
+        }
+      : undefined;
+
     let createdPassenger: any;
 
     try {
@@ -549,9 +734,10 @@ export class AuthService {
             authIdentities: {
               create: {
                 provider: isEmail ? 'EMAIL' : 'TELEGRAM',
-                providerId: session.identifier,
+                providerId: isEmail ? session.identifier : tgProviderId,
                 verified: true,
                 verifiedAt: new Date(),
+                metadata: isEmail ? undefined : (tgMetadata as any),
               },
             },
           },
@@ -595,6 +781,13 @@ export class AuthService {
 
   public async login(identifier: string, passwordAttempt: string, _deviceId?: string, platform = 'UNKNOWN') {
     const clean = identifier.trim().toLowerCase();
+    const phoneRes = normalizeEthiopianPhone(clean);
+    const searchConditions: any[] = [{ email: clean }, { phoneNumber: clean }];
+    if (phoneRes.isValid) {
+      searchConditions.push({ phoneNumber: phoneRes.normalized });
+      if (phoneRes.nationalNumber) searchConditions.push({ phoneNumber: phoneRes.nationalNumber });
+      searchConditions.push({ phoneNumber: phoneRes.normalized.replace('+', '') });
+    }
 
     let passenger: any = null;
 
@@ -602,7 +795,7 @@ export class AuthService {
       passenger = await withDbTimeout(
         prisma.passenger.findFirst({
           where: {
-            OR: [{ email: clean }, { phoneNumber: clean }],
+            OR: searchConditions,
           },
         })
       );
@@ -614,8 +807,11 @@ export class AuthService {
     }
 
     // Strictly restrict in-memory fallback to non-production environments
-    if (!passenger && env.NODE_ENV !== 'production' && fallbackUsers.has(clean)) {
-      passenger = fallbackUsers.get(clean);
+    if (!passenger && env.NODE_ENV !== 'production') {
+      passenger =
+        fallbackUsers.get(clean) ||
+        (phoneRes.isValid ? fallbackUsers.get(phoneRes.normalized) : null) ||
+        (phoneRes.isValid && phoneRes.nationalNumber ? fallbackUsers.get(phoneRes.nationalNumber) : null);
     }
 
     if (!passenger) {
@@ -649,18 +845,31 @@ export class AuthService {
   // ----------------------------------------------------------------------------
 
   public async initiateRecovery(method: RegistrationMethod, identifier: string) {
-    const clean = identifier.trim().toLowerCase();
+    const isEmail = method === 'email';
+    let clean = identifier.trim().toLowerCase();
+    const phoneRes = normalizeEthiopianPhone(clean);
+    if (!isEmail && phoneRes.isValid) {
+      clean = phoneRes.normalized;
+    }
+
     const normalized = normalizeIdentifier(clean);
 
     // 1. Identifier-level rate limiting
     checkIdentifierRateLimit(normalized, 5);
+
+    const searchConditions: any[] = [{ email: clean }, { phoneNumber: clean }];
+    if (!isEmail && phoneRes.isValid) {
+      searchConditions.push({ phoneNumber: phoneRes.normalized });
+      if (phoneRes.nationalNumber) searchConditions.push({ phoneNumber: phoneRes.nationalNumber });
+      searchConditions.push({ phoneNumber: phoneRes.normalized.replace('+', '') });
+    }
 
     let passenger: any = null;
     try {
       passenger = await withDbTimeout(
         prisma.passenger.findFirst({
           where: {
-            OR: [{ email: clean }, { phoneNumber: clean }],
+            OR: searchConditions,
           },
         })
       );
@@ -671,8 +880,11 @@ export class AuthService {
       passenger = null;
     }
 
-    if (!passenger && env.NODE_ENV !== 'production' && fallbackUsers.has(clean)) {
-      passenger = fallbackUsers.get(clean);
+    if (!passenger && env.NODE_ENV !== 'production') {
+      passenger =
+        fallbackUsers.get(clean) ||
+        (phoneRes.isValid ? fallbackUsers.get(phoneRes.normalized) : null) ||
+        (phoneRes.isValid && phoneRes.nationalNumber ? fallbackUsers.get(phoneRes.nationalNumber) : null);
     }
 
     if (!passenger) {
@@ -701,6 +913,7 @@ export class AuthService {
       fullName: passenger.fullName,
       otpHash,
       sessionSalt,
+      plainOtp,
       otpExpiresAt: Date.now() + ttlSeconds * 1000,
       attempts: 0,
       maxAttempts: 5,
@@ -735,14 +948,45 @@ export class AuthService {
       }
     }
 
-    if (method === 'email') {
-      await this.emailService.sendOtpEmail(clean, plainOtp, passenger.fullName);
-    } else {
-      await this.telegramService.sendOtpMessage(clean, plainOtp);
-    }
+    let telegramBotUrl: string | undefined;
+    let telegramChatLinked = false;
+    let telegramChatRequired = false;
 
-    const telegramBotUrl =
-      method === 'telegram' ? `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=rec_${sessionId}` : undefined;
+    if (method === 'email') {
+      const emailSent = await this.emailService.sendOtpEmail(clean, plainOtp, passenger.fullName);
+      if (!emailSent) {
+        throw new AppError(
+          'Failed to deliver recovery code to your email address. Please try again.',
+          502,
+          'EMAIL_DELIVERY_FAILED'
+        );
+      }
+    } else {
+      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=rec_${sessionId}`;
+      const tgRes = await this.telegramService.sendOtpMessage(clean, plainOtp, {
+        sessionId,
+        purpose: 'PASSWORD_RESET',
+        recipientName: passenger.fullName,
+      });
+
+      if (tgRes.success) {
+        telegramChatLinked = true;
+      } else if (tgRes.reason === 'CHAT_NOT_FOUND') {
+        telegramChatRequired = true;
+      } else if (tgRes.reason === 'BOT_BLOCKED') {
+        throw new AppError(
+          `You have blocked @${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'} on Telegram. Please unblock the bot and try again.`,
+          403,
+          'TELEGRAM_BOT_BLOCKED'
+        );
+      } else {
+        throw new AppError(
+          tgRes.error || 'Failed to dispatch Telegram recovery message. Please try again.',
+          502,
+          'TELEGRAM_DELIVERY_FAILED'
+        );
+      }
+    }
 
     return {
       sessionId,
@@ -752,6 +996,8 @@ export class AuthService {
       expiresInSeconds: ttlSeconds,
       resendCooldownSeconds: cooldownSeconds,
       telegramBotUrl,
+      telegramChatLinked,
+      telegramChatRequired,
       devOtp: env.NODE_ENV !== 'production' ? plainOtp : undefined,
     };
   }
@@ -771,6 +1017,7 @@ export class AuthService {
     checkIdentifierRateLimit(normalizeIdentifier(session.identifier), 5);
 
     const newOtp = this.generateOtp();
+    session.plainOtp = newOtp;
     session.otpHash = this.hashOtp(newOtp, session.sessionSalt);
     session.otpExpiresAt = Date.now() + 300 * 1000;
     session.resendCooldownUntil = Date.now() + 60 * 1000;
@@ -779,15 +1026,52 @@ export class AuthService {
 
     activeRecSessions.set(sessionId, session);
 
+    let telegramBotUrl: string | undefined;
+    let telegramChatLinked = false;
+    let telegramChatRequired = false;
+
     if (session.method === 'email') {
-      await this.emailService.sendOtpEmail(session.identifier, newOtp, session.fullName);
+      const emailSent = await this.emailService.sendOtpEmail(session.identifier, newOtp, session.fullName);
+      if (!emailSent) {
+        throw new AppError(
+          'Failed to deliver recovery code to your email address. Please try again.',
+          502,
+          'EMAIL_DELIVERY_FAILED'
+        );
+      }
     } else {
-      await this.telegramService.sendOtpMessage(session.identifier, newOtp);
+      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=rec_${sessionId}`;
+      const tgRes = await this.telegramService.sendOtpMessage(session.identifier, newOtp, {
+        sessionId,
+        purpose: 'PASSWORD_RESET',
+        recipientName: session.fullName,
+      });
+
+      if (tgRes.success) {
+        telegramChatLinked = true;
+      } else if (tgRes.reason === 'CHAT_NOT_FOUND') {
+        telegramChatRequired = true;
+      } else if (tgRes.reason === 'BOT_BLOCKED') {
+        throw new AppError(
+          `You have blocked @${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'} on Telegram. Please unblock the bot and try again.`,
+          403,
+          'TELEGRAM_BOT_BLOCKED'
+        );
+      } else {
+        throw new AppError(
+          tgRes.error || 'Failed to dispatch Telegram recovery message. Please try again.',
+          502,
+          'TELEGRAM_DELIVERY_FAILED'
+        );
+      }
     }
 
     return {
       success: true,
       resendCooldownSeconds: 60,
+      telegramBotUrl,
+      telegramChatLinked,
+      telegramChatRequired,
       devOtp: env.NODE_ENV !== 'production' ? newOtp : undefined,
     };
   }
@@ -1077,5 +1361,52 @@ export class AuthService {
     }
 
     return this.formatPassengerProfile(passenger);
+  }
+
+  public async handleTelegramWebhook(update: any) {
+    await this.telegramService.handleUpdate(update);
+    return { ok: true };
+  }
+
+  public async getDiagnostics() {
+    const smtpCheck = await this.emailService.verifyConnection();
+    const telegramCheck = await this.telegramService.getMe();
+    const webhookCheck = await this.telegramService.getWebhookInfo();
+
+    return {
+      timestamp: new Date().toISOString(),
+      channels: {
+        email: {
+          provider: 'Brevo SMTP',
+          host: env.SMTP_HOST || 'not-configured',
+          port: env.SMTP_PORT,
+          secure: env.SMTP_SECURE,
+          from: env.SMTP_FROM,
+          connected: smtpCheck.success,
+          latencyMs: smtpCheck.latencyMs,
+          error: smtpCheck.error,
+          recentAudits: this.emailService.getRecentAudits(),
+        },
+        telegram: {
+          botUsername: env.TELEGRAM_BOT_USERNAME,
+          botLink: env.TELEGRAM_BOT_LINK,
+          connected: telegramCheck.success,
+          botDetails: telegramCheck.bot
+            ? {
+                id: telegramCheck.bot.id,
+                username: telegramCheck.bot.username,
+                firstName: telegramCheck.bot.first_name,
+              }
+            : null,
+          webhookInfo: webhookCheck.info || null,
+          error: telegramCheck.error,
+          recentAudits: this.telegramService.getRecentAudits(),
+        },
+      },
+      sessions: {
+        activeRegistrationSessions: activeRegSessions.size,
+        activeRecoverySessions: activeRecSessions.size,
+      },
+    };
   }
 }

@@ -69,3 +69,4 @@ export const API_CONFIG = {
     status: '/auth/status',
   },
 };
+

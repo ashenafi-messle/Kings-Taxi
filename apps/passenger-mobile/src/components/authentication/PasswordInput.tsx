@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ViewStyle,
+  Platform,
 } from 'react-native';
 import { Lock, Eye, EyeOff } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
@@ -19,6 +20,8 @@ interface PasswordInputProps {
   isNewPassword?: boolean;
   showStrengthMeter?: boolean;
   style?: ViewStyle;
+  disableAutofill?: boolean;
+  importantForAutofill?: 'auto' | 'no' | 'noExcludeDescendants' | 'yes' | 'yesExcludeDescendants';
 }
 
 export const PasswordInput: React.FC<PasswordInputProps> = ({
@@ -30,6 +33,8 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
   isNewPassword = false,
   showStrengthMeter = false,
   style,
+  disableAutofill = false,
+  importantForAutofill,
 }) => {
   const [isSecure, setIsSecure] = useState(true);
 
@@ -49,6 +54,9 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
 
   const strength = getStrength(value);
 
+  // Prevent Google Password Manager / Autofill overlay from freezing/locking input on Android
+  const shouldDisableAutofill = disableAutofill || (Platform.OS === 'android' && isNewPassword);
+
   return (
     <View style={[styles.container, style]}>
       <Text style={styles.label}>{label}</Text>
@@ -67,6 +75,9 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
           autoCorrect={false}
           autoComplete={isNewPassword ? 'new-password' : 'password'}
           textContentType={isNewPassword ? 'newPassword' : 'password'}
+          importantForAutofill={
+            importantForAutofill || (shouldDisableAutofill ? 'no' : 'auto')
+          }
         />
 
         <TouchableOpacity

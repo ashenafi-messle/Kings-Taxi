@@ -30,6 +30,8 @@ export interface InitiateAuthData {
   expiresInSeconds: number;
   resendCooldownSeconds: number;
   telegramBotUrl?: string;
+  telegramChatLinked?: boolean;
+  telegramChatRequired?: boolean;
   devOtp?: string;
 }
 

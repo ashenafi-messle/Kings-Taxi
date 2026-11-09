@@ -193,5 +193,23 @@ export class AuthController {
       next(err);
     }
   }
+
+  static async handleTelegramWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await authService.handleTelegramWebhook(req.body);
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getDiagnostics(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const diagnostics = await authService.getDiagnostics();
+      ApiResponse.success(res, diagnostics, 'Auth & notification channels diagnostic information', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 

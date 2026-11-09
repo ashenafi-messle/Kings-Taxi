@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
@@ -31,19 +31,20 @@ import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
 
 export default function SetPasswordScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation(['auth', 'validation', 'common']);
   const params = useLocalSearchParams();
 
   const flow = (params.flow as string) || 'registration';
-  const sessionId = (params.sessionId as string) || '';
-  const registrationToken = (params.registrationToken as string) || '';
-  const recoveryToken = (params.recoveryToken as string) || '';
-  const method = (params.method as string) || 'email';
-  const identifier = (params.identifier as string) || '';
-  const fullName = (params.fullName as string) || '';
-
-  const { completeRegistrationWithPassword, resetPassword, isLoading } = useAuthStore();
+  const { completeRegistrationWithPassword, resetPassword, isLoading, recoveryState } = useAuthStore();
   const { language } = useSettingsStore();
+
+  const sessionId = (params.sessionId as string) || recoveryState?.sessionId || '';
+  const registrationToken = (params.registrationToken as string) || '';
+  const recoveryToken = (params.recoveryToken as string) || recoveryState?.recoveryToken || '';
+  const method = (params.method as string) || recoveryState?.method || 'email';
+  const identifier = (params.identifier as string) || recoveryState?.identifier || '';
+  const fullName = (params.fullName as string) || recoveryState?.fullName || '';
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -119,7 +120,7 @@ export default function SetPasswordScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       {/* Top Header Bar */}
@@ -157,7 +158,10 @@ export default function SetPasswordScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -216,6 +220,8 @@ export default function SetPasswordScreen() {
               }}
               isNewPassword
               showStrengthMeter
+              disableAutofill
+              importantForAutofill="no"
             />
 
             <PasswordInput
@@ -227,6 +233,8 @@ export default function SetPasswordScreen() {
                 setError('');
               }}
               isNewPassword
+              disableAutofill
+              importantForAutofill="no"
             />
 
             {/* Password Requirements Checklist */}

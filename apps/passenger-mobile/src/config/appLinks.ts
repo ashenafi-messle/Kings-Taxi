@@ -29,7 +29,7 @@ export const APP_CONFIG: AppConfig = {
   playStoreUrl: 'https://play.google.com/store/apps/details?id=et.kingstaxi.passenger',
   appStoreId: '6470000000',
   appStoreUrl: 'https://apps.apple.com/app/kings-taxi-passenger/id6470000000',
-  telegramBotUsername: 'KingsTaxiAuthBot',
+  telegramBotUsername: 'KingstaxiBot',
   // Toggle when official Google Play / Apple App Store listing is publicly active
   isStorePublished: false,
 };

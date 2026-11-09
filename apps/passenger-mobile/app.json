@@ -5,7 +5,7 @@
     "owner": "ardab-tech-solutions-22",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/kt-crown-app-icon.png",
     "scheme": "kingstaxi",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -15,11 +15,12 @@
       }
     },
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/branding/kings-taxi-app-icon-modern.png",
       "resizeMode": "contain",
       "backgroundColor": "#111516"
     },
     "ios": {
+      "icon": "./assets/kt-crown-app-icon.png",
       "supportsTablet": true,
       "bundleIdentifier": "et.kingstaxi.passenger",
       "infoPlist": {
@@ -35,9 +36,10 @@
     "android": {
       "package": "et.kingstaxi.passenger",
       "versionCode": 1,
+      "icon": "./assets/kt-crown-app-icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#111516"
+        "foregroundImage": "./assets/kt-crown-app-icon.png",
+        "backgroundColor": "#FFFFFF"
       },
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [

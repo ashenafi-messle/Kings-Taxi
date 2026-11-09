@@ -53,4 +53,19 @@ describe('Health & Liveness Integration Tests', () => {
     expect(res.body.error.code).toBe('DEPENDENCY_UNAVAILABLE');
     expect(res.body.error.details.database.status).toBe('down');
   });
+
+  it('GET /api/v1/health/diagnostics should return channel diagnostics without credentials leaks', async () => {
+    const res = await request(app).get('/api/v1/health/diagnostics');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.channels).toBeDefined();
+    expect(res.body.data.channels.email.provider).toBe('Brevo SMTP');
+    expect(res.body.data.channels.telegram.botUsername).toBeDefined();
+
+    // Verify ZERO password / secret leaks
+    const bodyStr = JSON.stringify(res.body);
+    expect(bodyStr).not.toContain(process.env.SMTP_PASS || 'NEVER_MATCH');
+    expect(bodyStr).not.toContain(process.env.TELEGRAM_BOT_TOKEN || 'NEVER_MATCH');
+  });
 });

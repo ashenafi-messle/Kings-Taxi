@@ -59,6 +59,10 @@ authRouter.post('/logout', authenticateToken, AuthController.logout);
 // Protected Identity Inspection
 authRouter.get('/me', authenticateToken, AuthController.getCurrentUser);
 
-// Telegram Verification Handshake
+// Telegram Verification Handshake & Webhook
 authRouter.post('/telegram/verify', authRateLimiter, AuthController.telegramVerify);
+authRouter.post('/telegram/webhook', AuthController.handleTelegramWebhook);
+
+// Safe Diagnostics Endpoint (Inspect channels & delivery health without leaking secrets)
+authRouter.get('/diagnostics', AuthController.getDiagnostics);
 

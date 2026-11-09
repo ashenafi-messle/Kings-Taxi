@@ -269,7 +269,10 @@ runTest('Telegram authentication does NOT expose bot tokens in client codebase',
 
   // Verify no bot tokens in client
   assert(!content.includes('BOT_TOKEN ='), 'BOT_TOKEN must not be in frontend client');
-  assert(content.includes('KingsTaxiAuthBot'), 'Official bot handle must be used');
+  assert(
+    content.includes('KingstaxiBot') || content.includes('KingsTaxiAuthBot'),
+    'Official bot handle must be used'
+  );
   assert(content.includes('generateChallenge'), 'Cryptographic challenge nonce must be generated');
 });
 

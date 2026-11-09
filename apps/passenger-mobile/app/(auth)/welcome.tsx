@@ -4,11 +4,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   StatusBar,
   BackHandler,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Globe, ArrowRight, ShieldCheck, Star } from 'lucide-react-native';
 import { colors } from '../../src/theme/colors';
@@ -24,10 +26,17 @@ import { useSettingsStore, useAuthStore } from '../../src/stores';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const { t } = useTranslation(['auth', 'common']);
   const { language } = useSettingsStore();
   const { isAuthenticated, user } = useAuthStore();
   const [langModalVisible, setLangModalVisible] = useState(false);
+
+  // Responsive device classification
+  const isSmallDevice = height < 700;
+  const isMediumDevice = height >= 700 && height < 820;
+  const logoScale = isSmallDevice ? 0.74 : isMediumDevice ? 0.88 : 1.0;
 
   // Android BackHandler closes modal if open
   useEffect(() => {
@@ -47,10 +56,10 @@ export default function WelcomeScreen() {
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
-      {/* Top Header Bar */}
+      {/* Top Header Bar - Protected by insets.top */}
       <View style={styles.topHeader}>
         <TouchableOpacity
           style={styles.langPill}
@@ -75,19 +84,30 @@ export default function WelcomeScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingBottom: Math.max(insets.bottom, 20) + 24,
+            paddingTop: isSmallDevice ? 4 : 8,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Official Brand Hero Presentation */}
-        <View style={styles.brandHeroSection}>
-          <KingsTaxiLogo variant="hero" showTagline showText />
+        {/* Official Brand Hero Presentation with Responsive Scale */}
+        <View
+          style={[
+            styles.brandHeroSection,
+            isSmallDevice && { marginTop: 4, marginBottom: 2 },
+          ]}
+        >
+          <KingsTaxiLogo variant="hero" showTagline showText scale={logoScale} />
         </View>
 
         {/* 4-Slide Image Advertising Hero Carousel */}
         <LandingHeroCarousel />
 
         {/* Trust Badges */}
-        <View style={styles.trustRow}>
+        <View style={[styles.trustRow, isSmallDevice && { marginVertical: 8, paddingVertical: 8 }]}>
           <View style={styles.trustItem}>
             <ShieldCheck size={16} color={colors.primaryGold} />
             <Text style={styles.trustText}>Screened Drivers</Text>

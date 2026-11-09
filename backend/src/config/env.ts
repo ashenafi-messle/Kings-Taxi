@@ -1,13 +1,23 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
 
-// Load appropriate .env file based on NODE_ENV
+// Load appropriate .env file based on NODE_ENV with path fallback
 const nodeEnv = process.env.NODE_ENV || 'development';
-if (nodeEnv === 'test') {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
-} else {
-  dotenv.config();
+const envFile = nodeEnv === 'test' ? '.env.test' : '.env';
+
+const potentialPaths = [
+  path.resolve(process.cwd(), envFile),
+  path.resolve(process.cwd(), 'backend', envFile),
+  path.resolve(__dirname, '../../', envFile),
+];
+
+for (const p of potentialPaths) {
+  if (fs.existsSync(p)) {
+    dotenv.config({ path: p });
+    break;
+  }
 }
 
 const envSchema = z.object({
@@ -28,18 +38,55 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 mins
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
 
-  // Optional future service credentials
+  // Email / SMTP (Brevo)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default('Kings Taxi <ashenafimesele78@gmail.com>'),
+  EMAIL_FROM_ADDRESS: z.string().optional(),
+  EMAIL_FROM_NAME: z.string().optional(),
+
+  // Telegram Bot
   TELEGRAM_BOT_TOKEN: z.string().optional(),
-  TELEGRAM_BOT_USERNAME: z.string().default('KingsTaxiAuthBot'),
+  TELEGRAM_BOT_USERNAME: z.string().default('KingstaxiBot'),
+  TELEGRAM_BOT_LINK: z.string().default('https://t.me/KingstaxiBot'),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  TELEGRAM_WEBHOOK_URL: z.string().optional(),
+
+  // Optional future service credentials
   CHAPA_SECRET_KEY: z.string().optional(),
   CHAPA_PUBLIC_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
 
+function normalizeDatabaseUrl(urlStr: string): string {
+  if (!urlStr || !urlStr.startsWith('postgresql://')) return urlStr;
+  const prefix = 'postgresql://';
+  const rest = urlStr.slice(prefix.length);
+  const colonIdx = rest.indexOf(':');
+  const lastAtIdx = rest.lastIndexOf('@');
+  if (colonIdx !== -1 && lastAtIdx !== -1 && lastAtIdx > colonIdx) {
+    const user = rest.slice(0, colonIdx);
+    const pass = rest.slice(colonIdx + 1, lastAtIdx);
+    const hostAndDb = rest.slice(lastAtIdx + 1);
+    if (pass.includes('@') || pass.includes('#') || pass.includes('$')) {
+      const encodedPass = encodeURIComponent(decodeURIComponent(pass));
+      return `${prefix}${user}:${encodedPass}@${hostAndDb}`;
+    }
+  }
+  return urlStr;
+}
+
 function parseEnv(): Env {
   // If in test mode and secrets not present, supply safe dummy values
   const rawEnv = { ...process.env };
+  if (rawEnv.DATABASE_URL) {
+    rawEnv.DATABASE_URL = normalizeDatabaseUrl(rawEnv.DATABASE_URL);
+    process.env.DATABASE_URL = rawEnv.DATABASE_URL;
+  }
   if (nodeEnv === 'test') {
     rawEnv.DATABASE_URL = rawEnv.DATABASE_URL || 'postgresql://test:test@localhost:5432/kings_taxi_test?schema=public';
     rawEnv.JWT_ACCESS_SECRET = rawEnv.JWT_ACCESS_SECRET || 'test_jwt_access_secret_min_32_characters_long_for_tests';

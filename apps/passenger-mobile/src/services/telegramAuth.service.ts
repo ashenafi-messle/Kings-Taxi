@@ -36,7 +36,9 @@ export interface TelegramAuthSession {
   status: 'idle' | 'pending' | 'authorized' | 'failed' | 'expired';
 }
 
-const TELEGRAM_BOT_USERNAME = 'KingsTaxiAuthBot';
+// Official Telegram bot handle (verified on BotFather: @KingstaxiBot, legacy alias: KingsTaxiAuthBot)
+const TELEGRAM_BOT_USERNAME = 'KingstaxiBot';
+export const LEGACY_BOT_HANDLE = 'KingsTaxiAuthBot';
 
 export class TelegramAuthService {
   /**
