@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   Sparkles,
   ChevronRight,
   ShieldCheck,
+  Phone,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { SearchInput, DestinationCard, StatusBadge, KingsTaxiLogo, HomeAdCarousel } from '../../src/components';
@@ -52,6 +53,10 @@ export default function HomeScreen() {
     setPickup(loc);
   };
 
+  useEffect(() => {
+    useRideStore.getState().fetchRideHistory();
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -76,27 +81,14 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Current Location Pill */}
+        {/* Current Location Pill — Gondar City */}
         <View style={styles.locationPill}>
           <MapPin size={14} color={theme.colors.primaryDark} />
-          <Text style={styles.locationLabel}>{t('transportation:pickupLocation')}:</Text>
+          <Text style={styles.locationLabel}>Operating In:</Text>
           <Text style={styles.locationValue} numberOfLines={1}>
-            Bole Airport, Addis Ababa
+            Gondar City, Amhara, Ethiopia
           </Text>
         </View>
-
-        {/* Search Bar */}
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => router.push('/rides/book')}
-          style={styles.searchWrapper}
-        >
-          <SearchInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder={t('searchDestinationPlaceholder')}
-          />
-        </TouchableOpacity>
 
         {/* Active Ride Banner (if active ride exists) */}
         {currentRide && currentRide.status !== 'PAYMENT_COMPLETED' && currentRide.status !== 'CANCELLED' && (
@@ -112,7 +104,7 @@ export default function HomeScreen() {
               <View>
                 <Text style={styles.activeRideTitle}>{t('activeRideBannerTitle')}</Text>
                 <Text style={styles.activeRideSubtitle} numberOfLines={1}>
-                  {currentRide.destination.title}
+                  {currentRide.destination?.title || currentRide.subcityName || 'Gondar On-Demand Ride'}
                 </Text>
               </View>
             </View>
@@ -122,6 +114,39 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
         )}
+
+        {/* Request-Based On-Demand Hero Card (No Destination Required) */}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => router.push('/rides/book')}
+          style={styles.requestRideHeroCard}
+        >
+          <View style={styles.requestHeroHeader}>
+            <View style={styles.requestHeroIconBox}>
+              <Car size={24} color="#C9A227" />
+            </View>
+            <View style={styles.requestHeroTextWrap}>
+              <Text style={styles.requestHeroTitle}>Request a Taxi in Gondar</Text>
+              <Text style={styles.requestHeroSubtitle}>
+                No upfront destination needed • Instant on-demand dispatch
+              </Text>
+            </View>
+          </View>
+          <View style={styles.requestHeroDivider} />
+          <View style={styles.requestHeroBottomRow}>
+            <View style={styles.requestPhonePill}>
+              <Phone size={13} color={theme.colors.primaryDark} />
+              <Text style={styles.requestPhoneText}>
+                {user?.phone || '0911234567'}
+              </Text>
+              <ShieldCheck size={14} color={theme.colors.success} />
+            </View>
+            <View style={styles.requestBtnInline}>
+              <Text style={styles.requestBtnInlineText}>Request Ride</Text>
+              <ChevronRight size={14} color="#FFFFFF" />
+            </View>
+          </View>
+        </TouchableOpacity>
 
         {/* Primary 4 Service Verticals Grid */}
         <View style={styles.servicesGrid}>
@@ -135,9 +160,9 @@ export default function HomeScreen() {
               <Car size={26} color={theme.colors.primaryDark} />
             </View>
             <Text style={styles.serviceTitle}>{t('services.rideTitle')}</Text>
-            <Text style={styles.serviceDesc}>{t('services.rideSubtitle')}</Text>
+            <Text style={styles.serviceDesc}>Instant taxi dispatch</Text>
             <View style={styles.serviceBadge}>
-              <Text style={styles.serviceBadgeText}>120 ETB+</Text>
+              <Text style={styles.serviceBadgeText}>Standard Rates</Text>
             </View>
           </TouchableOpacity>
 
@@ -562,5 +587,78 @@ const styles = StyleSheet.create({
     ...theme.typography.caption,
     color: '#15803D',
     marginTop: 2,
+  },
+  requestRideHeroCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: '#E6CA65',
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.card,
+  },
+  requestHeroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  requestHeroIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#F3E5AB',
+  },
+  requestHeroTextWrap: {
+    flex: 1,
+  },
+  requestHeroTitle: {
+    ...theme.typography.bodyBold,
+    fontSize: 16,
+    color: theme.colors.text,
+  },
+  requestHeroSubtitle: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+  },
+  requestHeroDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    marginVertical: theme.spacing.sm,
+  },
+  requestHeroBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  requestPhonePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.surfaceMuted,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: theme.borderRadius.full,
+  },
+  requestPhoneText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.text,
+  },
+  requestBtnInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.primaryDark,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: theme.borderRadius.full,
+  },
+  requestBtnInlineText: {
+    ...theme.typography.captionBold,
+    color: '#FFFFFF',
   },
 });

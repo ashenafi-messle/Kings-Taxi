@@ -85,5 +85,29 @@ export class ApiResponse {
 
     return res.status(statusCode).json(envelope);
   }
+
+  static badRequest(res: Response, message = 'Bad request', details?: any) {
+    return this.error(res, 'BAD_REQUEST', message, 400, details);
+  }
+
+  static unauthorized(res: Response, message = 'Unauthorized', details?: any) {
+    return this.error(res, 'UNAUTHORIZED', message, 401, details);
+  }
+
+  static forbidden(res: Response, message = 'Forbidden', details?: any) {
+    return this.error(res, 'FORBIDDEN', message, 403, details);
+  }
+
+  static notFound(res: Response, message = 'Resource not found', details?: any) {
+    return this.error(res, 'NOT_FOUND', message, 404, details);
+  }
+
+  static serverError(res: Response, message = 'Internal server error', details?: any) {
+    return this.error(res, 'INTERNAL_SERVER_ERROR', message, 500, details);
+  }
+
+  static created<T>(res: Response, data: T, message = 'Resource created successfully') {
+    return this.success(res, data, message, 201);
+  }
 }
 

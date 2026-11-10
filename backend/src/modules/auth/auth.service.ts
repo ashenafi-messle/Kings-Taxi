@@ -81,7 +81,7 @@ function normalizeIdentifier(identifier: string): string {
   return clean.replace(/[^0-9]/g, '');
 }
 
-async function withDbTimeout<T>(queryPromise: Promise<T>, timeoutMs = 1200): Promise<T> {
+async function withDbTimeout<T>(queryPromise: Promise<T>, timeoutMs = 10000): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('DB_TIMEOUT')), timeoutMs);
@@ -128,54 +128,6 @@ export function resetAuthSessions(): void {
   activeRegSessions.clear();
   activeRecSessions.clear();
 }
-
-// In-memory registered user cache (strictly restricted to non-production dev/testing when database is offline)
-const fallbackUsers = new Map<string, any>([
-  [
-    'dawit@kingstaxi.et',
-    {
-      id: 'e2b9c7a1-8d4e-4f1a-9b2c-3d4e5f6a7b8c',
-      fullName: 'Dawit Haile',
-      email: 'dawit@kingstaxi.et',
-      phoneNumber: '+251911234567',
-      passwordHash: hashPasswordSync('Password123!', 'salt_dawit_haile'),
-      passwordSalt: 'salt_dawit_haile',
-      language: 'EN',
-      city: 'Gondar',
-      isVerified: true,
-      accountStatus: 'ACTIVE',
-    },
-  ],
-  [
-    '+251911234567',
-    {
-      id: 'e2b9c7a1-8d4e-4f1a-9b2c-3d4e5f6a7b8c',
-      fullName: 'Dawit Haile',
-      email: 'dawit@kingstaxi.et',
-      phoneNumber: '+251911234567',
-      passwordHash: hashPasswordSync('Password123!', 'salt_dawit_haile'),
-      passwordSalt: 'salt_dawit_haile',
-      language: 'EN',
-      city: 'Gondar',
-      isVerified: true,
-      accountStatus: 'ACTIVE',
-    },
-  ],
-]);
-
-interface FallbackRefreshToken {
-  id: string;
-  tokenHash: string;
-  userId: string;
-  familyId: string;
-  expiresAt: Date;
-  isRevoked: boolean;
-  revokedAt?: Date;
-  passenger?: any;
-}
-
-// In-memory fallback refresh token cache (strictly for non-production environments)
-const fallbackRefreshTokens = new Map<string, FallbackRefreshToken>();
 
 export class AuthService {
   private emailService = EmailService.getInstance();
@@ -317,7 +269,7 @@ export class AuthService {
     const rawToken = `rt_${Date.now()}_${crypto.randomBytes(32).toString('hex')}`;
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const tokenFamily = familyId || `fam_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
-    const id = `rt_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+    const id = crypto.randomUUID();
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
@@ -338,29 +290,8 @@ export class AuthService {
         })
       );
     } catch (err) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Session persistence unavailable. Please try again later.', 503, 'SERVICE_UNAVAILABLE');
-      }
-      logger.warn({ err }, '[AuthService] Could not persist refresh token to database, operating in session memory');
-    }
-
-    if (env.NODE_ENV !== 'production') {
-      let passengerObj = null;
-      for (const val of fallbackUsers.values()) {
-        if (val.id === passengerId) {
-          passengerObj = val;
-          break;
-        }
-      }
-      fallbackRefreshTokens.set(tokenHash, {
-        id,
-        tokenHash,
-        userId: passengerId,
-        familyId: tokenFamily,
-        expiresAt,
-        isRevoked: false,
-        passenger: passengerObj || { id: passengerId },
-      });
+      logger.error({ err, passengerId }, '[AuthService] Database error persisting refresh token');
+      throw new AppError('Session persistence unavailable. Please try again later.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     return rawToken;
@@ -434,19 +365,8 @@ export class AuthService {
       }
     } catch (err: any) {
       if (err instanceof AppError) throw err;
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
-      }
-      // If DB is offline in non-production, check fallback map
-      const phoneRes = !isEmail ? normalizeEthiopianPhone(cleanIdentifier) : null;
-      if (
-        fallbackUsers.has(cleanIdentifier) ||
-        (phoneRes?.isValid &&
-          (fallbackUsers.has(phoneRes.normalized) ||
-            (phoneRes.nationalNumber && fallbackUsers.has(phoneRes.nationalNumber))))
-      ) {
-        throw new AppError('An account with this identifier already exists. Please sign in.', 409, 'ACCOUNT_ALREADY_EXISTS');
-      }
+      logger.error({ err }, '[AuthService] Database error checking duplicate account');
+      throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     const sessionId = `reg_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
@@ -493,9 +413,10 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
-      }
+      activeRegSessions.delete(sessionId);
+      if (err instanceof AppError) throw err;
+      logger.error({ err }, '[AuthService] Database error persisting registration OTP');
+      throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     let telegramBotUrl: string | undefined;
@@ -596,9 +517,9 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
-      }
+      if (err instanceof AppError) throw err;
+      logger.error({ err }, '[AuthService] Database error persisting resend registration OTP');
+      throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     let telegramBotUrl: string | undefined;
@@ -744,24 +665,18 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Unable to complete registration. Service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      if (err.code === 'P2002' || err.message?.includes('Unique constraint')) {
+        throw new AppError(
+          'An account with this email or phone number already exists.',
+          409,
+          'ACCOUNT_ALREADY_EXISTS'
+        );
       }
-      logger.warn({ err }, '[AuthService] Database write bypassed in non-production; creating in-memory fallback user');
-      createdPassenger = {
-        id: `usr_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
-        fullName: session.fullName,
-        email: emailVal,
-        phoneNumber: phoneVal,
-        passwordHash: `${passwordHash}:${salt}`,
-        isVerified: true,
-        accountStatus: 'ACTIVE',
-        language: 'EN',
-      };
-      fallbackUsers.set(session.identifier, createdPassenger);
+      logger.error({ err }, '[AuthService] Database error creating passenger account');
+      throw new AppError('Unable to complete registration. Service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
-    // Clean session
+    // Clean session only after successful database persistence
     activeRegSessions.delete(sessionId);
 
     // Issue tokens
@@ -800,18 +715,8 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Authentication service temporarily unavailable. Please try again later.', 503, 'SERVICE_UNAVAILABLE');
-      }
-      passenger = null;
-    }
-
-    // Strictly restrict in-memory fallback to non-production environments
-    if (!passenger && env.NODE_ENV !== 'production') {
-      passenger =
-        fallbackUsers.get(clean) ||
-        (phoneRes.isValid ? fallbackUsers.get(phoneRes.normalized) : null) ||
-        (phoneRes.isValid && phoneRes.nationalNumber ? fallbackUsers.get(phoneRes.nationalNumber) : null);
+      logger.error({ err }, '[AuthService] Database error looking up passenger for login');
+      throw new AppError('Authentication service temporarily unavailable. Please try again later.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     if (!passenger) {
@@ -874,17 +779,8 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Password recovery service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
-      }
-      passenger = null;
-    }
-
-    if (!passenger && env.NODE_ENV !== 'production') {
-      passenger =
-        fallbackUsers.get(clean) ||
-        (phoneRes.isValid ? fallbackUsers.get(phoneRes.normalized) : null) ||
-        (phoneRes.isValid && phoneRes.nationalNumber ? fallbackUsers.get(phoneRes.nationalNumber) : null);
+      logger.error({ err }, '[AuthService] Database error querying passenger for recovery');
+      throw new AppError('Password recovery service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     if (!passenger) {
@@ -924,9 +820,7 @@ export class AuthService {
       devOtp: env.NODE_ENV !== 'production' ? plainOtp : undefined,
     };
 
-    activeRecSessions.set(sessionId, session);
-
-    // Persist OTP in database
+    // Persist OTP in database before activating session and before dispatching message
     try {
       await withDbTimeout(
         prisma.oTPVerification.create({
@@ -943,10 +837,11 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Password recovery service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
-      }
+      logger.error({ err }, '[AuthService] Database error persisting password recovery OTP');
+      throw new AppError('Password recovery service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
+
+    activeRecSessions.set(sessionId, session);
 
     let telegramBotUrl: string | undefined;
     let telegramChatLinked = false;
@@ -1023,6 +918,28 @@ export class AuthService {
     session.resendCooldownUntil = Date.now() + 60 * 1000;
     session.attempts = 0;
     session.devOtp = env.NODE_ENV !== 'production' ? newOtp : undefined;
+
+    // Persist OTP in database
+    try {
+      await withDbTimeout(
+        prisma.oTPVerification.create({
+          data: {
+            identifier: normalizeIdentifier(session.identifier),
+            purpose: 'PASSWORD_RESET',
+            channel: session.method === 'email' ? 'EMAIL' : 'TELEGRAM',
+            codeHash: session.otpHash,
+            salt: session.sessionSalt,
+            expiresAt: new Date(session.otpExpiresAt),
+            maxAttempts: 5,
+            resendCooldownUntil: new Date(session.resendCooldownUntil),
+          },
+        })
+      );
+    } catch (err: any) {
+      if (err instanceof AppError) throw err;
+      logger.error({ err }, '[AuthService] Database error persisting resend recovery OTP');
+      throw new AppError('Password recovery service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+    }
 
     activeRecSessions.set(sessionId, session);
 
@@ -1119,9 +1036,6 @@ export class AuthService {
       throw new AppError('Invalid or unverified recovery session. Please verify your OTP code first.', 400, 'UNVERIFIED_SESSION');
     }
 
-    // Invalidate recovery token and session immediately to prevent replay attacks
-    activeRecSessions.delete(sessionId);
-
     const salt = this.generateSalt();
     const passwordHash = await this.hashPassword(newPassword, salt);
     const combinedHash = `${passwordHash}:${salt}`;
@@ -1140,24 +1054,12 @@ export class AuthService {
         ])
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Unable to reset password. Service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
-      }
-      if (fallbackUsers.has(session.identifier)) {
-        const u = fallbackUsers.get(session.identifier);
-        u.passwordHash = passwordHash;
-        u.passwordSalt = salt;
-      }
+      logger.error({ err, passengerId: session.passengerId }, '[AuthService] Database transaction error resetting password');
+      throw new AppError('Unable to reset password. Service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
-    if (env.NODE_ENV !== 'production') {
-      for (const token of fallbackRefreshTokens.values()) {
-        if (token.userId === session.passengerId) {
-          token.isRevoked = true;
-          token.revokedAt = new Date();
-        }
-      }
-    }
+    // Invalidate recovery token and session ONLY after successful database transaction
+    activeRecSessions.delete(sessionId);
 
     return {
       message: 'Password successfully updated. You may now sign in with your new password.',
@@ -1180,14 +1082,8 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
-      }
-      storedToken = null;
-    }
-
-    if (!storedToken && env.NODE_ENV !== 'production' && fallbackRefreshTokens.has(tokenHash)) {
-      storedToken = fallbackRefreshTokens.get(tokenHash);
+      logger.error({ err }, '[AuthService] Database error looking up refresh token');
+      throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     if (!storedToken) {
@@ -1209,18 +1105,8 @@ export class AuthService {
           })
         );
       } catch (err) {
-        if (env.NODE_ENV === 'production') {
-          logger.error({ err }, '[SecurityAlert] Failed to revoke compromised token family');
-        }
-      }
-
-      if (env.NODE_ENV !== 'production') {
-        for (const token of fallbackRefreshTokens.values()) {
-          if (token.familyId === storedToken.familyId) {
-            token.isRevoked = true;
-            token.revokedAt = new Date();
-          }
-        }
+        logger.error({ err, familyId: storedToken.familyId }, '[SecurityAlert] Failed to revoke compromised token family in DB');
+        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
       }
 
       throw new AppError(
@@ -1246,31 +1132,9 @@ export class AuthService {
         })
       );
       rotationSucceeded = updateResult.count === 1;
-    } catch {
-      // In non-production fallback store:
-      if (env.NODE_ENV !== 'production') {
-        const memToken = fallbackRefreshTokens.get(tokenHash);
-        if (memToken && !memToken.isRevoked) {
-          memToken.isRevoked = true;
-          memToken.revokedAt = new Date();
-          rotationSucceeded = true;
-        } else {
-          rotationSucceeded = false;
-        }
-      }
-    }
-
-    // Also sync the fallback store in non-production even if DB succeeded
-    if (env.NODE_ENV !== 'production') {
-      const memToken = fallbackRefreshTokens.get(tokenHash);
-      if (memToken) {
-        if (memToken.isRevoked && !rotationSucceeded) {
-          // Already marked as revoked
-        } else if (!memToken.isRevoked) {
-          memToken.isRevoked = true;
-          memToken.revokedAt = new Date();
-        }
-      }
+    } catch (err) {
+      logger.error({ err, tokenId: storedToken.id }, '[AuthService] Database error during token rotation');
+      throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     if (!rotationSucceeded) {
@@ -1285,15 +1149,9 @@ export class AuthService {
             data: { isRevoked: true, revokedAt: new Date() },
           })
         );
-      } catch {}
-
-      if (env.NODE_ENV !== 'production') {
-        for (const token of fallbackRefreshTokens.values()) {
-          if (token.familyId === storedToken.familyId) {
-            token.isRevoked = true;
-            token.revokedAt = new Date();
-          }
-        }
+      } catch (err) {
+        logger.error({ err, familyId: storedToken.familyId }, '[SecurityAlert] Failed to revoke family on concurrent refresh in DB');
+        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
       }
 
       throw new AppError('Concurrent token refresh detected. Session has been revoked.', 401, 'CONCURRENT_REFRESH_REVOKED');
@@ -1319,14 +1177,9 @@ export class AuthService {
             data: { isRevoked: true, revokedAt: new Date() },
           })
         );
-      } catch {}
-
-      if (env.NODE_ENV !== 'production') {
-        const memToken = fallbackRefreshTokens.get(tokenHash);
-        if (memToken) {
-          memToken.isRevoked = true;
-          memToken.revokedAt = new Date();
-        }
+      } catch (err) {
+        logger.error({ err }, '[AuthService] Database error revoking refresh token on logout');
+        throw new AppError('Session persistence unavailable. Please try again later.', 503, 'SERVICE_UNAVAILABLE');
       }
     }
     return { success: true };
@@ -1341,19 +1194,8 @@ export class AuthService {
         })
       );
     } catch (err: any) {
-      if (env.NODE_ENV === 'production') {
-        throw new AppError('Passenger service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
-      }
-      passenger = null;
-    }
-
-    if (!passenger && env.NODE_ENV !== 'production') {
-      for (const val of fallbackUsers.values()) {
-        if (val.id === passengerId) {
-          passenger = val;
-          break;
-        }
-      }
+      logger.error({ err, passengerId }, '[AuthService] Database error fetching passenger');
+      throw new AppError('Passenger service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
     }
 
     if (!passenger) {

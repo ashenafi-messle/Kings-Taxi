@@ -30,6 +30,7 @@ import { PaymentMethodType, PaymentStatus } from '../../src/types';
 import { PaymentService } from '../../src/services/payment.service';
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
+import { useRideStore } from '../../src/stores';
 
 export default function CheckoutPaymentScreen() {
   const router = useRouter();
@@ -97,6 +98,7 @@ export default function CheckoutPaymentScreen() {
       // Cash on Arrival completes immediately
       setTimeout(() => {
         setPaymentStatus('COMPLETED');
+        useRideStore.getState().completePayment('cash', handshake.transactionReference);
         setIsSubmitting(false);
       }, 900);
       return;
@@ -108,6 +110,7 @@ export default function CheckoutPaymentScreen() {
     // If external app could not launch or in simulator/dev, complete after simulation
     setTimeout(() => {
       setPaymentStatus('COMPLETED');
+      useRideStore.getState().completePayment(selectedMethod, handshake.transactionReference);
       setIsSubmitting(false);
     }, launchedExternal ? 4000 : 2000);
   };
@@ -121,6 +124,10 @@ export default function CheckoutPaymentScreen() {
     router.replace('/(tabs)/bookings');
   };
 
+  const handleViewReceipt = () => {
+    router.replace('/rides/receipt');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <AppHeader
@@ -128,6 +135,10 @@ export default function CheckoutPaymentScreen() {
         showBack
         onBack={() => {
           if (paymentStatus === 'PROCESSING') return; // Do not interrupt in flight
+          if (paymentStatus === 'COMPLETED') {
+            router.replace('/(tabs)');
+            return;
+          }
           if (router.canGoBack()) {
             router.back();
           } else {
@@ -163,9 +174,14 @@ export default function CheckoutPaymentScreen() {
               {t('successMsg', { amount: formatETB(amount) })}
             </Text>
             <PrimaryButton
+              title="View Itemized Receipt"
+              onPress={handleViewReceipt}
+              style={styles.doneBtn}
+            />
+            <SecondaryButton
               title={t('backToBookings')}
               onPress={handleFinish}
-              style={styles.doneBtn}
+              style={{ width: '100%', marginTop: theme.spacing.sm }}
             />
           </View>
         )}

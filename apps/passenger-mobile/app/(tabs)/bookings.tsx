@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,21 +23,40 @@ export default function BookingsScreen() {
   const { rideHistory } = useRideStore();
   const { hotelReservations, tourContracts } = useBookingStore();
 
-  const formattedRides: BookingSummaryItem[] = rideHistory.map((r) => ({
-    id: r.id,
-    type: 'ride',
-    title: `${r.pickup.title.split(',')[0]} → ${r.destination.title.split(',')[0]}`,
-    subtitle: `${r.vehicleCategory.toUpperCase()} • Driver: ${r.driver?.name || 'Assigned'}`,
-    date: r.createdAt,
-    priceETB: r.finalPrice || r.estimatedPrice,
-    status: r.status,
-  }));
+  useEffect(() => {
+    useRideStore.getState().fetchRideHistory();
+    useBookingStore.getState().fetchHotelReservations();
+  }, []);
+
+  const formattedRides: BookingSummaryItem[] = rideHistory.map((r) => {
+    const pickupTitle = r.pickup?.title
+      ? r.pickup.title.split(',')[0]
+      : r.subcityName
+      ? `${r.subcityName} Subcity`
+      : 'Gondar City';
+    const destTitle = r.destination?.title
+      ? r.destination.title.split(',')[0]
+      : 'On-Demand Journey';
+    const categoryName = r.vehicleCategory ? r.vehicleCategory.toUpperCase() : 'TAXI';
+
+    return {
+      id: r.id,
+      type: 'ride',
+      title: `${pickupTitle} → ${destTitle}`,
+      subtitle: `${categoryName} • Driver: ${r.driver?.name || 'Assigned'}`,
+      date: r.createdAt,
+      priceETB: r.finalPrice ?? r.estimatedPrice ?? 150,
+      status: r.status,
+    };
+  });
 
   const formattedHotels: BookingSummaryItem[] = hotelReservations.map((h) => ({
     id: h.id,
     type: 'hotel',
     title: h.hotelName,
-    subtitle: `${h.roomTitle} • ${h.nightsCount} Nights (${h.guestsCount} Guests)`,
+    subtitle: `${h.roomTitle} • ${h.nightsCount} Nights (${h.guestsCount} Guests)${
+      h.hasAirportTransfer ? ' • GDQ Airport Transfer' : ''
+    }`,
     date: h.checkInDate,
     priceETB: h.totalPriceETB,
     status: h.status,
@@ -67,7 +86,10 @@ export default function BookingsScreen() {
 
   const handleBookingPress = (booking: BookingSummaryItem) => {
     if (booking.type === 'ride') {
-      router.push('/rides/receipt');
+      router.push({
+        pathname: '/rides/receipt',
+        params: { id: booking.id },
+      });
     } else if (booking.type === 'hotel') {
       // Navigate to hotel details
       const hotelRes = hotelReservations.find((h) => h.id === booking.id);

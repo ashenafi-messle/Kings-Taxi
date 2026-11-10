@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   TouchableOpacity,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -19,6 +20,10 @@ import {
   CheckCircle,
   Users,
   Bed,
+  Plane,
+  Car,
+  ChevronRight,
+  Sparkles,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import {
@@ -26,6 +31,8 @@ import {
   RatingComponent,
   PrimaryButton,
 } from '../../src/components';
+import { HotelService } from '../../src/services/hotel.service';
+import { Hotel, AirportTransferRateDto } from '../../src/types';
 import { mockHotels } from '../../src/mocks';
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
@@ -35,20 +42,62 @@ export default function HotelDetailScreen() {
   const { id } = useLocalSearchParams();
   const { t } = useTranslation(['hotels', 'common', 'navigation']);
 
-  const hotel = mockHotels.find((h) => h.id === id) || mockHotels[0];
-  const [selectedRoomId, setSelectedRoomId] = useState(hotel.rooms[0]?.id || '');
+  const [hotel, setHotel] = useState<Hotel>(
+    () => mockHotels.find((h) => h.id === id) || mockHotels[0]
+  );
+  const [transferRates, setTransferRates] = useState<AirportTransferRateDto[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const selectedRoom = hotel.rooms.find((r) => r.id === selectedRoomId) || hotel.rooms[0];
+  const hotelId = (id as string) || hotel.id;
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadHotel() {
+      setIsLoading(true);
+      try {
+        const [hotelRes, ratesRes] = await Promise.all([
+          HotelService.getHotelById(hotelId),
+          HotelService.getTransferRates(hotelId),
+        ]);
+
+        if (isMounted) {
+          if (hotelRes.success && hotelRes.data) {
+            setHotel(hotelRes.data);
+            if (hotelRes.data.rooms.length > 0) {
+              setSelectedRoomId(hotelRes.data.rooms[0].id);
+            }
+          }
+          if (ratesRes.success && ratesRes.data) {
+            setTransferRates(ratesRes.data);
+          }
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadHotel();
+    return () => {
+      isMounted = false;
+    };
+  }, [hotelId]);
+
+  const selectedRoom =
+    hotel.rooms.find((r) => r.id === selectedRoomId) || hotel.rooms[0];
 
   const handleProceedToReserve = () => {
     router.push({
       pathname: '/hotels/reserve',
       params: {
         hotelId: hotel.id,
-        roomId: selectedRoom.id,
+        roomId: selectedRoom?.id || '',
       },
     });
   };
+
+  const galleryImages = hotel.photos && hotel.photos.length > 0 ? hotel.photos : [hotel.heroImage];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -57,8 +106,41 @@ export default function HotelDetailScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Image */}
-        <Image source={{ uri: hotel.heroImage }} style={styles.heroImage} />
+        {/* Main Display Image */}
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: galleryImages[selectedImageIndex] || hotel.heroImage }}
+            style={styles.heroImage}
+          />
+          <View style={styles.categoryPill}>
+            <Sparkles size={11} color="#FFF" />
+            <Text style={styles.categoryPillText}>
+              {(hotel.category || 'LUXURY').toUpperCase()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Thumbnail Gallery (if multiple) */}
+        {galleryImages.length > 1 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.thumbnailsWrap}
+          >
+            {galleryImages.map((uri, index) => (
+              <TouchableOpacity
+                key={index}
+                onPress={() => setSelectedImageIndex(index)}
+                style={[
+                  styles.thumbnailBtn,
+                  selectedImageIndex === index && styles.thumbnailBtnActive,
+                ]}
+              >
+                <Image source={{ uri }} style={styles.thumbnailImg} />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
 
         {/* Hotel Identity Card */}
         <View style={styles.contentCard}>
@@ -82,20 +164,24 @@ export default function HotelDetailScreen() {
 
           {/* Contact Row */}
           <View style={styles.contactRow}>
-            <TouchableOpacity
-              style={styles.contactItem}
-              onPress={() => Linking.openURL(`tel:${hotel.phone}`)}
-            >
-              <Phone size={14} color={theme.colors.secondary} />
-              <Text style={styles.contactText}>{hotel.phone}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.contactItem}
-              onPress={() => Linking.openURL(`mailto:${hotel.email}`)}
-            >
-              <Mail size={14} color={theme.colors.secondary} />
-              <Text style={styles.contactText}>{t('contactHotel')}</Text>
-            </TouchableOpacity>
+            {hotel.phone && (
+              <TouchableOpacity
+                style={styles.contactItem}
+                onPress={() => Linking.openURL(`tel:${hotel.phone}`)}
+              >
+                <Phone size={14} color={theme.colors.secondary} />
+                <Text style={styles.contactText}>{hotel.phone}</Text>
+              </TouchableOpacity>
+            )}
+            {hotel.email && (
+              <TouchableOpacity
+                style={styles.contactItem}
+                onPress={() => Linking.openURL(`mailto:${hotel.email}`)}
+              >
+                <Mail size={14} color={theme.colors.secondary} />
+                <Text style={styles.contactText}>Inquire Email</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -103,6 +189,60 @@ export default function HotelDetailScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>{t('aboutHotel')}</Text>
           <Text style={styles.descriptionText}>{hotel.description}</Text>
+        </View>
+
+        {/* Dedicated Gondar Airport Transfer Feature Card */}
+        <View style={styles.transferSectionCard}>
+          <View style={styles.transferHeader}>
+            <View style={styles.transferIconCircle}>
+              <Plane size={20} color="#0D5C3A" />
+            </View>
+            <View style={styles.transferHeaderTextWrap}>
+              <Text style={styles.transferTitle}>Gondar Airport Transfer</Text>
+              <Text style={styles.transferSubtitle}>
+                Atse Tewodros Airport (GDQ) ⇄ {hotel.name}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.transferDescription}>
+            Seamless fixed-price private transfer. Meet-and-greet in arrival terminal, baggage assistance, and direct travel with Kings Taxi executive drivers.
+          </Text>
+
+          <View style={styles.transferRatePillsContainer}>
+            {transferRates.map((rate) => (
+              <View key={rate.id} style={styles.transferRateCard}>
+                <View style={styles.transferRateVehicleRow}>
+                  <Car size={16} color={theme.colors.primaryDark} />
+                  <Text style={styles.transferVehicleName}>
+                    {rate.vehicleCategory === 'SEDAN'
+                      ? 'Standard Sedan'
+                      : rate.vehicleCategory === 'SUV'
+                      ? 'Executive SUV'
+                      : rate.vehicleCategory === 'VAN'
+                      ? 'Passenger Van'
+                      : rate.vehicleCategory}
+                  </Text>
+                </View>
+                <Text style={styles.transferPriceTag}>
+                  {formatETB(rate.fixedPriceETB)}
+                </Text>
+                <Text style={styles.transferEtaText}>
+                  ~{rate.estimatedMinutes} mins • Fixed Price
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={styles.transferCtaRow}
+            onPress={handleProceedToReserve}
+          >
+            <Text style={styles.transferCtaText}>
+              Add airport pickup during room reservation
+            </Text>
+            <ChevronRight size={16} color="#0D5C3A" />
+          </TouchableOpacity>
         </View>
 
         {/* Facilities & Amenities */}
@@ -133,13 +273,21 @@ export default function HotelDetailScreen() {
                   isSelected && styles.roomCardSelected,
                 ]}
               >
-                <Image source={{ uri: room.photos[0] }} style={styles.roomImage} />
+                <Image
+                  source={{
+                    uri:
+                      room.photos && room.photos.length > 0
+                        ? room.photos[0]
+                        : hotel.heroImage,
+                  }}
+                  style={styles.roomImage}
+                />
                 <View style={styles.roomDetails}>
                   <View style={styles.roomHeaderRow}>
                     <Text style={styles.roomTitle}>{room.title}</Text>
                     {isSelected && (
                       <View style={styles.selectedBadge}>
-                        <Text style={styles.selectedBadgeText}>{t('selectRoom')}</Text>
+                        <Text style={styles.selectedBadgeText}>Selected</Text>
                       </View>
                     )}
                   </View>
@@ -147,11 +295,13 @@ export default function HotelDetailScreen() {
                   <View style={styles.roomMetaRow}>
                     <View style={styles.roomMeta}>
                       <Bed size={14} color={theme.colors.textMuted} />
-                      <Text style={styles.roomMetaText}>{room.bedType}</Text>
+                      <Text style={styles.roomMetaText}>{room.bedType || 'King Bed'}</Text>
                     </View>
                     <View style={styles.roomMeta}>
                       <Users size={14} color={theme.colors.textMuted} />
-                      <Text style={styles.roomMetaText}>{room.capacityAdults} {t('guestCount')}</Text>
+                      <Text style={styles.roomMetaText}>
+                        {room.capacityAdults} Adults, {room.capacityChildren} Child
+                      </Text>
                     </View>
                   </View>
                   <View style={styles.roomPriceRow}>
@@ -160,7 +310,9 @@ export default function HotelDetailScreen() {
                       <Text style={styles.perNight}> / {t('common:perNight')}</Text>
                     </Text>
                     <Text style={styles.availabilityText}>
-                      {room.availableCount} {t('common:status')}
+                      {room.availableCount > 0
+                        ? `${room.availableCount} rooms available`
+                        : 'Available on request'}
                     </Text>
                   </View>
                 </View>
@@ -170,23 +322,25 @@ export default function HotelDetailScreen() {
         </View>
 
         {/* Hotel Policies */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{t('policies')}</Text>
-          <View style={styles.policyRow}>
-            <Clock size={16} color={theme.colors.textSecondary} />
-            <Text style={styles.policyText}>
-              {t('checkInTime')}: {hotel.policies.checkInTime} • {t('checkOutTime')}: {hotel.policies.checkOutTime}
-            </Text>
+        {hotel.policies && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>{t('policies')}</Text>
+            <View style={styles.policyRow}>
+              <Clock size={16} color={theme.colors.textSecondary} />
+              <Text style={styles.policyText}>
+                {t('checkInTime')}: {hotel.policies.checkInTime} • {t('checkOutTime')}: {hotel.policies.checkOutTime}
+              </Text>
+            </View>
+            <View style={styles.policyRow}>
+              <ShieldCheck size={16} color={theme.colors.success} />
+              <Text style={styles.policyText}>{hotel.policies.cancellationPolicy}</Text>
+            </View>
           </View>
-          <View style={styles.policyRow}>
-            <ShieldCheck size={16} color={theme.colors.success} />
-            <Text style={styles.policyText}>{hotel.policies.cancellationPolicy}</Text>
-          </View>
-        </View>
+        )}
 
         {/* Reserve CTA */}
         <PrimaryButton
-          title={`${t('reserveNow')} • ${formatETB(selectedRoom?.pricePerNight)}`}
+          title={`Reserve ${selectedRoom?.title || 'Room'} • ${formatETB(selectedRoom?.pricePerNight || hotel.startingPricePerNight)}`}
           onPress={handleProceedToReserve}
           style={styles.reserveBtn}
         />
@@ -203,10 +357,56 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: theme.spacing.xxl,
   },
+  imageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 240,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
   heroImage: {
     width: '100%',
-    height: 220,
-    backgroundColor: theme.colors.surfaceMuted,
+    height: '100%',
+  },
+  categoryPill: {
+    position: 'absolute',
+    bottom: 12,
+    left: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  categoryPillText: {
+    ...theme.typography.captionBold,
+    color: '#FFF',
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  thumbnailsWrap: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    gap: 8,
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  thumbnailBtn: {
+    width: 60,
+    height: 44,
+    borderRadius: 6,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  thumbnailBtnActive: {
+    borderColor: theme.colors.hotelAccent,
+  },
+  thumbnailImg: {
+    width: '100%',
+    height: '100%',
   },
   contentCard: {
     backgroundColor: theme.colors.surface,
@@ -223,6 +423,7 @@ const styles = StyleSheet.create({
     ...theme.typography.h2,
     color: theme.colors.text,
     flex: 1,
+    marginRight: 8,
   },
   cityBadge: {
     flexDirection: 'row',
@@ -279,6 +480,93 @@ const styles = StyleSheet.create({
     ...theme.typography.body,
     color: theme.colors.textSecondary,
     lineHeight: 22,
+  },
+  transferSectionCard: {
+    backgroundColor: '#F0FDF4',
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  transferHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  transferIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transferHeaderTextWrap: {
+    flex: 1,
+  },
+  transferTitle: {
+    ...theme.typography.h3,
+    color: '#14532D',
+  },
+  transferSubtitle: {
+    ...theme.typography.caption,
+    color: '#166534',
+  },
+  transferDescription: {
+    ...theme.typography.body,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#166534',
+    marginBottom: 12,
+  },
+  transferRatePillsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  transferRateCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.borderRadius.md,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  transferRateVehicleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  transferVehicleName: {
+    ...theme.typography.captionBold,
+    color: theme.colors.text,
+    fontSize: 11,
+  },
+  transferPriceTag: {
+    ...theme.typography.bodyBold,
+    color: '#0D5C3A',
+    fontSize: 14,
+  },
+  transferEtaText: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    fontSize: 10,
+    marginTop: 2,
+  },
+  transferCtaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#BBF7D0',
+  },
+  transferCtaText: {
+    ...theme.typography.captionBold,
+    color: '#0D5C3A',
   },
   amenitiesWrap: {
     flexDirection: 'row',

@@ -36,8 +36,10 @@ enum DriverVerificationStatus {
 enum DriverAvailabilityStatus {
   OFFLINE
   ONLINE
+  AVAILABLE
   BUSY
   ON_TRIP
+  TEMPORARILY_UNAVAILABLE
 }
 
 enum VehicleVerificationStatus {
@@ -178,6 +180,78 @@ enum ActorType {
   SYSTEM
 }
 
+enum TrackingSessionStatus {
+  ACTIVE
+  PAUSED
+  INTERRUPTED
+  COMPLETED
+  ABORTED
+}
+
+enum LocationValidationStatus {
+  VALID
+  REJECTED_ACCURACY
+  REJECTED_SPEED
+  REJECTED_JUMP
+  REJECTED_TIME
+}
+
+enum DestinationRevisionStatus {
+  PENDING
+  ACCEPTED_BY_DRIVER
+  REJECTED_BY_DRIVER
+  CANCELLED
+}
+
+enum HotelStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum RoomTypeStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum RateStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum HotelBookingStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+  COMPLETED
+  EXPIRED
+}
+
+enum TransferStatus {
+  REQUESTED
+  CONFIRMED
+  DRIVER_ASSIGNED
+  COMPLETED
+  CANCELLED
+}
+
+enum LoungeReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentType {
+  TAXI_RIDE
+  HOTEL_RESERVATION
+  AIRPORT_TRANSFER
+  LOUNGE_ACCESS
+}
+
 // ------------------------------------------------------------------------------
 // 1. Passenger Entity
 // ------------------------------------------------------------------------------
@@ -211,6 +285,8 @@ model Passenger {
   sessions         PassengerSession[]
   otpVerifications OTPVerification[]
   auditLogs        AuditLog[]
+  hotelBookings    HotelBooking[]
+  loungeReservations LoungeReservation[]
 
   @@index([accountStatus])
   @@index([phoneNumber])
@@ -269,6 +345,8 @@ model Driver {
   trips            Trip[]
   refreshTokens    RefreshToken[]
   auditLogs        AuditLog[]
+  subcities        DriverSubcity[]
+  trackingSessions TripTrackingSession[]
 
   @@index([verificationStatus])
   @@index([availabilityStatus])
@@ -331,20 +409,33 @@ model Booking {
   finalFare                Decimal? @map("final_fare") @db.Decimal(10, 2)
   currency                 String   @default("ETB") @db.VarChar(8)
 
+  subcityId                String?   @map("subcity_id") @db.Uuid
+  passengerContactPhone    String?   @map("passenger_contact_phone") @db.VarChar(32)
+  acceptedAt               DateTime? @map("accepted_at") @db.Timestamptz(6)
+  startedAt                DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt              DateTime? @map("completed_at") @db.Timestamptz(6)
+  cancelledAt              DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  additionalInstructions   String?   @map("additional_instructions") @db.Text
+
   cancellationReason String?            @map("cancellation_reason") @db.VarChar(255)
   cancelledBy        CancellationActor? @map("cancelled_by")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Restrict)
-  driver    Driver?   @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  vehicle   Vehicle?  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  trip      Trip?
-  payment   Payment?
+  passenger            Passenger                 @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  driver               Driver?                   @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle              Vehicle?                  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  subcity              Subcity?                  @relation(fields: [subcityId], references: [id], onDelete: SetNull)
+  trip                 Trip?
+  payment              Payment?
+  trackingSession      TripTrackingSession?
+  fareSnapshot         TripFareSnapshot?
+  destinationRevisions RideDestinationRevision[]
 
   @@index([passengerId, bookingStatus])
   @@index([driverId, bookingStatus])
+  @@index([subcityId])
   @@index([bookingReference])
   @@index([createdAt])
   @@map("bookings")
@@ -390,8 +481,10 @@ model Trip {
 
 model Payment {
   id                   String        @id @default(uuid()) @db.Uuid
-  bookingId            String        @unique @map("booking_id") @db.Uuid
+  bookingId            String?       @unique @map("booking_id") @db.Uuid
+  hotelBookingId       String?       @unique @map("hotel_booking_id") @db.Uuid
   passengerId          String        @map("passenger_id") @db.Uuid
+  paymentType          PaymentType   @default(TAXI_RIDE) @map("payment_type")
   amount               Decimal       @db.Decimal(10, 2)
   currency             String        @default("ETB") @db.VarChar(8)
   paymentMethod        PaymentMethod @default(CASH) @map("payment_method")
@@ -403,8 +496,9 @@ model Payment {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  booking      Booking?      @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  hotelBooking HotelBooking? @relation(fields: [hotelBookingId], references: [id], onDelete: Restrict)
+  passenger    Passenger     @relation(fields: [passengerId], references: [id], onDelete: Restrict)
 
   @@index([passengerId, paymentStatus])
   @@index([transactionReference])
@@ -581,4 +675,521 @@ model PassengerSession {
 
   @@index([passengerId, isActive])
   @@map("passenger_sessions")
+}
+
+// ------------------------------------------------------------------------------
+// 13. Subcity & Driver Assignment Entities
+// ------------------------------------------------------------------------------
+
+model Subcity {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   @unique @db.VarChar(64)
+  slug            String   @unique @db.VarChar(64)
+  city            String   @default("Gondar") @db.VarChar(64)
+  isActive        Boolean  @default(true) @map("is_active")
+  centerLatitude  Float    @map("center_latitude")
+  centerLongitude Float    @map("center_longitude")
+  radiusKm        Float    @default(5.0) @map("radius_km")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  driverAssignments DriverSubcity[]
+  bookings          Booking[]
+
+  @@index([isActive])
+  @@map("subcities")
+}
+
+model DriverSubcity {
+  id         String   @id @default(uuid()) @db.Uuid
+  driverId   String   @map("driver_id") @db.Uuid
+  subcityId  String   @map("subcity_id") @db.Uuid
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(6)
+
+  driver  Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  subcity Subcity @relation(fields: [subcityId], references: [id], onDelete: Cascade)
+
+  @@unique([driverId, subcityId])
+  @@index([subcityId])
+  @@index([driverId])
+  @@map("driver_subcities")
+}
+
+// ------------------------------------------------------------------------------
+// 14. Dynamic Vehicle Fare Configuration Entity
+// ------------------------------------------------------------------------------
+
+model VehicleFareConfiguration {
+  id               String      @id @default(uuid()) @db.Uuid
+  vehicleType      VehicleType @map("vehicle_type")
+  baseFare         Decimal     @map("base_fare") @db.Decimal(10, 2)
+  perKilometreRate Decimal     @map("per_kilometre_rate") @db.Decimal(10, 2)
+  perMinuteRate    Decimal     @map("per_minute_rate") @db.Decimal(10, 2)
+  minimumFare      Decimal     @default(50.00) @map("minimum_fare") @db.Decimal(10, 2)
+  currency         String      @default("ETB") @db.VarChar(8)
+  isActive         Boolean     @default(true) @map("is_active")
+  effectiveFrom    DateTime    @default(now()) @map("effective_from") @db.Timestamptz(6)
+  effectiveUntil   DateTime?   @map("effective_until") @db.Timestamptz(6)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([vehicleType, isActive])
+  @@map("vehicle_fare_configurations")
+}
+
+// ------------------------------------------------------------------------------
+// 15. Trip Tracking Session Entity (Driver GPS Telematics)
+// ------------------------------------------------------------------------------
+
+model TripTrackingSession {
+  id                      String                @id @default(uuid()) @db.Uuid
+  bookingId               String                @unique @map("booking_id") @db.Uuid
+  driverId                String                @map("driver_id") @db.Uuid
+  status                  TrackingSessionStatus @default(ACTIVE)
+  trackingQuality         String                @default("GOOD") @map("tracking_quality") @db.VarChar(32)
+  startedAt               DateTime              @default(now()) @map("started_at") @db.Timestamptz(6)
+  endedAt                 DateTime?             @map("ended_at") @db.Timestamptz(6)
+  officialDistanceMeters  Int                   @default(0) @map("official_distance_meters")
+  estimatedDistanceMeters Int?                  @map("estimated_distance_meters")
+  lastValidLocationAt     DateTime?             @map("last_valid_location_at") @db.Timestamptz(6)
+  lastLatitude            Float?                @map("last_latitude")
+  lastLongitude           Float?                @map("last_longitude")
+  totalSamplesCount       Int                   @default(0) @map("total_samples_count")
+  validSamplesCount       Int                   @default(0) @map("valid_samples_count")
+  interruptionCount       Int                   @default(0) @map("interruption_count")
+  createdAt               DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking Booking              @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  driver  Driver               @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  samples TripLocationSample[]
+
+  @@index([driverId, status])
+  @@map("trip_tracking_sessions")
+}
+
+// ------------------------------------------------------------------------------
+// 16. Trip Location Sample Entity (GPS Telematics Samples)
+// ------------------------------------------------------------------------------
+
+model TripLocationSample {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  trackingSessionId      String                   @map("tracking_session_id") @db.Uuid
+  latitude               Float
+  longitude              Float
+  accuracy               Float
+  speed                  Float?
+  heading                Float?
+  altitude               Float?
+  deviceTimestamp        DateTime                 @map("device_timestamp") @db.Timestamptz(6)
+  receivedAt             DateTime                 @default(now()) @map("received_at") @db.Timestamptz(6)
+  sequenceNumber         Int                      @map("sequence_number")
+  validationStatus       LocationValidationStatus @default(VALID) @map("validation_status")
+  distanceFromPrevMeters Float                    @default(0) @map("distance_from_prev_meters")
+
+  trackingSession TripTrackingSession @relation(fields: [trackingSessionId], references: [id], onDelete: Cascade)
+
+  @@index([trackingSessionId, sequenceNumber])
+  @@index([trackingSessionId, receivedAt])
+  @@map("trip_location_samples")
+}
+
+// ------------------------------------------------------------------------------
+// 17. Trip Fare Snapshot Entity (Authoritative Journey Pricing)
+// ------------------------------------------------------------------------------
+
+model TripFareSnapshot {
+  id                      String    @id @default(uuid()) @db.Uuid
+  bookingId               String    @unique @map("booking_id") @db.Uuid
+  pricingVersion          String    @default("v1") @map("pricing_version") @db.VarChar(32)
+  baseFare                Decimal   @map("base_fare") @db.Decimal(10, 2)
+  perKilometreRate        Decimal   @map("per_kilometre_rate") @db.Decimal(10, 2)
+  perMinuteRate           Decimal   @map("per_minute_rate") @db.Decimal(10, 2)
+  minimumFare             Decimal   @default(50.00) @map("minimum_fare") @db.Decimal(10, 2)
+  actualDistanceMeters    Int       @default(0) @map("actual_distance_meters")
+  estimatedDistanceMeters Int       @default(0) @map("estimated_distance_meters")
+  billableDistanceMeters  Int       @default(0) @map("billable_distance_meters")
+  durationSeconds         Int       @default(0) @map("duration_seconds")
+  distanceFare            Decimal   @default(0.00) @map("distance_fare") @db.Decimal(10, 2)
+  timeFare                Decimal   @default(0.00) @map("time_fare") @db.Decimal(10, 2)
+  finalFare               Decimal   @default(0.00) @map("final_fare") @db.Decimal(10, 2)
+  currency                String    @default("ETB") @db.VarChar(8)
+  calculationMethod       String    @default("STANDARD_GPS_HAVERSINE") @map("calculation_method") @db.VarChar(32)
+  capturedAt              DateTime  @default(now()) @map("captured_at") @db.Timestamptz(6)
+  finalizedAt             DateTime? @map("finalized_at") @db.Timestamptz(6)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("trip_fare_snapshots")
+}
+
+// ------------------------------------------------------------------------------
+// 18. Ride Destination Revision Entity (Mid-Journey Re-routing)
+// ------------------------------------------------------------------------------
+
+model RideDestinationRevision {
+  id                                String                    @id @default(uuid()) @db.Uuid
+  bookingId                         String                    @map("booking_id") @db.Uuid
+  revisionNumber                    Int                       @default(1) @map("revision_number")
+  previousDestination               String                    @map("previous_destination") @db.VarChar(255)
+  previousLatitude                  Float                     @map("previous_latitude")
+  previousLongitude                 Float                     @map("previous_longitude")
+  newDestination                    String                    @map("new_destination") @db.VarChar(255)
+  newLatitude                       Float                     @map("new_latitude")
+  newLongitude                      Float                     @map("new_longitude")
+  distanceTravelledAtRevisionMeters Int                       @default(0) @map("distance_travelled_at_revision_meters")
+  remainingEstimatedDistanceMeters  Int                       @default(0) @map("remaining_estimated_distance_meters")
+  previousEstimatedFare             Decimal                   @map("previous_estimated_fare") @db.Decimal(10, 2)
+  revisedEstimatedFare              Decimal                   @map("revised_estimated_fare") @db.Decimal(10, 2)
+  status                            DestinationRevisionStatus @default(PENDING)
+  requestedBy                       ActorType                 @default(PASSENGER) @map("requested_by")
+  requestedAt                       DateTime                  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  respondedAt                       DateTime?                 @map("responded_at") @db.Timestamptz(6)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, status])
+  @@map("ride_destination_revisions")
+}
+
+// ==============================================================================
+// 19. Hotel Entity
+// ==============================================================================
+
+model Hotel {
+  id               String      @id @default(uuid()) @db.Uuid
+  name             String      @db.VarChar(128)
+  slug             String      @unique @db.VarChar(128)
+  description      String      @db.Text
+  shortDescription String?     @map("short_description") @db.VarChar(255)
+  address          String      @db.VarChar(255)
+  city             String      @default("Gondar") @db.VarChar(64)
+  subCity          String?     @map("sub_city") @db.VarChar(64)
+  latitude         Float
+  longitude        Float
+  contactPhone     String      @map("contact_phone") @db.VarChar(32)
+  contactEmail     String?     @map("contact_email") @db.VarChar(255)
+  website          String?     @db.VarChar(255)
+  starRating       Int?        @default(4) @map("star_rating")
+  checkInTime      String      @default("14:00") @map("check_in_time") @db.VarChar(16)
+  checkOutTime     String      @default("11:00") @map("check_out_time") @db.VarChar(16)
+  timezone         String      @default("Africa/Addis_Ababa") @db.VarChar(64)
+  status           HotelStatus @default(DRAFT)
+  featured         Boolean     @default(false)
+  publishedAt      DateTime?   @map("published_at") @db.Timestamptz(6)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByAdminId String?     @map("created_by_admin_id") @db.Uuid
+  updatedByAdminId String?     @map("updated_by_admin_id") @db.Uuid
+
+  images        HotelImage[]
+  amenities     HotelAmenityRelation[]
+  roomTypes     HotelRoomType[]
+  transferRates AirportTransferRate[]
+  hotelBookings HotelBooking[]
+
+  @@index([city, status])
+  @@index([featured, status])
+  @@index([slug])
+  @@index([createdAt])
+  @@map("hotels")
+}
+
+// ==============================================================================
+// 20. Hotel Image Entity
+// ==============================================================================
+
+model HotelImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  hotelId      String   @map("hotel_id") @db.Uuid
+  imageUrl     String   @map("image_url") @db.VarChar(512)
+  publicId     String?  @map("public_id") @db.VarChar(255)
+  altText      String?  @map("alt_text") @db.VarChar(255)
+  displayOrder Int      @default(0) @map("display_order")
+  isCover      Boolean  @default(false) @map("is_cover")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId, displayOrder])
+  @@map("hotel_images")
+}
+
+// ==============================================================================
+// 21. Hotel Amenity Entity & Relational Association
+// ==============================================================================
+
+model HotelAmenity {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(64)
+  slug        String   @unique @db.VarChar(64)
+  icon        String?  @db.VarChar(64)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  hotels HotelAmenityRelation[]
+
+  @@map("hotel_amenities")
+}
+
+model HotelAmenityRelation {
+  id        String   @id @default(uuid()) @db.Uuid
+  hotelId   String   @map("hotel_id") @db.Uuid
+  amenityId String   @map("amenity_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  hotel   Hotel        @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  amenity HotelAmenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, amenityId])
+  @@index([hotelId])
+  @@index([amenityId])
+  @@map("hotel_amenity_relations")
+}
+
+// ==============================================================================
+// 22. Hotel Room Type Entity
+// ==============================================================================
+
+model HotelRoomType {
+  id                String         @id @default(uuid()) @db.Uuid
+  hotelId           String         @map("hotel_id") @db.Uuid
+  name              String         @db.VarChar(128)
+  description       String?        @db.Text
+  maximumAdults     Int            @default(2) @map("maximum_adults")
+  maximumChildren   Int            @default(1) @map("maximum_children")
+  maximumGuests     Int            @default(3) @map("maximum_guests")
+  totalInventory    Int            @default(10) @map("total_inventory")
+  basePricePerNight Decimal        @map("base_price_per_night") @db.Decimal(10, 2)
+  currency          String         @default("ETB") @db.VarChar(8)
+  status            RoomTypeStatus @default(ACTIVE)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  hotel        Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  rates        HotelRate[]
+  bookingRooms HotelBookingRoom[]
+
+  @@index([hotelId, status])
+  @@map("hotel_room_types")
+}
+
+// ==============================================================================
+// 23. Hotel Rate Entity (Date-Sensitive Seasonal Pricing)
+// ==============================================================================
+
+model HotelRate {
+  id            String     @id @default(uuid()) @db.Uuid
+  roomTypeId    String     @map("room_type_id") @db.Uuid
+  startDate     DateTime   @map("start_date") @db.Date
+  endDate       DateTime   @map("end_date") @db.Date
+  pricePerNight Decimal    @map("price_per_night") @db.Decimal(10, 2)
+  currency      String     @default("ETB") @db.VarChar(8)
+  minimumNights Int        @default(1) @map("minimum_nights")
+  status        RateStatus @default(ACTIVE)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  roomType HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@index([roomTypeId, startDate, endDate, status])
+  @@map("hotel_rates")
+}
+
+// ==============================================================================
+// 24. Airport Transfer Rate Entity (Configurable Fixed Price)
+// ==============================================================================
+
+model AirportTransferRate {
+  id               String      @id @default(uuid()) @db.Uuid
+  hotelId          String      @map("hotel_id") @db.Uuid
+  originName       String      @default("Atse Tewodros Airport (GDQ), Gondar") @map("origin_name") @db.VarChar(128)
+  originType       String      @default("AIRPORT") @map("origin_type") @db.VarChar(64)
+  destinationName  String      @map("destination_name") @db.VarChar(128)
+  vehicleType      VehicleType @default(STANDARD_SEDAN) @map("vehicle_type")
+  vehicleCapacity  Int         @default(4) @map("vehicle_capacity")
+  fixedPrice       Decimal     @map("fixed_price") @db.Decimal(10, 2)
+  currency         String      @default("ETB") @db.VarChar(8)
+  effectiveFrom    DateTime    @map("effective_from") @db.Date
+  effectiveUntil   DateTime?   @map("effective_until") @db.Date
+  isActive         Boolean     @default(true) @map("is_active")
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByAdminId String?     @map("created_by_admin_id") @db.Uuid
+
+  hotel            Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  transferBookings HotelTransferBooking[]
+
+  @@index([hotelId, isActive, effectiveFrom])
+  @@map("airport_transfer_rates")
+}
+
+// ==============================================================================
+// 25. Hotel Booking Entity
+// ==============================================================================
+
+model HotelBooking {
+  id               String             @id @default(uuid()) @db.Uuid
+  bookingReference String             @unique @map("booking_reference") @db.VarChar(64)
+  passengerId      String             @map("passenger_id") @db.Uuid
+  hotelId          String             @map("hotel_id") @db.Uuid
+  checkInDate      DateTime           @map("check_in_date") @db.Date
+  checkOutDate     DateTime           @map("check_out_date") @db.Date
+  adults           Int                @default(1)
+  children         Int                @default(0)
+  numberOfRooms    Int                @default(1) @map("number_of_rooms")
+  currency         String             @default("ETB") @db.VarChar(8)
+  roomSubtotal     Decimal            @map("room_subtotal") @db.Decimal(10, 2)
+  transferSubtotal Decimal            @default(0) @map("transfer_subtotal") @db.Decimal(10, 2)
+  additionalFees   Decimal            @default(0) @map("additional_fees") @db.Decimal(10, 2)
+  discountAmount   Decimal            @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  grandTotal       Decimal            @map("grand_total") @db.Decimal(10, 2)
+  bookingStatus    HotelBookingStatus @default(PENDING) @map("booking_status")
+  paymentStatus    PaymentStatus      @default(PENDING) @map("payment_status")
+  specialRequests  String?            @map("special_requests") @db.Text
+  priceSnapshot    Json?              @map("price_snapshot")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  confirmedAt      DateTime?          @map("confirmed_at") @db.Timestamptz(6)
+  cancelledAt      DateTime?          @map("cancelled_at") @db.Timestamptz(6)
+
+  passenger       Passenger             @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  hotel           Hotel                 @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  bookingRooms    HotelBookingRoom[]
+  transferBooking HotelTransferBooking?
+  payment         Payment?
+
+  @@index([passengerId, bookingStatus])
+  @@index([hotelId, checkInDate, checkOutDate])
+  @@index([bookingReference])
+  @@index([createdAt])
+  @@map("hotel_bookings")
+}
+
+// ==============================================================================
+// 26. Hotel Booking Room Line Items
+// ==============================================================================
+
+model HotelBookingRoom {
+  id                  String   @id @default(uuid()) @db.Uuid
+  hotelBookingId      String   @map("hotel_booking_id") @db.Uuid
+  roomTypeId          String   @map("room_type_id") @db.Uuid
+  quantity            Int      @default(1)
+  guestsAllocated     Int      @default(1) @map("guests_allocated")
+  nightlyRateSnapshot Decimal  @map("nightly_rate_snapshot") @db.Decimal(10, 2)
+  subtotal            Decimal  @db.Decimal(10, 2)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  booking  HotelBooking  @relation(fields: [hotelBookingId], references: [id], onDelete: Cascade)
+  roomType HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+
+  @@index([hotelBookingId])
+  @@index([roomTypeId])
+  @@map("hotel_booking_rooms")
+}
+
+// ==============================================================================
+// 27. Hotel Airport Transfer Booking Entity
+// ==============================================================================
+
+model HotelTransferBooking {
+  id                    String         @id @default(uuid()) @db.Uuid
+  hotelBookingId        String         @unique @map("hotel_booking_id") @db.Uuid
+  airportTransferRateId String         @map("airport_transfer_rate_id") @db.Uuid
+  pickupLocation        String         @default("Atse Tewodros Airport (GDQ), Gondar") @map("pickup_location") @db.VarChar(255)
+  pickupDate            DateTime       @map("pickup_date") @db.Date
+  pickupTime            String         @map("pickup_time") @db.VarChar(16)
+  flightNumber          String?        @map("flight_number") @db.VarChar(32)
+  passengers            Int            @default(1)
+  selectedVehicleType   VehicleType    @default(STANDARD_SEDAN) @map("selected_vehicle_type")
+  fixedFareSnapshot     Decimal        @map("fixed_fare_snapshot") @db.Decimal(10, 2)
+  transferStatus        TransferStatus @default(REQUESTED) @map("transfer_status")
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking             HotelBooking        @relation(fields: [hotelBookingId], references: [id], onDelete: Cascade)
+  airportTransferRate AirportTransferRate @relation(fields: [airportTransferRateId], references: [id], onDelete: Restrict)
+
+  @@index([airportTransferRateId])
+  @@index([transferStatus])
+  @@map("hotel_transfer_bookings")
+}
+
+// ==============================================================================
+// 28. Lounge Entity
+// ==============================================================================
+
+model Lounge {
+  id               String      @id @default(uuid()) @db.Uuid
+  name             String      @db.VarChar(128)
+  slug             String      @unique @db.VarChar(128)
+  description      String      @db.Text
+  shortDescription String?     @map("short_description") @db.VarChar(255)
+  address          String      @db.VarChar(255)
+  city             String      @default("Gondar") @db.VarChar(64)
+  latitude         Float
+  longitude        Float
+  contactPhone     String      @map("contact_phone") @db.VarChar(32)
+  contactEmail     String?     @map("contact_email") @db.VarChar(255)
+  operatingHours   String      @default("06:00 - 23:00") @map("operating_hours") @db.VarChar(128)
+  amenities        String[]    @default([])
+  featured         Boolean     @default(false)
+  status           HotelStatus @default(DRAFT)
+  publishedAt      DateTime?   @map("published_at") @db.Timestamptz(6)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByAdminId String?     @map("created_by_admin_id") @db.Uuid
+
+  images       LoungeImage[]
+  reservations LoungeReservation[]
+
+  @@index([city, status])
+  @@index([featured, status])
+  @@index([slug])
+  @@map("lounges")
+}
+
+// ==============================================================================
+// 29. Lounge Image Entity
+// ==============================================================================
+
+model LoungeImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  loungeId     String   @map("lounge_id") @db.Uuid
+  imageUrl     String   @map("image_url") @db.VarChar(512)
+  altText      String?  @map("alt_text") @db.VarChar(255)
+  displayOrder Int      @default(0) @map("display_order")
+  isCover      Boolean  @default(false) @map("is_cover")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lounge Lounge @relation(fields: [loungeId], references: [id], onDelete: Cascade)
+
+  @@index([loungeId, displayOrder])
+  @@map("lounge_images")
+}
+
+// ==============================================================================
+// 30. Lounge Reservation Entity
+// ==============================================================================
+
+model LoungeReservation {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  reservationReference String                  @unique @map("reservation_reference") @db.VarChar(64)
+  loungeId             String                  @map("lounge_id") @db.Uuid
+  passengerId          String                  @map("passenger_id") @db.Uuid
+  reservationDate      DateTime                @map("reservation_date") @db.Date
+  reservationTime      String                  @map("reservation_time") @db.VarChar(16)
+  guestsCount          Int                     @default(1) @map("guests_count")
+  specialRequests      String?                 @map("special_requests") @db.Text
+  status               LoungeReservationStatus @default(PENDING)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  lounge    Lounge    @relation(fields: [loungeId], references: [id], onDelete: Restrict)
+  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+
+  @@index([passengerId, status])
+  @@index([loungeId, reservationDate])
+  @@map("lounge_reservations")
 }

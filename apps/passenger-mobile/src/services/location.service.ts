@@ -9,6 +9,19 @@
 import * as Location from 'expo-location';
 import { Platform } from 'react-native';
 import { AddressLocation, LocationCoordinates } from '../types';
+import { offlineGpsQueueService } from './offlineGpsQueue.service';
+
+export interface GpsTelemetrySample {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  speed: number | null;
+  heading: number | null;
+  altitude: number | null;
+  deviceTimestamp: string;
+  tripId: string;
+  sequenceNumber: number;
+}
 
 export const DEFAULT_ADDIS_COORDINATES: LocationCoordinates = {
   latitude: 8.9778,
@@ -168,6 +181,73 @@ export class LocationService {
    */
   static getDefaultLocation(): AddressLocation {
     return { ...DEFAULT_PICKUP_LOCATION };
+  }
+
+  private static activeSubscription: Location.LocationSubscription | null = null;
+  private static sequenceCounter: number = 1;
+
+  /**
+   * Starts high-accuracy GNSS/GPS tracking independent of internet connectivity.
+   * Captured samples are immediately stored in the persistent local SQLite queue.
+   */
+  static async startTripTracking(
+    tripId: string,
+    onSample?: (sample: GpsTelemetrySample) => void
+  ): Promise<boolean> {
+    try {
+      const perm = await this.checkPermissions();
+      if (!perm.granted) {
+        const requested = await this.requestPermissions();
+        if (!requested.granted) return false;
+      }
+
+      this.stopTripTracking();
+      this.sequenceCounter = 1;
+
+      // Watch position with highest accuracy supported by native GNSS chip
+      this.activeSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2500, // 2.5 seconds
+          distanceInterval: 5, // 5 meters
+        },
+        async (loc) => {
+          const sample: GpsTelemetrySample = {
+            tripId,
+            sequenceNumber: this.sequenceCounter++,
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            accuracy: loc.coords.accuracy ?? 5.0,
+            speed: loc.coords.speed ?? null,
+            heading: loc.coords.heading ?? null,
+            altitude: loc.coords.altitude ?? null,
+            deviceTimestamp: new Date(loc.timestamp).toISOString(),
+          };
+
+          // Save into persistent local offline queue
+          await offlineGpsQueueService.enqueueSample(sample);
+
+          if (onSample) {
+            onSample(sample);
+          }
+        }
+      );
+
+      return true;
+    } catch (err) {
+      console.warn('[LocationService] Failed to start active trip tracking:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Stops active GNSS/GPS trip tracking
+   */
+  static stopTripTracking() {
+    if (this.activeSubscription) {
+      this.activeSubscription.remove();
+      this.activeSubscription = null;
+    }
   }
 }
 

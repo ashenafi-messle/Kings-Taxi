@@ -6,6 +6,7 @@ import { TelegramIdentityStore } from '../../src/integrations/telegram/telegramI
 import { AuthService, resetAuthSessions, resetIdentifierRateLimitTracker } from '../../src/modules/auth/auth.service';
 import { normalizeEthiopianPhone, maskPhone, isManualPhoneInput } from '../../src/utils/phone';
 import { AppError } from '../../src/core/errors/appError';
+import { prisma } from '../../src/config/database';
 
 describe('Telegram Phone Linking and OTP Flow (Section 10 Test Suite)', () => {
   let telegramService: TelegramService;
@@ -18,6 +19,10 @@ describe('Telegram Phone Linking and OTP Flow (Section 10 Test Suite)', () => {
     sentTelegramRequests = [];
     resetAuthSessions();
     resetIdentifierRateLimitTracker();
+
+    // Mock database queries for unit tests so they don't depend on live database connection
+    vi.spyOn(prisma.passenger, 'findFirst').mockResolvedValue(null);
+    vi.spyOn(prisma.oTPVerification, 'create').mockResolvedValue({} as any);
 
     // Enable active bot token for unit tests to verify real request structures
     env.TELEGRAM_BOT_TOKEN = '123456789:TEST_BOT_TOKEN_XYZ';

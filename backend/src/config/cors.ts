@@ -10,10 +10,20 @@ export function getCorsOptions(): CorsOptions {
   return {
     origin: allowedOrigins,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'Idempotency-Key'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-request-id',
+      'Idempotency-Key',
+      'Cache-Control',
+      'cache-control',
+      'Pragma',
+      'Expires',
+      'X-Requested-With',
+      'Accept',
+    ],
     exposedHeaders: ['x-request-id'],
     maxAge: 86400, // 24 hours
   };
 }
-

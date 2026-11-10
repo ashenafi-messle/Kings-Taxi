@@ -9,7 +9,7 @@ import {
   TextInput,
   TouchableOpacity,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { CheckCircle2, Navigation, MapPin, Share2 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import {
@@ -21,30 +21,58 @@ import {
 import { useRideStore } from '../../src/stores';
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
+import { RideBooking } from '../../src/types';
 
 export default function RideReceiptScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ id?: string }>();
   const { t } = useTranslation(['transportation', 'common', 'navigation', 'payments']);
-  const { currentRide, resetRide } = useRideStore();
+  const { currentRide, lastCompletedRide, rideHistory, resetRide } = useRideStore();
 
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const ride = currentRide || {
+  const selectedFromHistory = params.id ? rideHistory.find((r) => r.id === params.id) : null;
+  const ride: RideBooking =
+    selectedFromHistory ||
+    lastCompletedRide ||
+    currentRide ||
+    rideHistory[0] || {
     id: 'ride_rec_demo',
-    pickup: { title: 'Bole International Airport (ADD)' },
-    destination: { title: 'Ethiopian Skylight Hotel' },
-    finalPrice: 480,
-    estimatedPrice: 480,
+    status: 'PAYMENT_COMPLETED',
+    subcityName: 'Maraki',
+    pickup: {
+      id: 'maraki_loc',
+      title: 'Maraki Campus, University of Gondar',
+      address: 'Maraki Campus, Gondar',
+      coordinates: { latitude: 12.6074, longitude: 37.4589 },
+      city: 'Gondar',
+    },
+    destination: {
+      id: 'fasil_loc',
+      title: 'Fasil Ghebbi (Royal Enclosure), Gondar',
+      address: 'Piasa, Gondar',
+      coordinates: { latitude: 12.608, longitude: 37.469 },
+      city: 'Gondar',
+    },
+    finalPrice: 185,
+    estimatedPrice: 185,
     distanceKm: 4.8,
     estimatedDurationMins: 14,
+    createdAt: new Date().toISOString(),
     driver: {
-      name: 'Abebe Kebede',
-      vehiclePlate: 'AA 3-B48192',
-      vehicleModel: 'Toyota Corolla Silver',
+      id: 'driver_demo_1',
+      name: 'Dawit Haile',
+      phone: '+251918000000',
+      rating: 4.9,
+      totalTrips: 184,
+      vehiclePlate: '3-A12345',
+      vehicleModel: 'Corolla',
+      vehicleMake: 'Toyota',
+      vehicleColor: 'Silver',
       photoUrl:
-        'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80',
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
     },
   };
 
@@ -56,10 +84,15 @@ export default function RideReceiptScreen() {
     }, 600);
   };
 
+  const totalPriceVal = ride.finalPrice ?? ride.estimatedPrice ?? 150;
+  const baseFareVal = ride.fareBreakdown?.baseFare ?? 100;
+  const distanceFareVal = ride.fareBreakdown?.distanceFare ?? Math.round(ride.distanceKm * 25);
+  const timeFareVal = ride.fareBreakdown?.timeFare ?? Math.max(0, totalPriceVal - baseFareVal - distanceFareVal);
+
   const breakdownItems = [
-    { label: t('baseFare'), amount: 180 },
-    { label: `${t('distanceCharge')} (${ride.distanceKm} ${t('common:km')})`, amount: 220 },
-    { label: `${t('timeCharge')} (${ride.estimatedDurationMins} ${t('common:mins')})`, amount: 80 },
+    { label: t('baseFare'), amount: baseFareVal },
+    { label: `${t('distanceCharge')} (${ride.distanceKm.toFixed(1)} ${t('common:km')} @ ETB 25/km)`, amount: distanceFareVal },
+    { label: `${t('timeCharge')} (~${ride.estimatedDurationMins} ${t('common:mins')} @ ETB 2/min)`, amount: timeFareVal },
   ];
 
   return (
@@ -87,7 +120,7 @@ export default function RideReceiptScreen() {
           <Text style={styles.paidTitle}>{t('payments:successTitle')}</Text>
           <Text style={styles.paidMethod}>Telebirr SuperApp</Text>
           <Text style={styles.totalAmountText}>
-            {formatETB(ride.finalPrice || ride.estimatedPrice)}
+            {formatETB(totalPriceVal)}
           </Text>
         </View>
 
@@ -95,11 +128,11 @@ export default function RideReceiptScreen() {
         <View style={styles.routeCard}>
           <View style={styles.routeRow}>
             <Navigation size={14} color={theme.colors.success} />
-            <Text style={styles.routeText}>{ride.pickup.title}</Text>
+            <Text style={styles.routeText}>{ride.pickup?.title || (ride.subcityName ? `${ride.subcityName} Subcity` : 'Gondar City')}</Text>
           </View>
           <View style={styles.routeRow}>
             <MapPin size={14} color={theme.colors.danger} />
-            <Text style={styles.routeText}>{ride.destination.title}</Text>
+            <Text style={styles.routeText}>{ride.destination?.title || 'On-Demand Journey in Gondar'}</Text>
           </View>
         </View>
 
@@ -107,7 +140,7 @@ export default function RideReceiptScreen() {
         <Text style={styles.sectionTitle}>{t('receiptTitle')}</Text>
         <PriceBreakdown
           items={breakdownItems}
-          total={ride.finalPrice || ride.estimatedPrice}
+          total={totalPriceVal}
           totalLabel={t('totalFare')}
           style={styles.priceCard}
         />

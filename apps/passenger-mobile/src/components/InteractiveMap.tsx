@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { MapPin, Navigation, Car, AlertTriangle } from 'lucide-react-native';
+import { MapPin, Navigation, Car, AlertTriangle, WifiOff, Layers } from 'lucide-react-native';
 import { theme } from '../theme';
 import { LocationCoordinates } from '../types';
 
@@ -20,6 +20,9 @@ export interface InteractiveMapProps {
   onRequestPermission?: () => void;
   height?: number;
   style?: ViewStyle;
+  isOffline?: boolean;
+  cachedRegionName?: string;
+  lastKnownTimestamp?: string;
 }
 
 export const InteractiveMap: React.FC<InteractiveMapProps> = ({
@@ -30,10 +33,13 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   onRequestPermission,
   height = 240,
   style,
+  isOffline = false,
+  cachedRegionName = 'Gondar City',
+  lastKnownTimestamp,
 }) => {
   return (
     <View style={[styles.container, { height }, style]}>
-      {/* Visual Map Canvas Grid (Simulated High-Performance Vector Grid) */}
+      {/* Visual Map Canvas Grid (Cached 2D Vector Grid) */}
       <View style={styles.gridCanvas}>
         <View style={styles.gridLineHorizontal1} />
         <View style={styles.gridLineHorizontal2} />
@@ -68,13 +74,18 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           </View>
         )}
 
-        {/* Driver Live Marker */}
+        {/* Driver Live / Last Known Marker */}
         {driverCoords && (
           <View style={styles.driverMarkerWrapper}>
-            <View style={styles.driverPulseRing} />
-            <View style={styles.driverCarPin}>
+            <View style={[styles.driverPulseRing, isOffline && styles.driverPulseRingOffline]} />
+            <View style={[styles.driverCarPin, isOffline && styles.driverCarPinOffline]}>
               <Car size={16} color="#FFFFFF" />
             </View>
+            {isOffline && (
+              <View style={styles.offlineLastKnownBadge}>
+                <Text style={styles.offlineLastKnownText}>Last Known</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -85,6 +96,16 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           </View>
         )}
       </View>
+
+      {/* Offline Cached Map Badge */}
+      {isOffline && (
+        <View style={styles.offlineMapBadge}>
+          <WifiOff size={12} color="#92400E" />
+          <Text style={styles.offlineMapBadgeText}>
+            Cached 2D Map • {cachedRegionName}
+          </Text>
+        </View>
+      )}
 
       {/* Permission Warning Notice */}
       {!permissionGranted && (
@@ -314,5 +335,47 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     ...theme.shadows.card,
+  },
+  offlineMapBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: theme.borderRadius.full,
+    ...theme.shadows.subtle,
+  },
+  offlineMapBadgeText: {
+    ...theme.typography.captionBold,
+    fontSize: 10,
+    color: '#92400E',
+  },
+  driverPulseRingOffline: {
+    borderColor: '#94A3B8',
+    backgroundColor: 'rgba(148, 163, 184, 0.2)',
+  },
+  driverCarPinOffline: {
+    backgroundColor: '#64748B',
+    borderColor: '#94A3B8',
+  },
+  offlineLastKnownBadge: {
+    position: 'absolute',
+    bottom: -16,
+    alignSelf: 'center',
+    backgroundColor: '#475569',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  offlineLastKnownText: {
+    ...theme.typography.captionBold,
+    fontSize: 9,
+    color: '#FFFFFF',
   },
 });

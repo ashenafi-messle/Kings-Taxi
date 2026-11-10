@@ -8,3 +8,5 @@ export * from './heritage.service';
 export * from './payment.service';
 export * from './location.service';
 export * from './notification.service';
+export * from './network.service';
+export * from './offlineGpsQueue.service';

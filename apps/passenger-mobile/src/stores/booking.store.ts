@@ -4,12 +4,15 @@ import {
   HotelReservation,
 } from '../types';
 import { mockHotels } from '../mocks';
+import { HotelService } from '../services/hotel.service';
 
 interface BookingStoreState {
   hotelReservations: HotelReservation[];
   tourContracts: FullContractTransportationRequest[];
+  isLoading: boolean;
 
   // Actions
+  fetchHotelReservations: () => Promise<void>;
   addHotelReservation: (reservation: Omit<HotelReservation, 'id' | 'createdAt' | 'reservationCode'>) => HotelReservation;
   cancelHotelReservation: (id: string) => void;
   createTourContract: (request: Omit<FullContractTransportationRequest, 'id' | 'createdAt' | 'status'>) => FullContractTransportationRequest;
@@ -17,6 +20,7 @@ interface BookingStoreState {
 }
 
 export const useBookingStore = create<BookingStoreState>((set) => ({
+  isLoading: false,
   hotelReservations: [
     {
       id: 'res_htl_8829',
@@ -75,6 +79,20 @@ export const useBookingStore = create<BookingStoreState>((set) => ({
       createdAt: '2026-10-18T11:00:00Z',
     },
   ],
+
+  fetchHotelReservations: async () => {
+    try {
+      set({ isLoading: true });
+      const res = await HotelService.getPassengerBookings();
+      if (res.success && res.data && res.data.length > 0) {
+        set({ hotelReservations: res.data, isLoading: false });
+      } else {
+        set({ isLoading: false });
+      }
+    } catch {
+      set({ isLoading: false });
+    }
+  },
 
   addHotelReservation: (reservationData) => {
     const newReservation: HotelReservation = {

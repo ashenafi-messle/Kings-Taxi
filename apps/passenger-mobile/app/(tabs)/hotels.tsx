@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,25 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Hotel as HotelIcon, MapPin } from 'lucide-react-native';
+import {
+  Hotel as HotelIcon,
+  MapPin,
+  Coffee,
+  Plane,
+  Clock,
+  Users,
+  Sparkles,
+} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../src/theme';
 import { SearchInput, HotelCard, EmptyState } from '../../src/components';
-import { mockHotels } from '../../src/mocks';
+import { HotelService } from '../../src/services/hotel.service';
+import { Hotel, Lounge } from '../../src/types';
+import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
 
 interface CityFilter {
@@ -23,6 +35,7 @@ interface CityFilter {
 
 const CITY_OPTIONS: CityFilter[] = [
   { id: 'ALL', name: 'All Cities', labelKey: 'allCities' },
+  { id: 'Gondar', name: 'Gondar (GDQ)', labelKey: 'cities.gondar' },
   { id: 'Addis Ababa', name: 'Addis Ababa', labelKey: 'cities.addisAbaba' },
   { id: 'Bahir Dar', name: 'Bahir Dar', labelKey: 'cities.bahirDar' },
   { id: 'Hawassa', name: 'Hawassa', labelKey: 'cities.hawassa' },
@@ -33,35 +46,107 @@ export default function HotelsTabScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation(['hotels', 'home', 'common']);
+
+  const [activeCategory, setActiveCategory] = useState<'HOTELS' | 'LOUNGES'>('HOTELS');
   const [selectedCityId, setSelectedCityId] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const filteredHotels = mockHotels.filter((hotel) => {
-    const matchesCity =
-      selectedCityId === 'ALL' ||
-      hotel.city.toLowerCase() === selectedCityId.toLowerCase();
-    const matchesSearch =
-      hotel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      hotel.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      hotel.address.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCity && matchesSearch;
-  });
+  const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [lounges, setLounges] = useState<Lounge[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      setIsLoading(true);
+      try {
+        if (activeCategory === 'HOTELS') {
+          const res = await HotelService.searchHotels(searchQuery, selectedCityId);
+          if (isMounted && res.success && res.data) {
+            setHotels(res.data);
+          }
+        } else {
+          const res = await HotelService.listLounges(selectedCityId);
+          if (isMounted && res.success && res.data) {
+            let list = res.data;
+            if (searchQuery) {
+              list = list.filter(
+                (l) =>
+                  l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  l.address.toLowerCase().includes(searchQuery.toLowerCase())
+              );
+            }
+            setLounges(list);
+          }
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeCategory, selectedCityId, searchQuery]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
+        {/* Title and Top Section */}
         <View style={styles.headerTitleRow}>
           <HotelIcon size={22} color={theme.colors.hotelAccent} />
-          <Text style={styles.headerTitle}>{t('home:services.hotelsTitle')}</Text>
+          <Text style={styles.headerTitle}>Kings Hospitality</Text>
         </View>
         <Text style={styles.headerSubtitle}>
-          {t('home:services.hotelsSubtitle')}
+          Curated luxury hotels, airport transfers & premium lounges in Gondar and across Ethiopia.
         </Text>
 
+        {/* Category Switcher: Hotels vs Lounges */}
+        <View style={styles.tabSwitcher}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeCategory === 'HOTELS' && styles.tabButtonActive]}
+            onPress={() => setActiveCategory('HOTELS')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeCategory === 'HOTELS' }}
+          >
+            <HotelIcon
+              size={16}
+              color={activeCategory === 'HOTELS' ? theme.colors.primaryDark : theme.colors.textMuted}
+            />
+            <Text
+              style={[styles.tabButtonText, activeCategory === 'HOTELS' && styles.tabButtonTextActive]}
+            >
+              Luxury Hotels
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabButton, activeCategory === 'LOUNGES' && styles.tabButtonActive]}
+            onPress={() => setActiveCategory('LOUNGES')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeCategory === 'LOUNGES' }}
+          >
+            <Coffee
+              size={16}
+              color={activeCategory === 'LOUNGES' ? theme.colors.primaryDark : theme.colors.textMuted}
+            />
+            <Text
+              style={[styles.tabButtonText, activeCategory === 'LOUNGES' && styles.tabButtonTextActive]}
+            >
+              VIP Lounges
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Search Bar */}
         <SearchInput
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder={t('hotels:searchPlaceholder')}
+          placeholder={
+            activeCategory === 'HOTELS'
+              ? 'Search hotels, locations or amenities...'
+              : 'Search lounges, terraces & airport VIP spaces...'
+          }
           style={styles.searchBar}
         />
 
@@ -93,7 +178,7 @@ export default function HotelsTabScreen() {
                     isSelected && styles.cityPillTextActive,
                   ]}
                 >
-                  {t(item.labelKey as any)}
+                  {item.name}
                 </Text>
               </TouchableOpacity>
             );
@@ -104,32 +189,125 @@ export default function HotelsTabScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollList,
-          { paddingBottom: theme.layout.tabBarContentPadding + insets.bottom },
+          { paddingBottom: theme.layout.tabBarContentPadding + insets.bottom + 20 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {filteredHotels.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primaryDark} />
+            <Text style={styles.loadingText}>Loading curated hospitality destinations...</Text>
+          </View>
+        ) : activeCategory === 'HOTELS' ? (
+          hotels.length === 0 ? (
+            <EmptyState
+              title={t('hotels:noHotelsFound')}
+              description={t('common:noResults')}
+              actionTitle={t('hotels:resetFilters')}
+              onAction={() => {
+                setSearchQuery('');
+                setSelectedCityId('ALL');
+              }}
+            />
+          ) : (
+            hotels.map((hotel) => (
+              <View key={hotel.id} style={styles.cardWrapper}>
+                <HotelCard
+                  hotel={hotel}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/hotels/[id]',
+                      params: { id: hotel.id },
+                    })
+                  }
+                />
+                {/* Fixed Gondar Airport Pickup Badge */}
+                <View style={styles.transferBadge}>
+                  <Plane size={12} color="#0D5C3A" />
+                  <Text style={styles.transferBadgeText}>
+                    Direct Gondar Airport (GDQ) Transfer Available
+                  </Text>
+                </View>
+              </View>
+            ))
+          )
+        ) : lounges.length === 0 ? (
           <EmptyState
-            title={t('hotels:noHotelsFound')}
-            description={t('common:noResults')}
-            actionTitle={t('hotels:resetFilters')}
+            title="No Lounges Found"
+            description="No lounges matching your current search or city filter."
+            actionTitle="Reset Filters"
             onAction={() => {
               setSearchQuery('');
               setSelectedCityId('ALL');
             }}
           />
         ) : (
-          filteredHotels.map((hotel) => (
-            <HotelCard
-              key={hotel.id}
-              hotel={hotel}
-              onPress={() =>
+          lounges.map((lounge) => (
+            <TouchableOpacity
+              key={lounge.id}
+              activeOpacity={0.88}
+              style={styles.loungeCard}
+              onPress={() => {
+                // Navigate or prompt reservation
                 router.push({
-                  pathname: '/hotels/[id]',
-                  params: { id: hotel.id },
-                })
-              }
-            />
+                  pathname: '/hotels/reserve',
+                  params: {
+                    hotelId: 'goha-hotel-gondar',
+                    loungeId: lounge.id,
+                  },
+                });
+              }}
+            >
+              <Image source={{ uri: lounge.coverImage }} style={styles.loungeImage} />
+              <View style={styles.loungeOverlayTag}>
+                <Sparkles size={11} color="#FFF" />
+                <Text style={styles.loungeOverlayText}>VIP LOUNGE</Text>
+              </View>
+
+              <View style={styles.loungeContent}>
+                <View style={styles.loungeHeaderRow}>
+                  <Text style={styles.loungeTitle} numberOfLines={1}>
+                    {lounge.name}
+                  </Text>
+                  <View style={styles.cityPillSmall}>
+                    <MapPin size={10} color={theme.colors.hotelAccent} />
+                    <Text style={styles.cityPillSmallText}>{lounge.city}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.loungeAddress} numberOfLines={1}>
+                  {lounge.address}
+                </Text>
+
+                <Text style={styles.loungeDesc} numberOfLines={2}>
+                  {lounge.description}
+                </Text>
+
+                <View style={styles.loungeMetaRow}>
+                  <View style={styles.loungeMetaItem}>
+                    <Clock size={12} color={theme.colors.textMuted} />
+                    <Text style={styles.loungeMetaText}>{lounge.openingHours || '07:00 - 23:00'}</Text>
+                  </View>
+                  <View style={styles.loungeMetaItem}>
+                    <Users size={12} color={theme.colors.textMuted} />
+                    <Text style={styles.loungeMetaText}>Capacity: {lounge.capacity} guests</Text>
+                  </View>
+                </View>
+
+                <View style={styles.loungeFooterRow}>
+                  <View>
+                    <Text style={styles.startingFrom}>Pass Rate</Text>
+                    <Text style={styles.loungePrice}>
+                      {formatETB(lounge.pricePerPerson)}
+                      <Text style={styles.perPerson}> / guest</Text>
+                    </Text>
+                  </View>
+                  <View style={styles.reserveBtn}>
+                    <Text style={styles.reserveBtnText}>Reserve Pass</Text>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -165,6 +343,34 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: theme.spacing.sm,
   },
+  tabSwitcher: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.borderRadius.md,
+    padding: 3,
+    marginBottom: theme.spacing.sm,
+    gap: 4,
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: theme.borderRadius.sm,
+  },
+  tabButtonActive: {
+    backgroundColor: theme.colors.surface,
+    ...theme.shadows.subtle,
+  },
+  tabButtonText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.textMuted,
+  },
+  tabButtonTextActive: {
+    color: theme.colors.primaryDark,
+  },
   searchBar: {
     marginBottom: theme.spacing.sm,
   },
@@ -184,17 +390,172 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   cityPillActive: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primaryDark,
+    backgroundColor: theme.colors.hotelAccent,
+    borderColor: theme.colors.hotelAccent,
   },
   cityPillText: {
     ...theme.typography.captionBold,
-    color: theme.colors.textSecondary,
+    color: theme.colors.textMuted,
   },
   cityPillTextActive: {
-    color: theme.colors.text,
+    color: theme.colors.surface,
   },
   scrollList: {
     padding: theme.spacing.md,
+  },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+  },
+  cardWrapper: {
+    position: 'relative',
+    marginBottom: theme.spacing.sm,
+  },
+  transferBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#E6F4EA',
+    borderWidth: 1,
+    borderColor: '#CEEAD6',
+    borderRadius: theme.borderRadius.sm,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginTop: -8,
+    marginBottom: theme.spacing.md,
+    marginHorizontal: 4,
+  },
+  transferBadgeText: {
+    ...theme.typography.captionBold,
+    color: '#0D5C3A',
+    fontSize: 11,
+  },
+  loungeCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.card,
+  },
+  loungeImage: {
+    width: '100%',
+    height: 160,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  loungeOverlayTag: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(17, 24, 39, 0.85)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  loungeOverlayText: {
+    ...theme.typography.captionBold,
+    color: '#FFF',
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  loungeContent: {
+    padding: theme.spacing.md,
+  },
+  loungeHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  loungeTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  cityPillSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: theme.colors.surfaceMuted,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.full,
+  },
+  cityPillSmallText: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    fontSize: 10,
+  },
+  loungeAddress: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    marginBottom: 6,
+  },
+  loungeDesc: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  loungeMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    marginBottom: 10,
+  },
+  loungeMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  loungeMetaText: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    fontSize: 11,
+  },
+  loungeFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  startingFrom: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    fontSize: 11,
+  },
+  loungePrice: {
+    ...theme.typography.h3,
+    color: theme.colors.primaryDark,
+  },
+  perPerson: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+  },
+  reserveBtn: {
+    backgroundColor: theme.colors.primaryDark,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: theme.borderRadius.md,
+  },
+  reserveBtnText: {
+    ...theme.typography.captionBold,
+    color: '#FFF',
   },
 });
