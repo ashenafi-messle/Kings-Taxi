@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { bookingController } from './booking.controller';
+import { passengerBookingHistoryController } from '../passengers/passengerBookingHistory.controller';
 import { authenticateToken } from '../../core/middleware/auth.middleware';
 import { ApiResponse } from '../../core/response/apiResponse';
 
@@ -16,6 +17,11 @@ bookingRouter.get('/status', (_req: Request, res: Response) => {
     'Booking service status operational'
   );
 });
+
+// Unified booking history alias
+bookingRouter.get('/history', authenticateToken, (req, res) =>
+  passengerBookingHistoryController.listBookings(req, res)
+);
 
 // Fare estimation
 bookingRouter.post('/estimate', (req, res) => bookingController.estimate(req, res));

@@ -31,9 +31,9 @@ export const DestinationCard: React.FC<DestinationCardProps> = ({
     >
       <View style={styles.iconContainer}>
         {isRecent ? (
-          <Navigation size={18} color={theme.colors.primaryDark} />
+          <Navigation size={18} color={theme.colors.antiqueGold} />
         ) : (
-          <MapPin size={18} color={theme.colors.secondary} />
+          <MapPin size={18} color={theme.colors.deepChocolate} />
         )}
       </View>
       <View style={styles.textContainer}>
@@ -55,13 +55,15 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.borderGold,
   },
   iconContainer: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.surfaceGold,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.md,
@@ -71,7 +73,8 @@ const styles = StyleSheet.create({
   },
   title: {
     ...theme.typography.bodyBold,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   address: {
     ...theme.typography.caption,

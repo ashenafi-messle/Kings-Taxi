@@ -3,20 +3,30 @@ import { logger } from '../../core/logging/logger';
 import { HotelStatus } from '@prisma/client';
 import { CreateHotelDto, UpdateHotelDto, CreateHotelImageDto } from './hospitality.types';
 
-function isDbConnectionError(err: any): boolean {
+export function isDbConnectionError(err: any): boolean {
   if (!err) return false;
-  const msg = typeof err.message === 'string' ? err.message : '';
+  const name = String(err.name || '');
+  const msg = String(err.message || '');
+  const code = String(err.code || '');
+
   return (
-    err.code === 'P1001' ||
-    err.code === 'P1002' ||
-    err.name === 'PrismaClientInitializationError' ||
+    name.includes('PrismaClient') ||
+    code.startsWith('P1') ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'EADDRNOTAVAIL' ||
+    code === 'EHOSTUNREACH' ||
     msg.includes("Can't reach database server") ||
     msg.includes('connection timed out') ||
-    msg.includes('Connection refused')
+    msg.includes('Connection refused') ||
+    msg.includes('connect ECONNREFUSED') ||
+    msg.includes('connect ETIMEDOUT') ||
+    msg.includes('database') ||
+    msg.includes('5433')
   );
 }
 
-const BUILTIN_GONDAR_HOTELS: any[] = [
+export const BUILTIN_GONDAR_HOTELS: any[] = [
   {
     id: 'h_goha_hotel_gondar',
     name: 'Goha Hotel Gondar',
@@ -190,6 +200,260 @@ const BUILTIN_GONDAR_HOTELS: any[] = [
         vehicleType: 'STANDARD_SEDAN',
         vehicleCapacity: 4,
         fixedPrice: 1000,
+        currency: 'ETB',
+        isActive: true,
+      },
+    ],
+  },
+  {
+    id: 'htl_kuriftu_bahirdar',
+    name: 'Kuriftu Resort & Spa Lake Tana',
+    slug: 'kuriftu-resort-spa-lake-tana',
+    shortDescription: 'Lakeside sanctuary with authentic stone bungalows, ayurvedic spa, and Blue Nile vistas.',
+    description:
+      'Set directly on the serene shores of Lake Tana, source of the Blue Nile. Crafted with authentic Ethiopian stone architecture and world-class hospitality.',
+    address: 'Lake Tana Shoreline, Bahir Dar',
+    city: 'Bahir Dar',
+    subCity: 'Lake Tana',
+    latitude: 11.5941,
+    longitude: 37.3912,
+    starRating: 5,
+    featured: true,
+    checkInTime: '13:00',
+    checkOutTime: '11:00',
+    coverImage: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&auto=format&fit=crop&q=80',
+    images: [
+      { id: 'img_kuriftu_1', imageUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&auto=format&fit=crop&q=80', isCover: true, altText: 'Kuriftu Resort Lakefront' },
+    ],
+    amenities: [
+      { id: 'a_wifi', name: 'High-Speed Wi-Fi', slug: 'wifi', icon: 'wifi' },
+      { id: 'a_pool', name: 'Lake View Pool', slug: 'swimming-pool', icon: 'droplet' },
+      { id: 'a_spa', name: 'Ayurvedic Spa', slug: 'spa', icon: 'sparkles' },
+    ],
+    startingPrice: 7200,
+    currency: 'ETB',
+    airportTransferAvailable: true,
+    airportTransferRate: {
+      id: 'rate_kuriftu_sedan',
+      origin: 'Bahir Dar Ginbot 20 Airport (BJR)',
+      fixedPrice: 1500,
+      currency: 'ETB',
+      vehicleType: 'STANDARD_SEDAN',
+      capacity: 4,
+    },
+    roomTypes: [
+      {
+        id: 'rm_lake_bungalow',
+        name: 'Lakefront Stone Bungalow',
+        description: 'Authentic stone villa with private terrace overlooking the islands of Lake Tana.',
+        basePricePerNight: 7200,
+        currency: 'ETB',
+        maximumAdults: 2,
+        maximumChildren: 1,
+        maximumGuests: 3,
+        totalInventory: 10,
+        status: 'ACTIVE',
+        rates: [],
+      },
+    ],
+    transferRates: [
+      {
+        id: 'rate_kuriftu_sedan',
+        originName: 'Bahir Dar Airport (BJR) / Gondar (GDQ)',
+        destinationName: 'Kuriftu Resort Lake Tana Gate',
+        vehicleType: 'STANDARD_SEDAN',
+        vehicleCapacity: 4,
+        fixedPrice: 1500,
+        currency: 'ETB',
+        isActive: true,
+      },
+    ],
+  },
+  {
+    id: 'htl_skylight_addis',
+    name: 'Ethiopian Skylight Hotel',
+    slug: 'ethiopian-skylight-hotel',
+    shortDescription: 'Africa’s largest luxury airport hotel with fine dining, grand spa, and VIP lounges.',
+    description:
+      'Africa’s largest luxury airport hotel. Features magnificent dining options, luxury spa treatments, outdoor pool, and seamless airport connectivity.',
+    address: 'Bole Road, 5 min from Bole Airport, Addis Ababa',
+    city: 'Addis Ababa',
+    subCity: 'Bole',
+    latitude: 8.9855,
+    longitude: 38.7925,
+    starRating: 5,
+    featured: true,
+    checkInTime: '14:00',
+    checkOutTime: '12:00',
+    coverImage: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&auto=format&fit=crop&q=80',
+    images: [
+      { id: 'img_skylight_1', imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&auto=format&fit=crop&q=80', isCover: true, altText: 'Skylight Hotel Grand Atrium' },
+    ],
+    amenities: [
+      { id: 'a_wifi', name: 'High-Speed Wi-Fi', slug: 'wifi', icon: 'wifi' },
+      { id: 'a_airport', name: 'Airport Shuttle', slug: 'airport-transfer', icon: 'plane' },
+      { id: 'a_pool', name: 'Swimming Pool', slug: 'swimming-pool', icon: 'droplet' },
+    ],
+    startingPrice: 8500,
+    currency: 'ETB',
+    airportTransferAvailable: true,
+    airportTransferRate: {
+      id: 'rate_skylight_sedan',
+      origin: 'Addis Ababa Bole International Airport (ADD)',
+      fixedPrice: 800,
+      currency: 'ETB',
+      vehicleType: 'STANDARD_SEDAN',
+      capacity: 4,
+    },
+    roomTypes: [
+      {
+        id: 'rm_deluxe_king',
+        name: 'Deluxe King Room',
+        description: 'Spacious 38sqm room with city views, plush king bed, marble bathroom, and work desk.',
+        basePricePerNight: 8500,
+        currency: 'ETB',
+        maximumAdults: 2,
+        maximumChildren: 1,
+        maximumGuests: 3,
+        totalInventory: 20,
+        status: 'ACTIVE',
+        rates: [],
+      },
+    ],
+    transferRates: [
+      {
+        id: 'rate_skylight_sedan',
+        originName: 'Bole International Airport (ADD)',
+        destinationName: 'Ethiopian Skylight Hotel Main Lobby',
+        vehicleType: 'STANDARD_SEDAN',
+        vehicleCapacity: 4,
+        fixedPrice: 800,
+        currency: 'ETB',
+        isActive: true,
+      },
+    ],
+  },
+  {
+    id: 'htl_haile_hawassa',
+    name: 'Haile Resort Hawassa',
+    slug: 'haile-resort-hawassa',
+    shortDescription: 'Founded by Olympic legend Haile Gebrselassie. Combines lakefront tranquility and sports facilities.',
+    description:
+      'Founded by Olympic legend Haile Gebrselassie. Combines lakefront tranquility, sports facilities, and Sidama regional culture.',
+    address: 'Lake Hawassa, Sidama Region',
+    city: 'Hawassa',
+    subCity: 'Lake Hawassa',
+    latitude: 7.0504,
+    longitude: 38.4763,
+    starRating: 4,
+    featured: true,
+    checkInTime: '14:00',
+    checkOutTime: '12:00',
+    coverImage: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=1200&auto=format&fit=crop&q=80',
+    images: [
+      { id: 'img_haile_1', imageUrl: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=1200&auto=format&fit=crop&q=80', isCover: true, altText: 'Haile Resort Hawassa' },
+    ],
+    amenities: [
+      { id: 'a_wifi', name: 'High-Speed Wi-Fi', slug: 'wifi', icon: 'wifi' },
+      { id: 'a_pool', name: 'Lake View Terrace', slug: 'terrace', icon: 'sun' },
+    ],
+    startingPrice: 5800,
+    currency: 'ETB',
+    airportTransferAvailable: true,
+    airportTransferRate: {
+      id: 'rate_haile_sedan',
+      origin: 'Hawassa Airport (AWA)',
+      fixedPrice: 1000,
+      currency: 'ETB',
+      vehicleType: 'STANDARD_SEDAN',
+      capacity: 4,
+    },
+    roomTypes: [
+      {
+        id: 'rm_haile_standard',
+        name: 'Classic Lake View Room',
+        description: 'Bright room with balcony facing Lake Hawassa and surrounding gardens.',
+        basePricePerNight: 5800,
+        currency: 'ETB',
+        maximumAdults: 2,
+        maximumChildren: 1,
+        maximumGuests: 3,
+        totalInventory: 12,
+        status: 'ACTIVE',
+        rates: [],
+      },
+    ],
+    transferRates: [
+      {
+        id: 'rate_haile_sedan',
+        originName: 'Hawassa Airport (AWA)',
+        destinationName: 'Haile Resort Gate',
+        vehicleType: 'STANDARD_SEDAN',
+        vehicleCapacity: 4,
+        fixedPrice: 1000,
+        currency: 'ETB',
+        isActive: true,
+      },
+    ],
+  },
+  {
+    id: 'htl_maribela_lalibela',
+    name: 'Hotel Maribela Lalibela',
+    slug: 'hotel-maribela-lalibela',
+    shortDescription: 'Perched on the edge of the Lalibela valley with mountain sunset vistas, minutes from rock-hewn churches.',
+    description:
+      'Perched on the edge of the Lalibela valley with breathtaking mountain sunset vistas, minutes away from the 11 rock-hewn churches.',
+    address: 'Mountain Ridge Road, Lalibela',
+    city: 'Lalibela',
+    subCity: 'Lalibela',
+    latitude: 12.0319,
+    longitude: 39.0413,
+    starRating: 4,
+    featured: true,
+    checkInTime: '12:00',
+    checkOutTime: '10:00',
+    coverImage: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1200&auto=format&fit=crop&q=80',
+    images: [
+      { id: 'img_maribela_1', imageUrl: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1200&auto=format&fit=crop&q=80', isCover: true, altText: 'Maribela Lalibela' },
+    ],
+    amenities: [
+      { id: 'a_wifi', name: 'High-Speed Wi-Fi', slug: 'wifi', icon: 'wifi' },
+      { id: 'a_airport', name: 'Lalibela Airport Transfer', slug: 'airport-transfer', icon: 'plane' },
+    ],
+    startingPrice: 6400,
+    currency: 'ETB',
+    airportTransferAvailable: true,
+    airportTransferRate: {
+      id: 'rate_maribela_sedan',
+      origin: 'Lalibela Airport (LLI)',
+      fixedPrice: 1200,
+      currency: 'ETB',
+      vehicleType: 'STANDARD_SEDAN',
+      capacity: 4,
+    },
+    roomTypes: [
+      {
+        id: 'rm_maribela_valley',
+        name: 'Valley View Deluxe Room',
+        description: 'Room with private balcony furnished with traditional daybeds overlooking the mountain canyon.',
+        basePricePerNight: 6400,
+        currency: 'ETB',
+        maximumAdults: 2,
+        maximumChildren: 1,
+        maximumGuests: 3,
+        totalInventory: 8,
+        status: 'ACTIVE',
+        rates: [],
+      },
+    ],
+    transferRates: [
+      {
+        id: 'rate_maribela_sedan',
+        originName: 'Lalibela Airport (LLI)',
+        destinationName: 'Hotel Maribela Front Entrance',
+        vehicleType: 'STANDARD_SEDAN',
+        vehicleCapacity: 4,
+        fixedPrice: 1200,
         currency: 'ETB',
         isActive: true,
       },
@@ -622,7 +886,11 @@ export class HotelService {
   }
 
   getBuiltinHotelDetails(idOrSlug: string) {
-    const found = BUILTIN_GONDAR_HOTELS.find((h) => h.id === idOrSlug || h.slug === idOrSlug);
+    const clean = (s: string) => (s || '').toLowerCase().replace(/^(h_|htl_)/, '').replace(/[-_]/g, '');
+    const target = clean(idOrSlug);
+    const found = BUILTIN_GONDAR_HOTELS.find(
+      (h) => h.id === idOrSlug || h.slug === idOrSlug || clean(h.id) === target || clean(h.slug) === target
+    );
     return found || null;
   }
 
@@ -633,7 +901,7 @@ export class HotelService {
     try {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
 
-      const where: any = isUuid ? { id: idOrSlug } : { slug: idOrSlug };
+      const where: any = isUuid ? { id: idOrSlug } : { OR: [{ id: idOrSlug }, { slug: idOrSlug }] };
       if (isPublic) {
         where.status = HotelStatus.PUBLISHED;
       }

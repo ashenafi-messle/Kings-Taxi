@@ -33,7 +33,10 @@ export default function HeritageDetailScreen() {
   const site = mockHeritageSites.find((s) => s.id === id) || mockHeritageSites[0];
 
   const handleStartContractWithSite = () => {
-    router.push('/tours/contract-builder');
+    router.push({
+      pathname: '/tours/book',
+      params: { siteId: site.id },
+    });
   };
 
   return (
@@ -58,7 +61,7 @@ export default function HeritageDetailScreen() {
 
           {site.unescoDesignated && (
             <View style={styles.unescoPill}>
-              <Award size={14} color="#8B5CF6" />
+              <Award size={14} color={theme.colors.primary} />
               <Text style={styles.unescoText}>
                 {t('categories.unesco')} ({site.unescoYear || 1978})
               </Text>
@@ -172,13 +175,15 @@ const styles = StyleSheet.create({
   },
   regionText: {
     ...theme.typography.captionBold,
-    color: theme.colors.heritageAccent,
+    color: theme.colors.primary,
   },
   unescoPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#F3E8FF',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: theme.borderRadius.sm,
@@ -187,7 +192,7 @@ const styles = StyleSheet.create({
   },
   unescoText: {
     ...theme.typography.captionBold,
-    color: '#7C3AED',
+    color: theme.colors.primaryDark,
   },
   infoGrid: {
     flexDirection: 'row',
@@ -219,13 +224,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.md,
     marginTop: theme.spacing.sm,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border,
+    borderTopWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderColor: theme.colors.borderGold,
   },
   sectionTitle: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
     marginBottom: theme.spacing.xs,
   },
   bodyText: {
@@ -248,32 +254,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contractBanner: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FAF4DC',
     margin: theme.spacing.md,
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: theme.colors.borderGold,
     flexDirection: 'row',
     gap: theme.spacing.md,
-    ...theme.shadows.subtle,
+    ...theme.shadows.cardGold,
   },
   contractIconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#FAF2D3',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderGold,
   },
   contractTextWrap: {
     flex: 1,
   },
   contractBannerTitle: {
     ...theme.typography.bodyBold,
-    color: theme.colors.secondary,
+    color: theme.colors.primaryDark,
   },
   contractBannerDesc: {
     ...theme.typography.caption,

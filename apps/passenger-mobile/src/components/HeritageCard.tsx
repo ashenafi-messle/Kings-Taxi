@@ -34,7 +34,7 @@ export const HeritageCard: React.FC<HeritageCardProps> = ({
       <Image source={{ uri: site.heroImage }} style={styles.image} />
       {site.unescoDesignated && (
         <View style={styles.unescoBadge}>
-          <Award size={12} color="#FFFFFF" />
+          <Award size={12} color={theme.colors.brightGold} />
           <Text style={styles.unescoText}>{t('categories.unesco')}</Text>
         </View>
       )}
@@ -42,7 +42,7 @@ export const HeritageCard: React.FC<HeritageCardProps> = ({
         <View style={styles.titleRow}>
           <Text style={styles.name}>{site.name}</Text>
           <View style={styles.regionRow}>
-            <MapPin size={12} color={theme.colors.heritageAccent} />
+            <MapPin size={12} color={theme.colors.antiqueGold} />
             <Text style={styles.regionText}>{site.region}</Text>
           </View>
         </View>
@@ -63,10 +63,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.lg,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
     marginBottom: theme.spacing.md,
-    ...theme.shadows.card,
+    ...theme.shadows.cardGold,
   },
   image: {
     width: '100%',
@@ -77,17 +77,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: theme.spacing.sm,
     left: theme.spacing.sm,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: theme.colors.deepChocolate,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.brightGold,
   },
   unescoText: {
     ...theme.typography.badge,
-    color: '#FFFFFF',
+    color: theme.colors.champagneGold,
+    fontWeight: '700',
   },
   content: {
     padding: theme.spacing.md,
@@ -100,7 +103,8 @@ const styles = StyleSheet.create({
   },
   name: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
     flex: 1,
   },
   regionRow: {
@@ -110,7 +114,7 @@ const styles = StyleSheet.create({
   },
   regionText: {
     ...theme.typography.captionBold,
-    color: theme.colors.heritageAccent,
+    color: theme.colors.antiqueGold,
   },
   description: {
     ...theme.typography.bodySmall,
@@ -123,7 +127,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: theme.spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.borderGold,
   },
   duration: {
     ...theme.typography.caption,
@@ -131,6 +135,7 @@ const styles = StyleSheet.create({
   },
   exploreLink: {
     ...theme.typography.captionBold,
-    color: theme.colors.primaryDark,
+    color: theme.colors.antiqueGold,
+    fontWeight: '700',
   },
 });

@@ -205,7 +205,12 @@ export class HotelService {
       };
     }
 
-    const fallback = mockHotels.find((h) => h.id === idOrSlug) || null;
+    const clean = (s: string) => (s || '').toLowerCase().replace(/^(htl_|h_)/, '').replace(/[-_]/g, '');
+    const target = clean(idOrSlug);
+    const fallback =
+      mockHotels.find(
+        (h) => h.id === idOrSlug || (h as any).slug === idOrSlug || clean(h.id) === target
+      ) || null;
     return {
       success: Boolean(fallback),
       data: fallback,

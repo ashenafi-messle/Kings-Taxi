@@ -52,6 +52,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   row: {
     flexDirection: 'row',

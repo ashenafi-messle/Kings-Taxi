@@ -26,12 +26,12 @@ export const SearchInput: React.FC<SearchInputProps> = ({
 }) => {
   return (
     <View style={[styles.container, style]}>
-      <Search size={20} color={theme.colors.textMuted} style={styles.searchIcon} />
+      <Search size={20} color={theme.colors.antiqueGold} style={styles.searchIcon} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={theme.colors.textLight}
+        placeholderTextColor={theme.colors.textMuted}
         style={styles.input}
         returnKeyType="search"
       />
@@ -44,7 +44,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={styles.clearButton}
         >
-          <X size={18} color={theme.colors.textMuted} />
+          <X size={18} color={theme.colors.deepChocolateLight} />
         </TouchableOpacity>
       )}
     </View>
@@ -59,8 +59,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
+    ...theme.shadows.subtle,
   },
   searchIcon: {
     marginRight: theme.spacing.sm,
@@ -68,8 +69,9 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     ...theme.typography.body,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
     height: '100%',
+    fontWeight: '500',
   },
   clearButton: {
     padding: theme.spacing.xs,

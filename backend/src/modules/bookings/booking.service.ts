@@ -1,7 +1,8 @@
-import { prisma } from '../../core/database/prisma';
+import { prisma, isDbConnectionError } from '../../core/database/prisma';
 import { BookingStatus, TripStatus, DriverAvailabilityStatus, DriverVerificationStatus, ActorType } from '@prisma/client';
 import { fareService } from '../fares/fare.service';
 import { logger } from '../../core/logging/logger';
+import { AppError } from '../../core/errors/appError';
 import * as crypto from 'crypto';
 
 export interface CreateRideDto {
@@ -296,52 +297,79 @@ export class BookingService {
    */
   async getPassengerRides(passengerId: string, page: number = 1, limit: number = 20) {
     const skip = (page - 1) * limit;
-    const [rides, total] = await Promise.all([
-      prisma.booking.findMany({
-        where: { passengerId },
-        include: {
-          driver: {
-            select: {
-              id: true,
-              fullName: true,
-              profileImage: true,
-              rating: true,
-            },
-          },
-          vehicle: {
-            select: {
-              vehicleModel: true,
-              plateNumber: true,
-              vehicleType: true,
-            },
-          },
-          subcity: {
-            select: {
-              name: true,
-            },
-          },
-          trip: {
-            select: {
-              tripStatus: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.booking.count({ where: { passengerId } }),
-    ]);
 
-    return {
-      rides,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    try {
+      const [rides, total] = await Promise.all([
+        prisma.booking.findMany({
+          where: { passengerId },
+          include: {
+            driver: {
+              select: {
+                id: true,
+                fullName: true,
+                profileImage: true,
+                rating: true,
+              },
+            },
+            vehicle: {
+              select: {
+                vehicleModel: true,
+                plateNumber: true,
+                vehicleType: true,
+              },
+            },
+            subcity: {
+              select: {
+                name: true,
+              },
+            },
+            trip: {
+              select: {
+                tripStatus: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.booking.count({ where: { passengerId } }),
+      ]);
+
+      return {
+        rides,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        logger.warn(
+          { err: err.message, passengerId },
+          '[Bookings] Database unreachable on port 5433. Checking environment policy.'
+        );
+        if (process.env.NODE_ENV === 'production') {
+          throw new AppError(
+            'Passenger rides service temporarily unavailable.',
+            503,
+            'SERVICE_UNAVAILABLE'
+          );
+        }
+        return {
+          rides: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 1,
+          },
+        };
+      }
+      throw err;
+    }
   }
 
   /**

@@ -38,7 +38,7 @@ export const HotelCard: React.FC<HotelCardProps> = ({
         <View style={styles.headerRow}>
           <Text style={styles.name} numberOfLines={1}>{hotel.name}</Text>
           <View style={styles.cityPill}>
-            <MapPin size={10} color={theme.colors.hotelAccent} />
+            <MapPin size={10} color={theme.colors.antiqueGold} />
             <Text style={styles.cityText}>{hotel.city}</Text>
           </View>
         </View>
@@ -74,10 +74,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.lg,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
     marginBottom: theme.spacing.md,
-    ...theme.shadows.card,
+    ...theme.shadows.cardGold,
   },
   image: {
     width: '100%',
@@ -95,7 +95,8 @@ const styles = StyleSheet.create({
   },
   name: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
     flex: 1,
     marginRight: theme.spacing.xs,
   },
@@ -103,14 +104,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: theme.colors.surfaceGold,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
   },
   cityText: {
     ...theme.typography.captionBold,
-    color: theme.colors.hotelAccent,
+    color: theme.colors.antiqueGold,
   },
   rating: {
     marginVertical: 4,
@@ -127,7 +130,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
     paddingTop: theme.spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.borderGold,
   },
   startingFrom: {
     ...theme.typography.caption,
@@ -135,20 +138,25 @@ const styles = StyleSheet.create({
   },
   price: {
     ...theme.typography.h4,
-    color: theme.colors.primaryDark,
+    color: theme.colors.antiqueGold,
+    fontWeight: '800',
   },
   perNight: {
     ...theme.typography.caption,
     color: theme.colors.textMuted,
   },
   viewButton: {
-    backgroundColor: theme.colors.secondary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.antiqueGold,
+    borderWidth: 1,
+    borderColor: theme.colors.brightGold,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: theme.borderRadius.md,
+    ...theme.shadows.subtle,
   },
   viewButtonText: {
     ...theme.typography.captionBold,
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

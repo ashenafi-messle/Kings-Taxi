@@ -82,11 +82,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.lg,
-    ...theme.shadows.elevated,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
+    ...theme.shadows.cardGold,
   },
   title: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
     marginBottom: theme.spacing.xs,
   },
   message: {

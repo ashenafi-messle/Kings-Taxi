@@ -37,6 +37,7 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
   importantForAutofill,
 }) => {
   const [isSecure, setIsSecure] = useState(true);
+  const [isFocused, setIsFocused] = useState(false);
 
   // Compute password strength
   const getStrength = (pwd: string) => {
@@ -61,8 +62,18 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
     <View style={[styles.container, style]}>
       <Text style={styles.label}>{label}</Text>
 
-      <View style={[styles.inputRow, error ? styles.inputError : null]}>
-        <Lock size={18} color={colors.secondaryText} style={styles.leftIcon} />
+      <View
+        style={[
+          styles.inputRow,
+          isFocused ? styles.inputFocused : null,
+          error ? styles.inputError : null,
+        ]}
+      >
+        <Lock
+          size={18}
+          color={isFocused ? colors.primaryGold : colors.secondaryText}
+          style={styles.leftIcon}
+        />
 
         <TextInput
           style={styles.input}
@@ -78,6 +89,8 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
           importantForAutofill={
             importantForAutofill || (shouldDisableAutofill ? 'no' : 'auto')
           }
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
         />
 
         <TouchableOpacity
@@ -136,18 +149,22 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.dark,
+    color: colors.deepChocolate,
     marginBottom: 6,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: '#FFFDF9',
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: colors.borderGold || colors.champagneGold,
     borderRadius: 14,
     paddingHorizontal: 14,
     height: 52,
+  },
+  inputFocused: {
+    borderColor: colors.primaryGold,
+    backgroundColor: colors.surface,
   },
   inputError: {
     borderColor: colors.error,
@@ -158,7 +175,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     height: '100%',
-    color: colors.dark,
+    color: colors.deepChocolate,
     fontSize: 15,
   },
   eyeBtn: {

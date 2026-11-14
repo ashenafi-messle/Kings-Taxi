@@ -10,3 +10,6 @@ export * from './location.service';
 export * from './notification.service';
 export * from './network.service';
 export * from './offlineGpsQueue.service';
+export * from './passengerBookings.service';
+export * from './biometricAuth.service';
+export * from './passengerProfile.service';

@@ -159,6 +159,30 @@ enum SupportPriority {
   URGENT
 }
 
+enum SupportCategory {
+  RIDE_ISSUE
+  BOOKING_ISSUE
+  PAYMENT_ISSUE
+  ACCOUNT_ISSUE
+  DRIVER_BEHAVIOR
+  SAFETY_CONCERN
+  APP_TECHNICAL_ISSUE
+  OTHER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_PASSENGER
+  RESOLVED
+  CLOSED
+}
+
+enum SupportSenderType {
+  PASSENGER
+  ADMIN
+}
+
 enum CancellationActor {
   PASSENGER
   DRIVER
@@ -250,6 +274,53 @@ enum PaymentType {
   HOTEL_RESERVATION
   AIRPORT_TRANSFER
   LOUNGE_ACCESS
+  HERITAGE_TOUR
+}
+
+enum HeritageDestinationType {
+  HISTORICAL_PALACE
+  RELIGIOUS_MONASTERY
+  ANCIENT_RUIN
+  NATURAL_LANDMARK
+  CULTURAL_VILLAGE
+}
+
+enum HeritageTourBookingStatus {
+  DRAFT
+  REQUESTED
+  UNDER_REVIEW
+  CONFIRMED
+  GUIDE_ASSIGNED
+  VEHICLE_ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum TourComponentType {
+  TOUR_BASE
+  VEHICLE_TRANSPORT
+  TOUR_GUIDE
+  ENTRANCE_FEE
+  BOAT_TRANSPORT
+  PARKING
+  ADDITIONAL_SERVICE
+}
+
+enum TourPricingMethod {
+  FIXED_PER_BOOKING
+  PER_PASSENGER
+  PER_VEHICLE
+  PER_HOUR
+  PER_DAY
+}
+
+enum GuideAvailabilityStatus {
+  AVAILABLE
+  ASSIGNED
+  ON_LEAVE
+  INACTIVE
 }
 
 // ------------------------------------------------------------------------------
@@ -263,6 +334,7 @@ model Passenger {
   phoneNumber  String?       @unique @map("phone_number") @db.VarChar(32)
   passwordHash String        @map("password_hash") @db.VarChar(255)
   profileImage String?       @map("profile_image") @db.VarChar(512)
+  profileImagePublicId String? @map("profile_image_public_id") @db.VarChar(255)
   isVerified   Boolean       @default(false) @map("is_verified")
   accountStatus AccountStatus @default(PENDING_VERIFICATION) @map("account_status")
   language     SupportedLanguage @default(EN) @map("preferred_language")
@@ -280,6 +352,8 @@ model Passenger {
   bookings         Booking[]
   payments         Payment[]
   supportRequests  SupportRequest[]
+  supportTickets   SupportTicket[]
+  supportMessages  SupportMessage[]
   notifications    Notification[]
   refreshTokens    RefreshToken[]
   sessions         PassengerSession[]
@@ -287,6 +361,7 @@ model Passenger {
   auditLogs        AuditLog[]
   hotelBookings    HotelBooking[]
   loungeReservations LoungeReservation[]
+  heritageTourBookings HeritageTourBooking[]
 
   @@index([accountStatus])
   @@index([phoneNumber])
@@ -345,6 +420,7 @@ model Driver {
   trips            Trip[]
   refreshTokens    RefreshToken[]
   auditLogs        AuditLog[]
+  heritageTourBookings HeritageTourBooking[]
   subcities        DriverSubcity[]
   trackingSessions TripTrackingSession[]
 
@@ -376,6 +452,7 @@ model Vehicle {
   driver   Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
   bookings Booking[]
   trips    Trip[]
+  heritageTourBookings HeritageTourBooking[]
 
   @@index([driverId])
   @@index([plateNumber])
@@ -483,6 +560,7 @@ model Payment {
   id                   String        @id @default(uuid()) @db.Uuid
   bookingId            String?       @unique @map("booking_id") @db.Uuid
   hotelBookingId       String?       @unique @map("hotel_booking_id") @db.Uuid
+  heritageTourBookingId String?      @unique @map("heritage_tour_booking_id") @db.Uuid
   passengerId          String        @map("passenger_id") @db.Uuid
   paymentType          PaymentType   @default(TAXI_RIDE) @map("payment_type")
   amount               Decimal       @db.Decimal(10, 2)
@@ -496,9 +574,10 @@ model Payment {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  booking      Booking?      @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  hotelBooking HotelBooking? @relation(fields: [hotelBookingId], references: [id], onDelete: Restrict)
-  passenger    Passenger     @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  booking             Booking?             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  hotelBooking        HotelBooking?        @relation(fields: [hotelBookingId], references: [id], onDelete: Restrict)
+  heritageTourBooking HeritageTourBooking? @relation(fields: [heritageTourBookingId], references: [id], onDelete: Restrict)
+  passenger           Passenger            @relation(fields: [passengerId], references: [id], onDelete: Restrict)
 
   @@index([passengerId, paymentStatus])
   @@index([transactionReference])
@@ -558,6 +637,66 @@ model SupportRequest {
   @@index([status])
   @@index([createdAt])
   @@map("support_requests")
+}
+
+// ------------------------------------------------------------------------------
+// 8b. SupportTicket & SupportMessage Entities (Help & Support Multi-Message System)
+// ------------------------------------------------------------------------------
+
+model SupportTicket {
+  id                 String              @id @default(uuid()) @db.Uuid
+  ticketNumber       String              @unique @map("ticket_number") @db.VarChar(32)
+  passengerId        String              @map("passenger_id") @db.Uuid
+  category           SupportCategory     @default(OTHER)
+  subject            String              @db.VarChar(160)
+  status             SupportTicketStatus @default(OPEN)
+  priority           SupportPriority     @default(MEDIUM)
+  assignedAdminId    String?             @map("assigned_admin_id") @db.Uuid
+  assignedAdminName  String?             @map("assigned_admin_name") @db.VarChar(128)
+  bookingId          String?             @map("booking_id") @db.Uuid
+  bookingType        String?             @map("booking_type") @db.VarChar(32)
+  lastMessageAt      DateTime            @default(now()) @map("last_message_at") @db.Timestamptz(6)
+  resolvedAt         DateTime?           @map("resolved_at") @db.Timestamptz(6)
+  closedAt           DateTime?           @map("closed_at") @db.Timestamptz(6)
+  resolutionNotes    String?             @map("resolution_notes") @db.Text
+
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relationships
+  passenger          Passenger           @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+  messages           SupportMessage[]
+
+  @@index([passengerId, status])
+  @@index([status])
+  @@index([category])
+  @@index([ticketNumber])
+  @@index([lastMessageAt])
+  @@index([createdAt])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id          String            @id @default(uuid()) @db.Uuid
+  ticketId    String            @map("ticket_id") @db.Uuid
+  senderType  SupportSenderType @default(PASSENGER) @map("sender_type")
+  passengerId String?           @map("passenger_id") @db.Uuid
+  adminId     String?           @map("admin_id") @db.Uuid
+  senderName  String            @map("sender_name") @db.VarChar(128)
+  message     String            @db.Text
+  readAt      DateTime?         @map("read_at") @db.Timestamptz(6)
+
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relationships
+  ticket      SupportTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  passenger   Passenger?        @relation(fields: [passengerId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([senderType, readAt])
+  @@index([createdAt])
+  @@map("support_messages")
 }
 
 // ------------------------------------------------------------------------------
@@ -1192,4 +1331,308 @@ model LoungeReservation {
   @@index([passengerId, status])
   @@index([loungeId, reservationDate])
   @@map("lounge_reservations")
+}
+
+// ==============================================================================
+// 31. Heritage Site Entity (Destination Catalog)
+// ==============================================================================
+
+model HeritageSite {
+  id                            String                  @id @default(uuid()) @db.Uuid
+  name                          String                  @db.VarChar(128)
+  slug                          String                  @unique @db.VarChar(128)
+  shortDescription              String                  @map("short_description") @db.VarChar(255)
+  fullDescription               String                  @map("full_description") @db.Text
+  region                        String                  @default("Amhara Region") @db.VarChar(64)
+  city                          String                  @default("Gondar") @db.VarChar(64)
+  specificLocation              String                  @map("specific_location") @db.VarChar(255)
+  latitude                      Float
+  longitude                     Float
+  destinationType               HeritageDestinationType @default(HISTORICAL_PALACE) @map("destination_type")
+  estimatedVisitDurationMinutes Int                     @default(120) @map("estimated_visit_duration_minutes")
+  historicalInformation         String?                 @map("historical_information") @db.Text
+  culturalInformation           String?                 @map("cultural_information") @db.Text
+  visitingRules                 String?                 @map("visiting_rules") @db.Text
+  coverImageUrl                 String                  @map("cover_image_url") @db.VarChar(512)
+  galleryImages                 String[]                @default([]) @map("gallery_images")
+  highlights                    String[]                @default([])
+  entryFeeETB                   Decimal                 @default(0.00) @map("entry_fee_etb") @db.Decimal(10, 2)
+  requiresBoatTransport         Boolean                 @default(false) @map("requires_boat_transport")
+  unescoDesignated              Boolean                 @default(false) @map("unesco_designated")
+  unescoYear                    Int?                    @map("unesco_year")
+  status                        HotelStatus             @default(DRAFT)
+  featured                      Boolean                 @default(false)
+  displayOrder                  Int                     @default(0) @map("display_order")
+  publishedAt                   DateTime?               @map("published_at") @db.Timestamptz(6)
+  createdAt                     DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByAdminId              String?                 @map("created_by_admin_id") @db.Uuid
+
+  packageSites HeritageTourPackageSite[]
+  bookingSites HeritageTourBookingSite[]
+
+  @@index([city, status])
+  @@index([region, status])
+  @@index([featured, status])
+  @@index([slug])
+  @@map("heritage_sites")
+}
+
+// ==============================================================================
+// 32. Heritage Tour Package Entity (Multi-site or Curated Packages)
+// ==============================================================================
+
+model HeritageTourPackage {
+  id                     String      @id @default(uuid()) @db.Uuid
+  name                   String      @db.VarChar(128)
+  slug                   String      @unique @db.VarChar(128)
+  description            String      @db.Text
+  itinerary              Json?       @db.JsonB
+  estimatedDurationMinutes Int       @default(240) @map("estimated_duration_minutes")
+  region                 String      @default("Amhara Region") @db.VarChar(64)
+  city                   String      @default("Gondar") @db.VarChar(64)
+  basePrice              Decimal     @map("base_price") @db.Decimal(10, 2)
+  currency               String      @default("ETB") @db.VarChar(8)
+  minimumPassengers      Int         @default(1) @map("minimum_passengers")
+  maximumPassengers      Int         @default(20) @map("maximum_passengers")
+  includesGuide          Boolean     @default(false) @map("includes_guide")
+  includesTransport      Boolean     @default(true) @map("includes_transport")
+  includesBoat           Boolean     @default(false) @map("includes_boat")
+  status                 HotelStatus @default(DRAFT)
+  featured               Boolean     @default(false)
+  requiresAdvanceBooking Boolean     @default(true) @map("requires_advance_booking")
+  minimumAdvanceHours    Int         @default(6) @map("minimum_advance_hours")
+  cancellationPolicy     String?     @map("cancellation_policy") @db.Text
+  publishedAt            DateTime?   @map("published_at") @db.Timestamptz(6)
+  createdAt              DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByAdminId       String?     @map("created_by_admin_id") @db.Uuid
+
+  packageSites    HeritageTourPackageSite[]
+  priceComponents HeritageTourPriceComponent[]
+  bookings        HeritageTourBooking[]
+
+  @@index([city, status])
+  @@index([featured, status])
+  @@index([slug])
+  @@map("heritage_tour_packages")
+}
+
+// ==============================================================================
+// 33. Heritage Tour Package Site Entity (Package Destination Order)
+// ==============================================================================
+
+model HeritageTourPackageSite {
+  id                            String   @id @default(uuid()) @db.Uuid
+  packageId                     String   @map("package_id") @db.Uuid
+  siteId                        String   @map("site_id") @db.Uuid
+  visitOrder                    Int      @default(1) @map("visit_order")
+  estimatedVisitDurationMinutes Int      @default(60) @map("estimated_visit_duration_minutes")
+  notes                         String?  @db.Text
+  createdAt                     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  package HeritageTourPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  site    HeritageSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, siteId])
+  @@index([packageId, visitOrder])
+  @@map("heritage_tour_package_sites")
+}
+
+// ==============================================================================
+// 34. Heritage Tour Price Component Entity (Configurable Itemized Pricing)
+// ==============================================================================
+
+model HeritageTourPriceComponent {
+  id            String            @id @default(uuid()) @db.Uuid
+  packageId     String?           @map("package_id") @db.Uuid
+  name          String            @db.VarChar(128)
+  componentType TourComponentType @map("component_type")
+  pricingMethod TourPricingMethod @map("pricing_method")
+  rate          Decimal           @db.Decimal(10, 2)
+  currency      String            @default("ETB") @db.VarChar(8)
+  isMandatory   Boolean           @default(true) @map("is_mandatory")
+  description   String?           @db.Text
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  package HeritageTourPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId, componentType])
+  @@map("heritage_tour_price_components")
+}
+
+// ==============================================================================
+// 35. Heritage Tour Guide Entity (Certified Professional Guides)
+// ==============================================================================
+
+model HeritageTourGuide {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  fullName           String                  @map("full_name") @db.VarChar(128)
+  languages          String[]                @default(["English", "Amharic"])
+  qualifications     String[]                @default([])
+  specialties        String[]                @default([])
+  dailyRate          Decimal                 @default(1500.00) @map("daily_rate") @db.Decimal(10, 2)
+  hourlyRate         Decimal?                @map("hourly_rate") @db.Decimal(10, 2)
+  phone              String                  @db.VarChar(32)
+  email              String?                 @db.VarChar(255)
+  profileImageUrl    String?                 @map("profile_image_url") @db.VarChar(512)
+  rating             Float                   @default(5.0)
+  totalToursLed      Int                     @default(0) @map("total_tours_led")
+  isActive           Boolean                 @default(true) @map("is_active")
+  availabilityStatus GuideAvailabilityStatus @default(AVAILABLE) @map("availability_status")
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  bookings      HeritageTourBooking[]
+  guideRequests HeritageTourGuideRequest[]
+
+  @@index([availabilityStatus, isActive])
+  @@map("heritage_tour_guides")
+}
+
+// ==============================================================================
+// 36. Heritage Tour Vehicle Option Entity (Tour Transportation)
+// ==============================================================================
+
+model HeritageTourVehicleOption {
+  id              String      @id @default(uuid()) @db.Uuid
+  vehicleType     VehicleType @map("vehicle_type")
+  displayName     String      @map("display_name") @db.VarChar(64)
+  seatingCapacity Int         @map("seating_capacity") @db.SmallInt
+  luggageCapacity Int         @default(2) @map("luggage_capacity") @db.SmallInt
+  baseRate        Decimal     @map("base_rate") @db.Decimal(10, 2)
+  perHourRate     Decimal     @map("per_hour_rate") @db.Decimal(10, 2)
+  isActive        Boolean     @default(true) @map("is_active")
+  features        String[]    @default([])
+  displayOrder    Int         @default(0) @map("display_order")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  bookings HeritageTourBooking[]
+
+  @@index([vehicleType, isActive])
+  @@map("heritage_tour_vehicle_options")
+}
+
+// ==============================================================================
+// 37. Heritage Tour Booking Entity (Authoritative Tour Reservation)
+// ==============================================================================
+
+model HeritageTourBooking {
+  id                  String                    @id @default(uuid()) @db.Uuid
+  bookingReference    String                    @unique @map("booking_reference") @db.VarChar(64)
+  passengerId         String                    @map("passenger_id") @db.Uuid
+  packageId           String?                   @map("package_id") @db.Uuid
+  vehicleOptionId     String?                   @map("vehicle_option_id") @db.Uuid
+  assignedVehicleId   String?                   @map("assigned_vehicle_id") @db.Uuid
+  assignedDriverId    String?                   @map("assigned_driver_id") @db.Uuid
+  assignedGuideId     String?                   @map("assigned_guide_id") @db.Uuid
+  bookingStatus       HeritageTourBookingStatus @default(REQUESTED) @map("booking_status")
+  paymentStatus       PaymentStatus             @default(PENDING) @map("payment_status")
+  scheduledDate       DateTime                  @map("scheduled_date") @db.Date
+  preferredStartTime  String                    @default("09:00") @map("preferred_time") @db.VarChar(16)
+  adults              Int                       @default(1)
+  children            Int                       @default(0)
+  pickupLocation      String                    @map("pickup_location") @db.VarChar(255)
+  pickupLatitude      Float?                    @map("pickup_latitude")
+  pickupLongitude     Float?                    @map("pickup_longitude")
+  specialRequests     String?                   @map("special_requests") @db.Text
+  cancellationReason  String?                   @map("cancellation_reason") @db.Text
+  cancelledAt         DateTime?                 @map("cancelled_at") @db.Timestamptz(6)
+  baseAmount          Decimal                   @map("base_amount") @db.Decimal(10, 2)
+  vehicleAmount       Decimal                   @default(0.00) @map("vehicle_amount") @db.Decimal(10, 2)
+  guideAmount         Decimal                   @default(0.00) @map("guide_amount") @db.Decimal(10, 2)
+  entranceFeesAmount  Decimal                   @default(0.00) @map("entrance_fees_amount") @db.Decimal(10, 2)
+  boatTransportAmount Decimal                   @default(0.00) @map("boat_transport_amount") @db.Decimal(10, 2)
+  discountAmount      Decimal                   @default(0.00) @map("discount_amount") @db.Decimal(10, 2)
+  taxAmount           Decimal                   @default(0.00) @map("tax_amount") @db.Decimal(10, 2)
+  totalAmount         Decimal                   @map("total_amount") @db.Decimal(10, 2)
+  currency            String                    @default("ETB") @db.VarChar(8)
+  pricingSnapshot     Json                      @map("pricing_snapshot") @db.JsonB
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  passenger       Passenger                  @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  package         HeritageTourPackage?       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  vehicleOption   HeritageTourVehicleOption? @relation(fields: [vehicleOptionId], references: [id], onDelete: SetNull)
+  assignedVehicle Vehicle?                   @relation(fields: [assignedVehicleId], references: [id], onDelete: SetNull)
+  assignedDriver  Driver?                    @relation(fields: [assignedDriverId], references: [id], onDelete: SetNull)
+  assignedGuide   HeritageTourGuide?         @relation(fields: [assignedGuideId], references: [id], onDelete: SetNull)
+  bookingSites    HeritageTourBookingSite[]
+  priceItems      HeritageTourBookingPriceItem[]
+  guideRequests   HeritageTourGuideRequest[]
+  payment         Payment?
+
+  @@index([passengerId, bookingStatus])
+  @@index([scheduledDate, bookingStatus])
+  @@index([packageId])
+  @@index([bookingReference])
+  @@map("heritage_tour_bookings")
+}
+
+// ==============================================================================
+// 38. Heritage Tour Booking Site Entity (Snapshot of Itinerary Destinations)
+// ==============================================================================
+
+model HeritageTourBookingSite {
+  id                   String   @id @default(uuid()) @db.Uuid
+  bookingId            String   @map("booking_id") @db.Uuid
+  siteId               String   @map("site_id") @db.Uuid
+  siteNameSnapshot     String   @map("site_name_snapshot") @db.VarChar(128)
+  visitOrder           Int      @default(1) @map("visit_order")
+  entryFeeSnapshot     Decimal  @map("entry_fee_snapshot") @db.Decimal(10, 2)
+  requiresBoatSnapshot Boolean  @default(false) @map("requires_boat_snapshot")
+  notes                String?  @db.Text
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  booking HeritageTourBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  site    HeritageSite        @relation(fields: [siteId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId, visitOrder])
+  @@map("heritage_tour_booking_sites")
+}
+
+// ==============================================================================
+// 39. Heritage Tour Booking Price Item Entity (Itemized Historical Breakdown)
+// ==============================================================================
+
+model HeritageTourBookingPriceItem {
+  id            String            @id @default(uuid()) @db.Uuid
+  bookingId     String            @map("booking_id") @db.Uuid
+  componentName String            @map("component_name") @db.VarChar(128)
+  componentType TourComponentType @map("component_type")
+  pricingMethod TourPricingMethod @map("pricing_method")
+  unitPrice     Decimal           @map("unit_price") @db.Decimal(10, 2)
+  quantity      Int               @default(1)
+  totalPrice    Decimal           @map("total_price") @db.Decimal(10, 2)
+  description   String?           @db.Text
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  booking HeritageTourBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, componentType])
+  @@map("heritage_tour_booking_price_items")
+}
+
+// ==============================================================================
+// 40. Heritage Tour Guide Request Entity (Guide & Language Preferences)
+// ==============================================================================
+
+model HeritageTourGuideRequest {
+  id                String    @id @default(uuid()) @db.Uuid
+  bookingId         String    @map("booking_id") @db.Uuid
+  preferredLanguage String    @default("English") @map("preferred_language") @db.VarChar(64)
+  specialization    String?   @db.VarChar(128)
+  status            String    @default("REQUESTED") @db.VarChar(32)
+  assignedGuideId   String?   @map("assigned_guide_id") @db.Uuid
+  notes             String?   @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking       HeritageTourBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  assignedGuide HeritageTourGuide?  @relation(fields: [assignedGuideId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@map("heritage_tour_guide_requests")
 }

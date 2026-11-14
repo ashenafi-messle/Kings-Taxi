@@ -27,6 +27,7 @@
         "NSLocationWhenInUseUsageDescription": "Kings Taxi uses your location to pinpoint your pickup position and connect you with nearby drivers.",
         "NSCameraUsageDescription": "Kings Taxi requires camera access for document and profile photo verification.",
         "NSPhotoLibraryUsageDescription": "Kings Taxi requires photo library access to upload profile pictures and identity documents.",
+        "NSFaceIDUsageDescription": "Kings Taxi uses Face ID for fast, secure passwordless app unlock.",
         "UIBackgroundModes": [
           "remote-notification"
         ],
@@ -46,7 +47,10 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "INTERNET",
-        "VIBRATE"
+        "VIBRATE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "READ_MEDIA_IMAGES"
       ],
       "intentFilters": [
         {
@@ -77,6 +81,18 @@
       "expo-secure-store",
       "expo-localization",
       "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kings Taxi needs access to your photos to upload your profile avatar."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Kings Taxi to use Face ID for fast and secure account unlock."
+        }
+      ],
       [
         "expo-location",
         {

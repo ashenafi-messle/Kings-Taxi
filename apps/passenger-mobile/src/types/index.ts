@@ -4,3 +4,4 @@ export * from './ride.types';
 export * from './hotel.types';
 export * from './heritage.types';
 export * from './payment.types';
+export * from './bookingsHistory.types';

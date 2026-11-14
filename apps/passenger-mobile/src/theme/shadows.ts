@@ -52,13 +52,37 @@ export const shadows = {
   }),
   goldGlow: Platform.select<ViewStyle>({
     ios: {
-      shadowColor: '#C69A45',
+      shadowColor: '#A36B31',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.25,
       shadowRadius: 12,
     },
     android: {
       elevation: 5,
+    },
+    default: {},
+  }),
+  goldSubtle: Platform.select<ViewStyle>({
+    ios: {
+      shadowColor: '#A36B31',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 6,
+    },
+    android: {
+      elevation: 2,
+    },
+    default: {},
+  }),
+  cardGold: Platform.select<ViewStyle>({
+    ios: {
+      shadowColor: '#502D0A',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+    },
+    android: {
+      elevation: 3,
     },
     default: {},
   }),

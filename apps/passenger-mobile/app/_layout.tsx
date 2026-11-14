@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -24,6 +25,40 @@ export default function RootLayout() {
       console.warn('Failed to restore language settings:', err);
     });
   }, [initSettings]);
+
+  // Web accessibility focus guard: prevents "Blocked aria-hidden on an element because its descendant retained focus"
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const handleBlurHidden = () => {
+        if (document.activeElement && document.activeElement instanceof HTMLElement) {
+          if (document.activeElement.closest('[aria-hidden="true"]')) {
+            document.activeElement.blur();
+          }
+        }
+      };
+
+      window.addEventListener('popstate', handleBlurHidden);
+      window.addEventListener('hashchange', handleBlurHidden);
+
+      let observer: MutationObserver | null = null;
+      try {
+        observer = new MutationObserver(() => {
+          handleBlurHidden();
+        });
+        observer.observe(document.body, {
+          attributes: true,
+          subtree: true,
+          attributeFilter: ['aria-hidden'],
+        });
+      } catch {}
+
+      return () => {
+        window.removeEventListener('popstate', handleBlurHidden);
+        window.removeEventListener('hashchange', handleBlurHidden);
+        if (observer) observer.disconnect();
+      };
+    }
+  }, []);
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
@@ -63,10 +98,6 @@ export default function RootLayout() {
             options={{ presentation: 'card' }}
           />
           <Stack.Screen
-            name="tours/contract-builder"
-            options={{ presentation: 'card' }}
-          />
-          <Stack.Screen
             name="payments/checkout"
             options={{ presentation: 'modal' }}
           />
@@ -76,6 +107,22 @@ export default function RootLayout() {
           />
           <Stack.Screen
             name="support/index"
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="support/create"
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="support/[id]"
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="legal/terms"
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="legal/privacy"
             options={{ presentation: 'card' }}
           />
           <Stack.Screen

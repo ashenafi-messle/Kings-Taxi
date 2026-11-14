@@ -79,15 +79,18 @@ const styles = StyleSheet.create({
   },
   outline: {
     borderWidth: 1.5,
-    borderColor: theme.colors.borderStrong,
-    backgroundColor: theme.colors.surface,
+    borderColor: '#A36B31',
+    backgroundColor: '#FAF4DC',
+    ...theme.shadows.subtle,
   },
   disabled: {
     opacity: 0.6,
   },
   text: {
     ...theme.typography.h4,
-    color: theme.colors.text,
+    color: '#502D0A',
+    fontWeight: '700',
     textAlign: 'center',
+    letterSpacing: 0.2,
   },
 });

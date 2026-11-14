@@ -102,10 +102,10 @@ const styles = StyleSheet.create({
   listCard: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
     overflow: 'hidden',
-    ...theme.shadows.subtle,
+    ...theme.shadows.cardGold,
   },
   languageItem: {
     flexDirection: 'row',
@@ -113,17 +113,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.borderGold,
   },
   languageItemSelected: {
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: theme.colors.paleGold,
   },
   languageTextWrap: {
     flex: 1,
   },
   nativeName: {
     ...theme.typography.bodyBold,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   englishName: {
     ...theme.typography.caption,

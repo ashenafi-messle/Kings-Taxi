@@ -94,7 +94,7 @@ export default function HotelsTabScreen() {
       <View style={styles.header}>
         {/* Title and Top Section */}
         <View style={styles.headerTitleRow}>
-          <HotelIcon size={22} color={theme.colors.hotelAccent} />
+          <HotelIcon size={22} color={theme.colors.antiqueGold} />
           <Text style={styles.headerTitle}>Kings Hospitality</Text>
         </View>
         <Text style={styles.headerSubtitle}>
@@ -111,7 +111,7 @@ export default function HotelsTabScreen() {
           >
             <HotelIcon
               size={16}
-              color={activeCategory === 'HOTELS' ? theme.colors.primaryDark : theme.colors.textMuted}
+              color={activeCategory === 'HOTELS' ? theme.colors.antiqueGold : theme.colors.textMuted}
             />
             <Text
               style={[styles.tabButtonText, activeCategory === 'HOTELS' && styles.tabButtonTextActive]}
@@ -128,7 +128,7 @@ export default function HotelsTabScreen() {
           >
             <Coffee
               size={16}
-              color={activeCategory === 'LOUNGES' ? theme.colors.primaryDark : theme.colors.textMuted}
+              color={activeCategory === 'LOUNGES' ? theme.colors.antiqueGold : theme.colors.textMuted}
             />
             <Text
               style={[styles.tabButtonText, activeCategory === 'LOUNGES' && styles.tabButtonTextActive]}
@@ -325,8 +325,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1.5,
+    borderBottomColor: theme.colors.borderGold,
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -335,7 +335,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...theme.typography.h2,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '800',
   },
   headerSubtitle: {
     ...theme.typography.caption,
@@ -345,11 +346,13 @@ const styles = StyleSheet.create({
   },
   tabSwitcher: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: '#FAF4DC',
     borderRadius: theme.borderRadius.md,
     padding: 3,
     marginBottom: theme.spacing.sm,
     gap: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
   },
   tabButton: {
     flex: 1,
@@ -361,7 +364,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
   },
   tabButtonActive: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#FAF2D3',
+    borderWidth: 1,
+    borderColor: theme.colors.brightGold,
     ...theme.shadows.subtle,
   },
   tabButtonText: {
@@ -369,7 +374,8 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   tabButtonTextActive: {
-    color: theme.colors.primaryDark,
+    color: theme.colors.antiqueGold,
+    fontWeight: '800',
   },
   searchBar: {
     marginBottom: theme.spacing.sm,
@@ -385,20 +391,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
   },
   cityPillActive: {
-    backgroundColor: theme.colors.hotelAccent,
-    borderColor: theme.colors.hotelAccent,
+    backgroundColor: theme.colors.antiqueGold,
+    borderColor: theme.colors.brightGold,
   },
   cityPillText: {
     ...theme.typography.captionBold,
-    color: theme.colors.textMuted,
+    color: theme.colors.deepChocolateLight,
   },
   cityPillTextActive: {
-    color: theme.colors.surface,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   scrollList: {
     padding: theme.spacing.md,
@@ -440,10 +447,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.lg,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
     marginBottom: theme.spacing.md,
-    ...theme.shadows.card,
+    ...theme.shadows.cardGold,
   },
   loungeImage: {
     width: '100%',
@@ -457,14 +464,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(17, 24, 39, 0.85)',
+    backgroundColor: theme.colors.deepChocolate,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: theme.colors.brightGold,
   },
   loungeOverlayText: {
     ...theme.typography.captionBold,
-    color: '#FFF',
+    color: theme.colors.champagneGold,
     fontSize: 10,
     letterSpacing: 0.5,
   },
@@ -479,7 +488,8 @@ const styles = StyleSheet.create({
   },
   loungeTitle: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
     flex: 1,
     marginRight: 8,
   },
@@ -542,20 +552,24 @@ const styles = StyleSheet.create({
   },
   loungePrice: {
     ...theme.typography.h3,
-    color: theme.colors.primaryDark,
+    color: theme.colors.antiqueGold,
+    fontWeight: '700',
   },
   perPerson: {
     ...theme.typography.caption,
     color: theme.colors.textMuted,
   },
   reserveBtn: {
-    backgroundColor: theme.colors.primaryDark,
+    backgroundColor: theme.colors.antiqueGold,
+    borderWidth: 1,
+    borderColor: theme.colors.brightGold,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: theme.borderRadius.md,
   },
   reserveBtnText: {
     ...theme.typography.captionBold,
-    color: '#FFF',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

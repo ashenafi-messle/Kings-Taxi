@@ -9,14 +9,24 @@ import { logger } from '../../core/logging/logger';
 import { HotelBookingStatus } from '@prisma/client';
 
 function handleHospitalityError(res: Response, err: any, fallbackMessage: string) {
-  const msg = typeof err?.message === 'string' ? err.message : '';
+  const name = String(err?.name || '');
+  const msg = String(err?.message || '');
+  const code = String(err?.code || '');
+
   const isDbDown =
-    err?.code === 'P1001' ||
-    err?.code === 'P1002' ||
-    err?.name === 'PrismaClientInitializationError' ||
+    name.includes('PrismaClient') ||
+    code.startsWith('P1') ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'EADDRNOTAVAIL' ||
+    code === 'EHOSTUNREACH' ||
     msg.includes("Can't reach database server") ||
     msg.includes('connection timed out') ||
-    msg.includes('Connection refused');
+    msg.includes('Connection refused') ||
+    msg.includes('connect ECONNREFUSED') ||
+    msg.includes('connect ETIMEDOUT') ||
+    msg.includes('database') ||
+    msg.includes('5433');
 
   if (isDbDown) {
     ApiResponse.error(
@@ -170,7 +180,7 @@ export class HospitalityController {
         ApiResponse.notFound(res, msg.split(': ')[1] || msg);
         return;
       }
-      ApiResponse.serverError(res, err.message || 'Unable to calculate quote');
+      handleHospitalityError(res, err, 'Unable to calculate quote');
     }
   }
 

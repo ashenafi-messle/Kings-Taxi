@@ -155,8 +155,23 @@ export class AuthController {
   static async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const rawRefreshToken = req.body?.refreshToken;
-      const result = await authService.logout(rawRefreshToken);
+      const passengerId = req.user?.sub;
+      const result = await authService.logout(rawRefreshToken, passengerId);
       ApiResponse.success(res, result, 'Logged out successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async logoutAll(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.sub;
+      if (!userId) {
+        ApiResponse.error(res, 'UNAUTHORIZED', 'Authentication required', 401);
+        return;
+      }
+      const result = await authService.logoutAll(userId);
+      ApiResponse.success(res, result, 'All device sessions revoked successfully', 200);
     } catch (err) {
       next(err);
     }

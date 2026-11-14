@@ -17,7 +17,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
 
   return (
     <View style={[styles.container, style]}>
-      <ActivityIndicator size="large" color={theme.colors.primaryDark} />
+      <ActivityIndicator size="large" color={theme.colors.antiqueGold} />
       {displayMessage ? <Text style={styles.message}>{displayMessage}</Text> : null}
     </View>
   );

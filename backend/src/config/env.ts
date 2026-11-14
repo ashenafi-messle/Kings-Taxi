@@ -55,6 +55,12 @@ const envSchema = z.object({
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
   TELEGRAM_WEBHOOK_URL: z.string().optional(),
 
+  // Cloudinary Image Storage
+  CLOUDINARY_CLOUD_NAME: z.string().default('kings-taxi'),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  CLOUDINARY_UPLOAD_PRESET: z.string().optional(),
+
   // Optional future service credentials
   CHAPA_SECRET_KEY: z.string().optional(),
   CHAPA_PUBLIC_KEY: z.string().optional(),
@@ -64,6 +70,7 @@ export type Env = z.infer<typeof envSchema>;
 
 function normalizeDatabaseUrl(urlStr: string): string {
   if (!urlStr || !urlStr.startsWith('postgresql://')) return urlStr;
+  let normalized = urlStr;
   const prefix = 'postgresql://';
   const rest = urlStr.slice(prefix.length);
   const colonIdx = rest.indexOf(':');
@@ -74,10 +81,13 @@ function normalizeDatabaseUrl(urlStr: string): string {
     const hostAndDb = rest.slice(lastAtIdx + 1);
     if (pass.includes('@') || pass.includes('#') || pass.includes('$')) {
       const encodedPass = encodeURIComponent(decodeURIComponent(pass));
-      return `${prefix}${user}:${encodedPass}@${hostAndDb}`;
+      normalized = `${prefix}${user}:${encodedPass}@${hostAndDb}`;
     }
   }
-  return urlStr;
+  if (!normalized.includes('sslmode=')) {
+    normalized += (normalized.includes('?') ? '&' : '?') + 'sslmode=disable';
+  }
+  return normalized;
 }
 
 function parseEnv(): Env {

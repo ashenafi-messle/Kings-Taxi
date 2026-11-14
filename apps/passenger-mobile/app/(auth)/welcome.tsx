@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Globe, ArrowRight, ShieldCheck, Star } from 'lucide-react-native';
+import { Globe, ArrowRight, ShieldCheck, Star, Fingerprint } from 'lucide-react-native';
 import { colors } from '../../src/theme/colors';
 import {
   KingsTaxiLogo,
@@ -23,6 +23,7 @@ import {
 } from '../../src/components';
 import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
 import { useSettingsStore, useAuthStore } from '../../src/stores';
+import { BiometricAuthService } from '../../src/services/biometricAuth.service';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -32,6 +33,45 @@ export default function WelcomeScreen() {
   const { language } = useSettingsStore();
   const { isAuthenticated, user } = useAuthStore();
   const [langModalVisible, setLangModalVisible] = useState(false);
+  const [canBiometricUnlock, setCanBiometricUnlock] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState('Face ID / Fingerprint');
+  const [isBiometricAuthenticating, setIsBiometricAuthenticating] = useState(false);
+
+  // Check device biometric capability and stored preference
+  useEffect(() => {
+    BiometricAuthService.checkCapability().then((cap) => {
+      setBiometricLabel(cap.label);
+    });
+    BiometricAuthService.isBiometricLoginActive().then((active) => {
+      setCanBiometricUnlock(active);
+    });
+  }, []);
+
+  const handleBiometricReentry = async () => {
+    setIsBiometricAuthenticating(true);
+    try {
+      const auth = await BiometricAuthService.authenticate(`Unlock Kings Taxi using ${biometricLabel}`);
+      if (auth.success) {
+        if (!isAuthenticated) {
+          const refreshed = await useAuthStore.getState().refreshSession();
+          if (refreshed) {
+            router.replace('/(tabs)');
+            return;
+          } else {
+            router.push('/(auth)/login');
+            return;
+          }
+        } else {
+          router.replace('/(tabs)');
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Biometric unlock failed:', e);
+    } finally {
+      setIsBiometricAuthenticating(false);
+    }
+  };
 
   // Responsive device classification
   const isSmallDevice = height < 700;
@@ -143,6 +183,24 @@ export default function WelcomeScreen() {
                 </View>
               </View>
 
+              {canBiometricUnlock ? (
+                <TouchableOpacity
+                  style={styles.biometricQuickBtn}
+                  onPress={handleBiometricReentry}
+                  disabled={isBiometricAuthenticating}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Unlock with ${biometricLabel}`}
+                >
+                  <Fingerprint size={18} color={colors.deepGold} />
+                  <Text style={styles.biometricQuickText}>
+                    {isBiometricAuthenticating
+                      ? 'Authenticating...'
+                      : `Unlock with ${biometricLabel}`}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
               <PrimaryButton
                 title="Continue to App"
                 onPress={() => router.replace('/(tabs)')}
@@ -171,16 +229,6 @@ export default function WelcomeScreen() {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={styles.guestLink}
-              onPress={() => router.replace('/(tabs)')}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={t('exploreAsGuest')}
-            >
-              <Text style={styles.guestLinkText}>{t('exploreAsGuest')}</Text>
-            </TouchableOpacity>
-
             <Text style={styles.termsNotice}>
               {t('termsNotice')}{' '}
               <Text style={styles.termsLink}>{t('termsOfService')}</Text> {t('and')}{' '}
@@ -189,6 +237,24 @@ export default function WelcomeScreen() {
           </View>
         ) : (
           <View style={styles.actionsSection}>
+            {canBiometricUnlock ? (
+              <TouchableOpacity
+                style={styles.biometricQuickBtn}
+                onPress={handleBiometricReentry}
+                disabled={isBiometricAuthenticating}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Fast sign-in with ${biometricLabel}`}
+              >
+                <Fingerprint size={18} color={colors.deepGold} />
+                <Text style={styles.biometricQuickText}>
+                  {isBiometricAuthenticating
+                    ? 'Authenticating...'
+                    : `Fast Sign-In with ${biometricLabel}`}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
             <PrimaryButton
               title={t('getStarted')}
               onPress={() => router.push('/(auth)/register')}
@@ -201,16 +267,6 @@ export default function WelcomeScreen() {
               onPress={() => router.push('/(auth)/login')}
               style={styles.secondaryBtn}
             />
-
-            <TouchableOpacity
-              style={styles.guestLink}
-              onPress={() => router.replace('/(tabs)')}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={t('exploreAsGuest')}
-            >
-              <Text style={styles.guestLinkText}>{t('exploreAsGuest')}</Text>
-            </TouchableOpacity>
 
             <Text style={styles.termsNotice}>
               {t('termsNotice')}{' '}
@@ -247,17 +303,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.lightGold,
+    backgroundColor: colors.paleGold,
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.champagne,
+    borderWidth: 1.5,
+    borderColor: colors.brightGold,
   },
   langPillText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.deepGold,
+    color: colors.deepChocolate,
   },
   signInShortcut: {
     paddingVertical: 6,
@@ -284,12 +340,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
     marginVertical: 14,
-    backgroundColor: colors.white,
+    backgroundColor: '#FAF4DC',
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.borderGold,
   },
   trustItem: {
     flexDirection: 'row',
@@ -298,8 +354,8 @@ const styles = StyleSheet.create({
   },
   trustText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: colors.secondaryText,
+    fontWeight: '700',
+    color: colors.deepChocolate,
   },
   trustDot: {
     width: 4,
@@ -325,16 +381,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderColor: colors.borderGold,
   },
-  guestLink: {
-    paddingVertical: 8,
-    marginTop: 2,
-  },
-  guestLinkText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.deepGold,
-    letterSpacing: 0.2,
-  },
   termsNotice: {
     fontSize: 11,
     color: colors.textLight,
@@ -349,7 +395,7 @@ const styles = StyleSheet.create({
   },
   authSessionCard: {
     width: '100%',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: 18,
     borderWidth: 1.5,
@@ -370,16 +416,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.lightGold,
+    backgroundColor: colors.paleGold,
     borderWidth: 1.5,
-    borderColor: colors.primaryGold,
+    borderColor: colors.brightGold,
     alignItems: 'center',
     justifyContent: 'center',
   },
   authAvatarText: {
     fontSize: 18,
     fontWeight: '800',
-    color: colors.deepGold,
+    color: colors.deepChocolate,
   },
   authSessionDetails: {
     flex: 1,
@@ -394,7 +440,7 @@ const styles = StyleSheet.create({
   authWelcomeName: {
     fontSize: 16,
     fontWeight: '800',
-    color: colors.dark,
+    color: colors.deepChocolate,
     marginTop: 2,
   },
   continueBtn: {
@@ -421,5 +467,23 @@ const styles = StyleSheet.create({
   authDividerDot: {
     fontSize: 14,
     color: colors.borderGold,
+  },
+  biometricQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FAF4DC',
+    borderWidth: 1.5,
+    borderColor: colors.borderGold,
+    borderRadius: 14,
+    paddingVertical: 14,
+    width: '100%',
+    marginBottom: 10,
+  },
+  biometricQuickText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.deepChocolate,
   },
 });

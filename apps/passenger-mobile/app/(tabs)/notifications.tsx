@@ -32,15 +32,15 @@ export default function NotificationsScreen() {
   const getCategoryIcon = (category: AppNotification['category']) => {
     switch (category) {
       case 'ride':
-        return <Car size={18} color={theme.colors.primaryDark} />;
+        return <Car size={18} color={theme.colors.antiqueGold} />;
       case 'payment':
         return <CreditCard size={18} color={theme.colors.success} />;
       case 'hotel':
-        return <Hotel size={18} color={theme.colors.hotelAccent} />;
+        return <Hotel size={18} color={theme.colors.antiqueGold} />;
       case 'tour':
-        return <Compass size={18} color={theme.colors.heritageAccent} />;
+        return <Compass size={18} color={theme.colors.deepChocolate} />;
       default:
-        return <Bell size={18} color={theme.colors.secondary} />;
+        return <Bell size={18} color={theme.colors.antiqueGold} />;
     }
   };
 
@@ -57,7 +57,7 @@ export default function NotificationsScreen() {
         </View>
         {unreadCount > 0 && (
           <TouchableOpacity onPress={handleMarkAllRead} style={styles.markReadBtn}>
-            <CheckCheck size={16} color={theme.colors.primaryDark} />
+            <CheckCheck size={16} color={theme.colors.antiqueGold} />
             <Text style={styles.markReadText}>{t('markAllRead')}</Text>
           </TouchableOpacity>
         )}
@@ -130,14 +130,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: '#FAF4DC',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   markReadText: {
     ...theme.typography.captionBold,
-    color: theme.colors.primaryDark,
+    color: theme.colors.antiqueGold,
   },
   scrollList: {
     padding: theme.spacing.md,
@@ -154,8 +156,8 @@ const styles = StyleSheet.create({
     ...theme.shadows.subtle,
   },
   cardUnread: {
-    backgroundColor: '#FFFDF5',
-    borderColor: theme.colors.borderGold,
+    backgroundColor: '#FAF2D3',
+    borderColor: theme.colors.champagneGold,
   },
   iconCircle: {
     width: 38,

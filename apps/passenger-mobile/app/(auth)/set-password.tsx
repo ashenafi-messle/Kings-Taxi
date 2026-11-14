@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '900',
-    color: colors.dark,
+    color: colors.deepChocolate,
     letterSpacing: -0.3,
     marginBottom: 6,
   },
@@ -462,11 +462,11 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   checklistCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: colors.borderGold,
     marginBottom: 24,
     gap: 8,
   },
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
-    color: colors.secondaryText,
+    color: colors.deepChocolateLight,
     marginBottom: 4,
   },
   checkItem: {
@@ -495,8 +495,8 @@ const styles = StyleSheet.create({
     color: colors.secondaryText,
   },
   checkTextActive: {
-    color: colors.dark,
-    fontWeight: '600',
+    color: colors.deepChocolate,
+    fontWeight: '700',
   },
   saveBtn: {
     height: 52,

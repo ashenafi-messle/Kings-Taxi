@@ -14,6 +14,8 @@ import { AuthService } from '../services/auth.service';
 import { TelegramAuthService } from '../services/telegramAuth.service';
 import { RegistrationMethod } from '../services/registrationAuth.service';
 import { RecoveryMethod } from '../services/passwordRecovery.service';
+import { BiometricAuthService } from '../services/biometricAuth.service';
+import { useSettingsStore } from './settings.store';
 import { API_CONFIG } from '../config/api';
 
 const REMEMBERED_EMAIL_KEY = '@kings_taxi_remembered_email';
@@ -23,6 +25,11 @@ const AUTH_USER_KEY = 'kings_taxi_session_user';
 
 // Mutex promise to prevent concurrent refresh requests from colliding or double-consuming rotating tokens
 let activeRefreshPromise: Promise<boolean> | null = null;
+
+const logoutCleanups: Array<() => void> = [];
+export const registerLogoutCleanup = (fn: () => void) => {
+  logoutCleanups.push(fn);
+};
 
 export interface AuthActionResult {
   success: boolean;
@@ -56,7 +63,7 @@ interface AuthState {
   login: (identifier: string, password: string) => Promise<AuthActionResult>;
   loginWithEmail: (
     email: string,
-    password?: string,
+    password: string,
     remember?: boolean
   ) => Promise<AuthActionResult>;
   loginWithTelegram: () => Promise<boolean>;
@@ -115,6 +122,7 @@ interface AuthState {
   refreshSession: () => Promise<boolean>;
   checkSessionValidity: () => Promise<boolean>;
   logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
   updateProfile: (updates: Partial<PassengerProfile>) => void;
   loadInitialAuth: () => Promise<void>;
   setRememberedEmail: (email: string, remember: boolean) => Promise<void>;
@@ -207,6 +215,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await SecureStorageUtil.setItem(REFRESH_TOKEN_KEY, refreshToken);
         await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user));
 
+        // Prevent cross-account biometric reuse if a different passenger logs in
+        try {
+          const previousBioUserId = await BiometricAuthService.getBiometricPassengerId();
+          if (previousBioUserId && previousBioUserId !== user.id) {
+            await BiometricAuthService.clearBiometricSession();
+            useSettingsStore.getState().setBiometricLoginEnabled(false);
+          }
+        } catch {
+          // Non-blocking
+        }
+
+        // Isolate avatar cache to the authenticated passenger
+        if (user.id) {
+          if (user.profileImage || user.avatarUrl) {
+            await AsyncStorage.setItem(
+              `@kings_taxi_local_avatar_${user.id}`,
+              (user.profileImage || user.avatarUrl)!
+            ).catch(() => null);
+          } else {
+            await AsyncStorage.removeItem(`@kings_taxi_local_avatar_${user.id}`).catch(() => null);
+          }
+        }
+        await AsyncStorage.removeItem('@kings_taxi_local_avatar').catch(() => null);
+
         set({
           user,
           token,
@@ -238,7 +270,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   loginWithEmail: async (
     email: string,
-    password = 'Password123!',
+    password: string,
     remember = false
   ): Promise<AuthActionResult> => {
     await get().setRememberedEmail(email, remember);
@@ -536,6 +568,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await SecureStorageUtil.removeItem(REFRESH_TOKEN_KEY);
     await SecureStorageUtil.removeItem(AUTH_USER_KEY);
 
+    // Clear ride history cache to prevent cross-account history leakage
+    await AsyncStorage.removeItem('@kings_taxi_ride_history').catch(() => null);
+
+    // Clear passenger-specific avatar cache to guarantee isolation between accounts
+    const currentUserId = get().user?.id;
+    if (currentUserId) {
+      await AsyncStorage.removeItem(`@kings_taxi_local_avatar_${currentUserId}`).catch(() => null);
+    }
+    await AsyncStorage.removeItem('@kings_taxi_local_avatar').catch(() => null);
+
+    logoutCleanups.forEach((cleanup) => {
+      try {
+        cleanup();
+      } catch {
+        // Non-blocking
+      }
+    });
+
+    // Clean up biometric session
+    try {
+      await BiometricAuthService.clearBiometricSession();
+      useSettingsStore.getState().setBiometricLoginEnabled(false);
+    } catch {
+      // Non-blocking
+    }
+
     set({
       user: null,
       token: null,
@@ -546,11 +604,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
+  logoutAll: async () => {
+    const currentAccessToken = get().token;
+    try {
+      if (currentAccessToken) {
+        await fetch(`${API_CONFIG.baseUrl}/auth/logout-all`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${currentAccessToken}`,
+          },
+        }).catch(() => null);
+      }
+    } catch {
+      // Ignore network errors
+    }
+
+    await get().logout();
+  },
+
   updateProfile: (updates: Partial<PassengerProfile>) => {
     set((state) => {
       const updated = state.user ? { ...state.user, ...updates } : null;
       if (updated) {
         SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(updated)).catch(() => null);
+        const avatar = updates.profileImage || updates.avatarUrl;
+        if (avatar && updated.id) {
+          AsyncStorage.setItem(`@kings_taxi_local_avatar_${updated.id}`, avatar).catch(() => null);
+        } else if (updates.profileImage === null && updated.id) {
+          AsyncStorage.removeItem(`@kings_taxi_local_avatar_${updated.id}`).catch(() => null);
+        }
       }
       return { user: updated };
     });

@@ -42,7 +42,7 @@ export default function LoginScreen() {
   const { language } = useSettingsStore();
 
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('Password123!');
+  const [password, setPassword] = useState('');
   const [rememberEmail, setRememberEmail] = useState(false);
   const [error, setError] = useState('');
   const [langModalVisible, setLangModalVisible] = useState(false);
@@ -56,9 +56,6 @@ export default function LoginScreen() {
     if (rememberedEmail) {
       setEmail(rememberedEmail);
       setRememberEmail(true);
-    } else {
-      // Default demo email for fast evaluation
-      setEmail('passenger@kingstaxi.et');
     }
   }, [rememberedEmail, isEmailRemembered]);
 
@@ -301,9 +298,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: '#FAF2D3',
+    borderWidth: 1.5,
+    borderColor: colors.borderGold,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -311,17 +308,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.lightGold,
+    backgroundColor: colors.paleGold,
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.champagne,
+    borderWidth: 1.5,
+    borderColor: colors.brightGold,
   },
   langPillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.deepGold,
+    color: colors.deepChocolate,
   },
   keyboardView: {
     flex: 1,
@@ -344,7 +341,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: colors.dark,
+    color: colors.deepChocolate,
     letterSpacing: -0.3,
     marginBottom: 4,
   },
@@ -386,7 +383,7 @@ const styles = StyleSheet.create({
   },
   forgotText: {
     fontSize: 13,
-    color: colors.deepGold,
+    color: colors.primaryGold,
     fontWeight: '700',
   },
   signInBtn: {
@@ -403,7 +400,7 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: colors.borderGold,
   },
   dividerText: {
     fontSize: 12,

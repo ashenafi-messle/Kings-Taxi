@@ -7,22 +7,32 @@ import { parseCalendarDate, formatCalendarDate, getAddisCurrentDateString } from
 
 function isDbConnectionError(err: any): boolean {
   if (!err) return false;
-  const msg = typeof err.message === 'string' ? err.message : '';
+  const name = String(err.name || '');
+  const msg = String(err.message || '');
+  const code = String(err.code || '');
+
   return (
-    err.code === 'P1001' ||
-    err.code === 'P1002' ||
-    err.name === 'PrismaClientInitializationError' ||
+    name.includes('PrismaClient') ||
+    code.startsWith('P1') ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'EADDRNOTAVAIL' ||
+    code === 'EHOSTUNREACH' ||
     msg.includes("Can't reach database server") ||
     msg.includes('connection timed out') ||
-    msg.includes('Connection refused')
+    msg.includes('Connection refused') ||
+    msg.includes('connect ECONNREFUSED') ||
+    msg.includes('connect ETIMEDOUT') ||
+    msg.includes('database') ||
+    msg.includes('5433')
   );
 }
 
 const BUILTIN_GONDAR_LOUNGES: any[] = [
   {
-    id: 'lng_fasil_imperial',
-    name: 'Fasil Imperial Lounge & Terrace',
-    slug: 'fasil-imperial-lounge-terrace',
+    id: 'lng_fasil_terrace',
+    name: 'Fasil Imperial Terrace & Coffee Lounge',
+    slug: 'fasil-imperial-terrace',
     shortDescription: 'Rooftop cocktail lounge and traditional coffee pavilion overlooking the Royal Enclosure.',
     description:
       'A refined rooftop lounge overlooking the imperial compound of Gondar. Enjoy artisan Ethiopian coffee tastings, evening cocktails, and light gourmet bites with traditional live music.',
@@ -35,6 +45,8 @@ const BUILTIN_GONDAR_LOUNGES: any[] = [
     amenities: ['Castle View Terrace', 'Coffee Ceremony', 'Signature Cocktails', 'Live Acoustic Masinko'],
     featured: true,
     status: HotelStatus.PUBLISHED,
+    pricePerPerson: 450,
+    capacity: 40,
     coverImage: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
     images: [
       {
@@ -46,7 +58,7 @@ const BUILTIN_GONDAR_LOUNGES: any[] = [
     ],
   },
   {
-    id: 'lng_atse_tewodros',
+    id: 'lng_royal_executive',
     name: 'Atse Tewodros Executive Airport Lounge',
     slug: 'atse-tewodros-executive-lounge',
     shortDescription: 'Quiet premium airport departure lounge with private desks and direct boarding updates.',
@@ -61,6 +73,8 @@ const BUILTIN_GONDAR_LOUNGES: any[] = [
     amenities: ['Flight Boarding Updates', 'Complimentary Buffet', 'Fast Wi-Fi', 'Workstations'],
     featured: true,
     status: HotelStatus.PUBLISHED,
+    pricePerPerson: 750,
+    capacity: 25,
     coverImage: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&auto=format&fit=crop&q=80',
     images: [
       {
@@ -68,6 +82,114 @@ const BUILTIN_GONDAR_LOUNGES: any[] = [
         imageUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&auto=format&fit=crop&q=80',
         isCover: true,
         altText: 'Atse Tewodros Executive Lounge',
+      },
+    ],
+  },
+  {
+    id: 'lng_skylight_vip',
+    name: 'Skylight Executive VIP Lounge',
+    slug: 'skylight-executive-vip-lounge',
+    shortDescription: 'Premier Bole airport lounge with gourmet dining, bar, and private workstations.',
+    description: 'Premier airport lounge featuring panoramic runway outlooks, artisanal coffee, and fast business center facilities.',
+    address: 'Bole Airport Concourse, Addis Ababa',
+    city: 'Addis Ababa',
+    latitude: 8.9855,
+    longitude: 38.7925,
+    contactPhone: '+251116818181',
+    operatingHours: '24/7',
+    amenities: ['Buffet & Bar', 'Showers', 'High-Speed Wi-Fi', 'Quiet Sleep Pods'],
+    featured: true,
+    status: HotelStatus.PUBLISHED,
+    pricePerPerson: 950,
+    capacity: 60,
+    coverImage: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&auto=format&fit=crop&q=80',
+    images: [
+      {
+        id: 'img_lng_3',
+        imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&auto=format&fit=crop&q=80',
+        isCover: true,
+        altText: 'Skylight VIP Lounge',
+      },
+    ],
+  },
+  {
+    id: 'lng_tana_sunset',
+    name: 'Tana Sunset Lake Lounge',
+    slug: 'tana-sunset-lake-lounge',
+    shortDescription: 'Lakefront open-air lounge with traditional fire pit and sunset cocktails.',
+    description: 'Directly overlooking Lake Tana, offering fresh fish specialties, local craft beers, and sunset acoustic sessions.',
+    address: 'Lakefront Boulevard, Bahir Dar',
+    city: 'Bahir Dar',
+    latitude: 11.5941,
+    longitude: 37.3912,
+    contactPhone: '+251582265959',
+    operatingHours: '10:00 - 23:00',
+    amenities: ['Lake View Pier', 'Sunset Cocktails', 'Outdoor Fire Pit'],
+    featured: true,
+    status: HotelStatus.PUBLISHED,
+    pricePerPerson: 500,
+    capacity: 50,
+    coverImage: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&auto=format&fit=crop&q=80',
+    images: [
+      {
+        id: 'img_lng_4',
+        imageUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&auto=format&fit=crop&q=80',
+        isCover: true,
+        altText: 'Tana Sunset Lounge',
+      },
+    ],
+  },
+  {
+    id: 'lng_sidama_garden',
+    name: 'Sidama Heritage Garden Lounge',
+    slug: 'sidama-heritage-garden-lounge',
+    shortDescription: 'Lush tropical lakeside garden lounge with authentic Sidama coffee ceremony.',
+    description: 'Nestled on the banks of Lake Hawassa with tropical birds, garden daybeds, and fresh juices.',
+    address: 'Lake Hawassa Promenade, Hawassa',
+    city: 'Hawassa',
+    latitude: 7.0504,
+    longitude: 38.4763,
+    contactPhone: '+251462209500',
+    operatingHours: '08:00 - 22:00',
+    amenities: ['Lakeside Garden', 'Coffee Ceremony', 'Fresh Juices'],
+    featured: true,
+    status: HotelStatus.PUBLISHED,
+    pricePerPerson: 400,
+    capacity: 35,
+    coverImage: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=1200&auto=format&fit=crop&q=80',
+    images: [
+      {
+        id: 'img_lng_5',
+        imageUrl: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=1200&auto=format&fit=crop&q=80',
+        isCover: true,
+        altText: 'Sidama Garden Lounge',
+      },
+    ],
+  },
+  {
+    id: 'lng_roha_panoramic',
+    name: 'Roha Valley Panoramic Lounge',
+    slug: 'roha-valley-panoramic-lounge',
+    shortDescription: 'Spectacular mountain cliff lounge with views of the Ethiopian highlands.',
+    description: 'Suspended over the dramatic canyons of Lalibela with Tej honey wine, organic cuisine, and fire ceremony.',
+    address: 'Mountain Top Ridge, Lalibela',
+    city: 'Lalibela',
+    latitude: 12.0319,
+    longitude: 39.0413,
+    contactPhone: '+251333360020',
+    operatingHours: '09:00 - 22:00',
+    amenities: ['Canyon Panorama', 'Traditional Tej Honey Wine', 'Acoustic Masinko'],
+    featured: true,
+    status: HotelStatus.PUBLISHED,
+    pricePerPerson: 600,
+    capacity: 30,
+    coverImage: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1200&auto=format&fit=crop&q=80',
+    images: [
+      {
+        id: 'img_lng_6',
+        imageUrl: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1200&auto=format&fit=crop&q=80',
+        isCover: true,
+        altText: 'Roha Panoramic Lounge',
       },
     ],
   },
@@ -308,7 +430,11 @@ export class LoungeService {
   }
 
   getBuiltinLoungeDetails(idOrSlug: string) {
-    const found = BUILTIN_GONDAR_LOUNGES.find((l) => l.id === idOrSlug || l.slug === idOrSlug);
+    const clean = (s: string) => (s || '').toLowerCase().replace(/^(lng_|lounge_)/, '').replace(/[-_]/g, '');
+    const target = clean(idOrSlug);
+    const found = BUILTIN_GONDAR_LOUNGES.find(
+      (l) => l.id === idOrSlug || l.slug === idOrSlug || clean(l.id) === target || clean(l.slug) === target
+    );
     return found || null;
   }
 

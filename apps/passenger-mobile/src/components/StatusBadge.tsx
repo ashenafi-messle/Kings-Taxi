@@ -39,7 +39,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       case 'success':
         return { bg: theme.colors.successLight, text: theme.colors.success };
       case 'warning':
-        return { bg: theme.colors.warningLight, text: '#B45309' };
+        return { bg: theme.colors.warningLight, text: theme.colors.warning };
       case 'danger':
         return { bg: theme.colors.dangerLight, text: theme.colors.danger };
       case 'info':

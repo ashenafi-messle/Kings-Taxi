@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Compass, Hotel as HotelIcon, Landmark, Route, Car } from 'lucide-react-native';
+import { Compass, Hotel as HotelIcon, Landmark, Route } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import {
   SearchInput,
@@ -71,7 +71,7 @@ export default function ExploreScreen() {
           >
             <Compass
               size={14}
-              color={selectedFilter === 'all' ? theme.colors.text : theme.colors.textMuted}
+              color={selectedFilter === 'all' ? theme.colors.antiqueGold : theme.colors.textMuted}
             />
             <Text
               style={[
@@ -89,7 +89,7 @@ export default function ExploreScreen() {
           >
             <HotelIcon
               size={14}
-              color={selectedFilter === 'hotels' ? theme.colors.text : theme.colors.textMuted}
+              color={selectedFilter === 'hotels' ? theme.colors.antiqueGold : theme.colors.textMuted}
             />
             <Text
               style={[
@@ -107,7 +107,7 @@ export default function ExploreScreen() {
           >
             <Landmark
               size={14}
-              color={selectedFilter === 'heritage' ? theme.colors.text : theme.colors.textMuted}
+              color={selectedFilter === 'heritage' ? theme.colors.antiqueGold : theme.colors.textMuted}
             />
             <Text
               style={[
@@ -125,7 +125,7 @@ export default function ExploreScreen() {
           >
             <Route
               size={14}
-              color={selectedFilter === 'tours' ? theme.colors.text : theme.colors.textMuted}
+              color={selectedFilter === 'tours' ? theme.colors.antiqueGold : theme.colors.textMuted}
             />
             <Text
               style={[
@@ -155,30 +155,8 @@ export default function ExploreScreen() {
           />
         ) : (
           <>
-            {/* Full Contract Tour Builder Callout */}
-            {(selectedFilter === 'all' || selectedFilter === 'tours') && (
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={() => router.push('/tours/contract-builder')}
-                style={styles.contractCalloutCard}
-              >
-                <View style={styles.contractCalloutIcon}>
-                  <Car size={24} color={theme.colors.secondary} />
-                </View>
-                <View style={styles.contractCalloutContent}>
-                  <Text style={styles.contractCalloutTitle}>
-                    {t('heritage:customTour.title')}
-                  </Text>
-                  <Text style={styles.contractCalloutDesc}>
-                    {t('heritage:customTour.subtitle')}
-                  </Text>
-                  <Text style={styles.contractCalloutAction}>{t('heritage:buildCustomTourBtn')} →</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-
             {/* Heritage Sites Section */}
-            {(selectedFilter === 'all' || selectedFilter === 'heritage') && (
+            {(selectedFilter === 'all' || selectedFilter === 'heritage' || selectedFilter === 'tours') && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>{t('heritage:categories.historical')}</Text>
@@ -241,12 +219,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1.5,
+    borderBottomColor: theme.colors.borderGold,
   },
   headerTitle: {
     ...theme.typography.h2,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '800',
   },
   headerSubtitle: {
     ...theme.typography.caption,
@@ -268,61 +247,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
   },
   filterPillActive: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primaryDark,
+    backgroundColor: theme.colors.paleGold,
+    borderColor: theme.colors.brightGold,
   },
   filterPillText: {
     ...theme.typography.captionBold,
     color: theme.colors.textSecondary,
   },
   filterPillTextActive: {
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   scrollList: {
     padding: theme.spacing.md,
     paddingBottom: theme.layout.tabBarContentPadding,
-  },
-  contractCalloutCard: {
-    flexDirection: 'row',
-    backgroundColor: '#EFF6FF',
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.md,
-    borderWidth: 1.5,
-    borderColor: '#BFDBFE',
-    marginBottom: theme.spacing.lg,
-    gap: theme.spacing.md,
-    alignItems: 'center',
-  },
-  contractCalloutIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: theme.colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contractCalloutContent: {
-    flex: 1,
-  },
-  contractCalloutTitle: {
-    ...theme.typography.bodyBold,
-    color: theme.colors.secondary,
-  },
-  contractCalloutDesc: {
-    ...theme.typography.caption,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  contractCalloutAction: {
-    ...theme.typography.captionBold,
-    color: theme.colors.hotelAccent,
-    marginTop: 4,
   },
   section: {
     marginBottom: theme.spacing.md,
@@ -332,7 +275,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   sectionSubtitle: {
     ...theme.typography.caption,

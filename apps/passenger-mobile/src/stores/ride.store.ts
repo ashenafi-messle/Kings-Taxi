@@ -16,7 +16,7 @@ import {
 import { mockDriver, mockVehicleOptions } from '../mocks';
 import { RideService, GONDAR_LOCATIONS } from '../services/ride.service';
 import { calculateDistanceKm, estimateTravelTimeMinutes } from '../utils/geo';
-import { useAuthStore } from './auth.store';
+import { useAuthStore, registerLogoutCleanup } from './auth.store';
 
 const RIDE_HISTORY_STORAGE_KEY = '@kings_taxi_ride_history';
 
@@ -869,3 +869,8 @@ export const useRideStore = create<RideState>((set, get) => ({
     }
   },
 }));
+
+registerLogoutCleanup(() => {
+  useRideStore.getState().resetRide();
+  useRideStore.setState({ rideHistory: [], lastCompletedRide: null });
+});

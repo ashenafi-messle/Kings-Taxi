@@ -67,6 +67,15 @@ export const API_CONFIG = {
     me: '/auth/me',
     telegramVerify: '/auth/telegram/verify',
     status: '/auth/status',
+    // Passenger Profile & Security routes
+    passengerProfile: '/passenger/profile',
+    passengerContactInitiate: '/passenger/profile/change-contact/initiate',
+    passengerContactVerify: '/passenger/profile/change-contact/verify',
+    passengerUploadSignature: '/passenger/profile-image/upload-signature',
+    passengerUploadDirect: '/passenger/profile-image/upload-direct',
+    passengerProfileImage: '/passenger/profile-image',
+    passengerSecurity: '/passenger/security',
+    passengerBiometric: '/passenger/security/biometric',
   },
 };
 

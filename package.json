@@ -22,7 +22,8 @@
     "test:i18n": "node scripts/test-multilingual-runtime.js",
     "build:android": "cd apps/passenger-mobile && eas build --platform android --profile preview",
     "build:ios": "cd apps/passenger-mobile && eas build --platform ios --profile preview",
-    "build:production": "cd apps/passenger-mobile && eas build --platform all --profile production"
+    "build:production": "cd apps/passenger-mobile && eas build --platform all --profile production",
+    "postinstall": "node scripts/patch-expo-cli.js"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

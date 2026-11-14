@@ -5,24 +5,22 @@ import {
   getCurrentLanguage,
   getPersistedLanguage,
 } from '../i18n';
+import { BiometricAuthService } from '../services/biometricAuth.service';
 
 interface SettingsState {
   language: SupportedLanguage;
   notificationsEnabled: boolean;
-  smsReceiptsEnabled: boolean;
   biometricLoginEnabled: boolean;
 
   setLanguage: (lang: SupportedLanguage) => Promise<void>;
   initSettings: () => Promise<void>;
   toggleNotifications: () => void;
-  toggleSmsReceipts: () => void;
-  toggleBiometrics: () => void;
+  setBiometricLoginEnabled: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   language: getCurrentLanguage(),
   notificationsEnabled: true,
-  smsReceiptsEnabled: true,
   biometricLoginEnabled: false,
 
   setLanguage: async (language: SupportedLanguage) => {
@@ -32,16 +30,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   initSettings: async () => {
     const persisted = await getPersistedLanguage();
-    set({ language: persisted });
+    const biometricActive = await BiometricAuthService.isBiometricLoginActive();
+    set({ language: persisted, biometricLoginEnabled: biometricActive });
     await changeLanguage(persisted);
   },
 
   toggleNotifications: () =>
     set((state) => ({ notificationsEnabled: !state.notificationsEnabled })),
-  toggleSmsReceipts: () =>
-    set((state) => ({ smsReceiptsEnabled: !state.smsReceiptsEnabled })),
-  toggleBiometrics: () =>
-    set((state) => ({ biometricLoginEnabled: !state.biometricLoginEnabled })),
+
+  setBiometricLoginEnabled: (enabled: boolean) =>
+    set({ biometricLoginEnabled: enabled }),
 }));
 
 export { SupportedLanguage };

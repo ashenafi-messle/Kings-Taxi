@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -15,25 +16,93 @@ import {
   Car,
   Hotel,
   Compass,
-  FileText,
   Clock,
   Sparkles,
   ChevronRight,
   ShieldCheck,
   Phone,
+  Coffee,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
-import { SearchInput, DestinationCard, StatusBadge, KingsTaxiLogo, HomeAdCarousel } from '../../src/components';
+import {
+  SearchInput,
+  DestinationCard,
+  StatusBadge,
+  KingsTaxiLogo,
+  HomeAdCarousel,
+  KingsTaxiBrandShowcase,
+} from '../../src/components';
 import { useAuthStore, useRideStore } from '../../src/stores';
 import { mockLocations, mockHeritageSites, mockHotels } from '../../src/mocks';
 import { useTranslation } from '../../src/i18n';
+import { PassengerBookingsService } from '../../src/services/passengerBookings.service';
+import { PassengerRecentActivity } from '../../src/types';
+
+function formatRelativeTime(dateString?: string): string {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch {
+    return '';
+  }
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const { t } = useTranslation(['home', 'transportation', 'common', 'navigation']);
-  const { user } = useAuthStore();
+  const { user, isAuthenticated, token } = useAuthStore();
   const { currentRide, setDestination, setPickup } = useRideStore();
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [activities, setActivities] = useState<PassengerRecentActivity[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [activitiesError, setActivitiesError] = useState<string | null>(null);
+
+  // Unauthenticated access guard: redirect to welcome
+  useEffect(() => {
+    if (!isAuthenticated && !user && !token) {
+      router.replace('/(auth)/welcome');
+    }
+  }, [isAuthenticated, user, token, router]);
+
+  // Account-isolated recent activities loader
+  const loadRecentActivities = useCallback(async () => {
+    if (!user?.id) {
+      setActivities([]);
+      setActivitiesLoading(false);
+      return;
+    }
+    setActivitiesLoading(true);
+    setActivitiesError(null);
+    try {
+      const res = await PassengerBookingsService.getRecentActivities(5);
+      if (res.success && Array.isArray(res.data)) {
+        setActivities(res.data);
+      } else {
+        setActivities([]);
+      }
+    } catch {
+      setActivitiesError('Unable to load recent activities');
+    } finally {
+      setActivitiesLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadRecentActivities();
+  }, [loadRecentActivities]);
 
   const firstName = user?.fullName?.split(' ')[0] || 'Passenger';
 
@@ -72,9 +141,11 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.avatarCircle}
             onPress={() => router.push('/(tabs)/profile')}
+            accessibilityRole="button"
+            accessibilityLabel="View profile"
           >
-            {user?.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+            {user?.profileImage || user?.avatarUrl ? (
+              <Image source={{ uri: (user.profileImage || user.avatarUrl)! }} style={styles.avatarImage} />
             ) : (
               <Text style={styles.avatarInitial}>{firstName[0]}</Text>
             )}
@@ -123,7 +194,7 @@ export default function HomeScreen() {
         >
           <View style={styles.requestHeroHeader}>
             <View style={styles.requestHeroIconBox}>
-              <Car size={24} color="#C9A227" />
+              <Car size={24} color={theme.colors.antiqueGold} />
             </View>
             <View style={styles.requestHeroTextWrap}>
               <Text style={styles.requestHeroTitle}>Request a Taxi in Gondar</Text>
@@ -135,7 +206,7 @@ export default function HomeScreen() {
           <View style={styles.requestHeroDivider} />
           <View style={styles.requestHeroBottomRow}>
             <View style={styles.requestPhonePill}>
-              <Phone size={13} color={theme.colors.primaryDark} />
+              <Phone size={13} color={theme.colors.antiqueGold} />
               <Text style={styles.requestPhoneText}>
                 {user?.phone || '0911234567'}
               </Text>
@@ -156,8 +227,8 @@ export default function HomeScreen() {
             onPress={() => router.push('/rides/book')}
             style={[styles.serviceCard, styles.rideCard]}
           >
-            <View style={[styles.serviceIconCircle, { backgroundColor: '#FFF9E6' }]}>
-              <Car size={26} color={theme.colors.primaryDark} />
+            <View style={[styles.serviceIconCircle, { backgroundColor: '#FAF4DC' }]}>
+              <Car size={26} color={theme.colors.antiqueGold} />
             </View>
             <Text style={styles.serviceTitle}>{t('services.rideTitle')}</Text>
             <Text style={styles.serviceDesc}>Instant taxi dispatch</Text>
@@ -172,13 +243,13 @@ export default function HomeScreen() {
             onPress={() => router.push('/(tabs)/hotels')}
             style={[styles.serviceCard, styles.hotelCard]}
           >
-            <View style={[styles.serviceIconCircle, { backgroundColor: '#EFF6FF' }]}>
-              <Hotel size={26} color={theme.colors.hotelAccent} />
+            <View style={[styles.serviceIconCircle, { backgroundColor: '#FAF2D3' }]}>
+              <Hotel size={26} color={theme.colors.antiqueGold} />
             </View>
             <Text style={styles.serviceTitle}>{t('services.hotelsTitle')}</Text>
             <Text style={styles.serviceDesc}>{t('services.hotelsSubtitle')}</Text>
-            <View style={[styles.serviceBadge, { backgroundColor: '#DBEAFE' }]}>
-              <Text style={[styles.serviceBadgeText, { color: theme.colors.hotelAccent }]}>
+            <View style={[styles.serviceBadge, { backgroundColor: '#FAF2D3' }]}>
+              <Text style={[styles.serviceBadgeText, { color: theme.colors.antiqueGold }]}>
                 {t('common:status')}
               </Text>
             </View>
@@ -190,54 +261,128 @@ export default function HomeScreen() {
             onPress={() => router.push('/(tabs)/explore')}
             style={[styles.serviceCard, styles.heritageCard]}
           >
-            <View style={[styles.serviceIconCircle, { backgroundColor: '#F3E8FF' }]}>
-              <Compass size={26} color={theme.colors.heritageAccent} />
+            <View style={[styles.serviceIconCircle, { backgroundColor: '#FAF4DC' }]}>
+              <Compass size={26} color={theme.colors.deepChocolate} />
             </View>
             <Text style={styles.serviceTitle}>{t('services.heritageTitle')}</Text>
             <Text style={styles.serviceDesc}>{t('services.heritageSubtitle')}</Text>
-            <View style={[styles.serviceBadge, { backgroundColor: '#EDE9FE' }]}>
-              <Text style={[styles.serviceBadgeText, { color: theme.colors.heritageAccent }]}>
+            <View style={[styles.serviceBadge, { backgroundColor: theme.colors.deepChocolate }]}>
+              <Text style={[styles.serviceBadgeText, { color: theme.colors.champagneGold }]}>
                 UNESCO
               </Text>
             </View>
           </TouchableOpacity>
 
-          {/* Service 4: Full-Contract Transportation */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => router.push('/tours/contract-builder')}
-            style={[styles.serviceCard, styles.contractCard]}
-          >
-            <View style={[styles.serviceIconCircle, { backgroundColor: '#ECFDF5' }]}>
-              <FileText size={26} color="#059669" />
-            </View>
-            <Text style={styles.serviceTitle}>{t('services.customTourTitle')}</Text>
-            <Text style={styles.serviceDesc}>{t('services.customTourSubtitle')}</Text>
-            <View style={[styles.serviceBadge, { backgroundColor: '#D1FAE5' }]}>
-              <Text style={[styles.serviceBadgeText, { color: '#059669' }]}>VIP</Text>
-            </View>
-          </TouchableOpacity>
+          {/* Service 4: Premium Kings Taxi Brand Showcase */}
+          <KingsTaxiBrandShowcase />
         </View>
 
         {/* Premium 5-Slide Advertising Carousel */}
         <HomeAdCarousel />
 
-        {/* Recent Destinations Section */}
+        {/* Real Authenticated Recent Activities Section */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
             <Clock size={18} color={theme.colors.text} />
             <Text style={styles.sectionTitle}>{t('recentActivity')}</Text>
           </View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/bookings')}>
+            <Text style={styles.seeAllText}>{t('seeAllDestinations', 'View All')}</Text>
+          </TouchableOpacity>
         </View>
+
         <View style={styles.recentDestinationsContainer}>
-          {mockLocations.slice(1, 4).map((loc) => (
-            <DestinationCard
-              key={loc.id}
-              location={loc}
-              onSelect={() => handleSelectRecentDestination(loc)}
-              isRecent
-            />
-          ))}
+          {activitiesLoading ? (
+            <View style={styles.activityLoadingBox}>
+              <ActivityIndicator size="small" color={theme.colors.antiqueGold} />
+              <Text style={styles.activityLoadingText}>Loading recent activities...</Text>
+            </View>
+          ) : activitiesError ? (
+            <View style={styles.activityErrorBox}>
+              <Text style={styles.activityErrorText}>{activitiesError}</Text>
+              <TouchableOpacity
+                style={styles.activityRetryBtn}
+                onPress={loadRecentActivities}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.activityRetryText}>{t('common:retry', 'Retry')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : activities.length === 0 ? (
+            <View style={styles.activityEmptyBox}>
+              <Text style={styles.activityEmptyText}>
+                Your recent activities will appear here when you start using Kings Taxi.
+              </Text>
+            </View>
+          ) : (
+            activities.map((item, index) => {
+              const isLast = index === activities.length - 1;
+              return (
+                <TouchableOpacity
+                  key={item.id || item.reference || index}
+                  activeOpacity={0.7}
+                  onPress={() => router.push('/(tabs)/bookings')}
+                  style={[styles.activityRow, isLast && { borderBottomWidth: 0 }]}
+                >
+                  <View style={styles.activityIconCircle}>
+                    {item.category === 'ride' ? (
+                      <Car size={18} color={theme.colors.antiqueGold} />
+                    ) : item.category === 'hotel' ? (
+                      <Hotel size={18} color={theme.colors.antiqueGold} />
+                    ) : item.category === 'lounge' ? (
+                      <Coffee size={18} color={theme.colors.antiqueGold} />
+                    ) : (
+                      <Compass size={18} color={theme.colors.antiqueGold} />
+                    )}
+                  </View>
+                  <View style={styles.activityDetails}>
+                    <Text style={styles.activityTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.activitySubtitle} numberOfLines={1}>
+                      {item.subtitle}
+                    </Text>
+                  </View>
+                  <View style={styles.activityMeta}>
+                    <View
+                      style={[
+                        styles.activityBadge,
+                        item.normalizedStatus === 'COMPLETED'
+                          ? styles.badgeCompleted
+                          : item.normalizedStatus === 'IN_PROGRESS'
+                          ? styles.badgeInProgress
+                          : item.normalizedStatus === 'CONFIRMED'
+                          ? styles.badgeConfirmed
+                          : item.normalizedStatus === 'CANCELLED'
+                          ? styles.badgeCancelled
+                          : styles.badgePending,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.activityBadgeText,
+                          item.normalizedStatus === 'COMPLETED'
+                            ? styles.badgeTextCompleted
+                            : item.normalizedStatus === 'IN_PROGRESS'
+                            ? styles.badgeTextInProgress
+                            : item.normalizedStatus === 'CONFIRMED'
+                            ? styles.badgeTextConfirmed
+                            : item.normalizedStatus === 'CANCELLED'
+                            ? styles.badgeTextCancelled
+                            : styles.badgeTextPending,
+                        ]}
+                      >
+                        {item.normalizedStatus}
+                      </Text>
+                    </View>
+                    <Text style={styles.activityTimestamp}>
+                      {formatRelativeTime(item.timestamp)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         {/* Recommended Heritage & Tourism Section */}
@@ -255,7 +400,7 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScroll}
         >
-          {mockHeritageSites.slice(0, 3).map((site) => (
+          {mockHeritageSites.slice(0, 5).map((site) => (
             <TouchableOpacity
               key={site.id}
               activeOpacity={0.85}
@@ -316,16 +461,17 @@ const styles = StyleSheet.create({
   },
   greetingText: {
     ...theme.typography.h2,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '800',
     marginTop: 2,
   },
   avatarCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: '#FAF2D3',
     borderWidth: 2,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.brightGold,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -337,27 +483,30 @@ const styles = StyleSheet.create({
   avatarInitial: {
     ...theme.typography.h4,
     color: theme.colors.primaryDark,
+    fontWeight: '800',
   },
   locationPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#FAF2D3',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.full,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.brightGold,
     alignSelf: 'flex-start',
     gap: 4,
     marginBottom: theme.spacing.md,
+    ...theme.shadows.subtle,
   },
   locationLabel: {
     ...theme.typography.captionBold,
-    color: theme.colors.textMuted,
+    color: theme.colors.deepChocolateLight,
   },
   locationValue: {
     ...theme.typography.captionBold,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
     maxWidth: 200,
   },
   searchWrapper: {
@@ -413,25 +562,21 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadows.subtle,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
+    ...theme.shadows.cardGold,
   },
   rideCard: {
     borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primary,
+    borderLeftColor: theme.colors.antiqueGold,
   },
   hotelCard: {
     borderLeftWidth: 4,
-    borderLeftColor: theme.colors.hotelAccent,
+    borderLeftColor: theme.colors.brightGold,
   },
   heritageCard: {
     borderLeftWidth: 4,
-    borderLeftColor: theme.colors.heritageAccent,
-  },
-  contractCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#059669',
+    borderLeftColor: theme.colors.deepChocolate,
   },
   serviceIconCircle: {
     width: 48,
@@ -440,10 +585,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
   },
   serviceTitle: {
     ...theme.typography.bodyBold,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   serviceDesc: {
     ...theme.typography.caption,
@@ -464,49 +612,6 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryDark,
     fontSize: 10,
   },
-  featuredContractBanner: {
-    backgroundColor: theme.colors.secondary,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-    ...theme.shadows.card,
-  },
-  featuredContractContent: {
-    gap: 4,
-  },
-  goldPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    gap: 4,
-    marginBottom: 4,
-  },
-  goldPillText: {
-    ...theme.typography.badge,
-    color: theme.colors.text,
-    fontSize: 9,
-  },
-  featuredContractTitle: {
-    ...theme.typography.h3,
-    color: theme.colors.textInverse,
-  },
-  featuredContractDesc: {
-    ...theme.typography.caption,
-    color: '#94A3B8',
-    lineHeight: 18,
-  },
-  featuredContractAction: {
-    marginTop: theme.spacing.sm,
-    alignSelf: 'flex-start',
-  },
-  featuredActionText: {
-    ...theme.typography.captionBold,
-    color: theme.colors.primary,
-  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -521,19 +626,21 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '800',
   },
   seeAllText: {
     ...theme.typography.captionBold,
-    color: theme.colors.primaryDark,
+    color: theme.colors.antiqueGold,
   },
   recentDestinationsContainer: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
     overflow: 'hidden',
     marginBottom: theme.spacing.lg,
+    ...theme.shadows.cardGold,
   },
   horizontalScroll: {
     gap: theme.spacing.md,
@@ -545,9 +652,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadows.subtle,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
+    ...theme.shadows.cardGold,
   },
   heritageImage: {
     width: '100%',
@@ -559,12 +666,14 @@ const styles = StyleSheet.create({
   },
   heritageCardTitle: {
     ...theme.typography.bodyBold,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   heritageCardRegion: {
     ...theme.typography.caption,
-    color: theme.colors.heritageAccent,
+    color: theme.colors.antiqueGold,
     marginTop: 2,
+    fontWeight: '600',
   },
   safetyBanner: {
     flexDirection: 'row',
@@ -589,13 +698,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   requestRideHeroCard: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#FAF4DC',
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1.5,
-    borderColor: '#E6CA65',
+    borderColor: theme.colors.brightGold,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.md,
-    ...theme.shadows.card,
+    ...theme.shadows.cardGold,
   },
   requestHeroHeader: {
     flexDirection: 'row',
@@ -606,11 +715,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFF9E6',
+    backgroundColor: '#FAF2D3',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#F3E5AB',
+    borderColor: theme.colors.borderGold,
   },
   requestHeroTextWrap: {
     flex: 1,
@@ -618,16 +727,17 @@ const styles = StyleSheet.create({
   requestHeroTitle: {
     ...theme.typography.bodyBold,
     fontSize: 16,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '800',
   },
   requestHeroSubtitle: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.deepChocolateLight,
     marginTop: 2,
   },
   requestHeroDivider: {
     height: 1,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.borderGold,
     marginVertical: theme.spacing.sm,
   },
   requestHeroBottomRow: {
@@ -639,20 +749,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: '#FFFDF7',
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
   },
   requestPhoneText: {
     ...theme.typography.captionBold,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
   },
   requestBtnInline: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: theme.colors.primaryDark,
+    backgroundColor: theme.colors.antiqueGold,
+    borderWidth: 1,
+    borderColor: theme.colors.brightGold,
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: theme.borderRadius.full,
@@ -660,5 +774,134 @@ const styles = StyleSheet.create({
   requestBtnInlineText: {
     ...theme.typography.captionBold,
     color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  activityLoadingBox: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityLoadingText: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    marginTop: 8,
+  },
+  activityErrorBox: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityErrorText: {
+    ...theme.typography.caption,
+    color: theme.colors.error,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  activityRetryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#FAF4DC',
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
+  },
+  activityRetryText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.antiqueGold,
+  },
+  activityEmptyBox: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityEmptyText: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 16,
+  },
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderGold,
+  },
+  activityIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FAF2D3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
+  },
+  activityDetails: {
+    flex: 1,
+    marginRight: 8,
+  },
+  activityTitle: {
+    ...theme.typography.bodyBold,
+    fontSize: 14,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
+  },
+  activitySubtitle: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+  },
+  activityMeta: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  activityBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  activityBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  badgeCompleted: {
+    backgroundColor: '#ECFDF5',
+  },
+  badgeTextCompleted: {
+    color: '#059669',
+  },
+  badgeInProgress: {
+    backgroundColor: '#EFF6FF',
+  },
+  badgeTextInProgress: {
+    color: '#2563EB',
+  },
+  badgeConfirmed: {
+    backgroundColor: '#FEF3C7',
+  },
+  badgeTextConfirmed: {
+    color: '#D97706',
+  },
+  badgeCancelled: {
+    backgroundColor: '#FEE2E2',
+  },
+  badgeTextCancelled: {
+    color: '#DC2626',
+  },
+  badgePending: {
+    backgroundColor: '#F3F4F6',
+  },
+  badgeTextPending: {
+    color: '#4B5563',
+  },
+  activityTimestamp: {
+    ...theme.typography.caption,
+    fontSize: 10,
+    color: theme.colors.textMuted,
   },
 });

@@ -55,6 +55,7 @@ authRouter.post('/recovery/reset', authRateLimiter, AuthController.resetPassword
 // Token Refresh & Logout
 authRouter.post('/refresh', authRateLimiter, AuthController.refreshToken);
 authRouter.post('/logout', authenticateToken, AuthController.logout);
+authRouter.post('/logout-all', authenticateToken, AuthController.logoutAll);
 
 // Protected Identity Inspection
 authRouter.get('/me', authenticateToken, AuthController.getCurrentUser);

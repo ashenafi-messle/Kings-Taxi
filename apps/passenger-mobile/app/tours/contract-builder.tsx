@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -71,6 +71,12 @@ const contractVehicles: VehicleContractChoice[] = [
 
 export default function ContractBuilderScreen() {
   const router = useRouter();
+
+  // Safety redirect: Custom Tour Package Builder removed from active passenger navigation
+  useEffect(() => {
+    router.replace('/(tabs)/explore');
+  }, [router]);
+
   const { t } = useTranslation(['heritage', 'common', 'navigation']);
   const { createTourContract } = useBookingStore();
 
@@ -647,8 +653,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   vehicleOptionSelected: {
-    borderColor: theme.colors.primaryDark,
-    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   vehicleOptionHeader: {
     flexDirection: 'row',
@@ -662,7 +668,7 @@ const styles = StyleSheet.create({
   },
   vehicleOptionPrice: {
     ...theme.typography.h4,
-    color: theme.colors.primaryDark,
+    color: theme.colors.primary,
   },
   dailyText: {
     ...theme.typography.caption,
@@ -694,11 +700,11 @@ const styles = StyleSheet.create({
   },
   disclaimerBox: {
     flexDirection: 'row',
-    backgroundColor: '#FEF3C7',
+    backgroundColor: theme.colors.surfaceMuted,
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: '#FDE68A',
+    borderColor: theme.colors.border,
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
   },
@@ -707,11 +713,11 @@ const styles = StyleSheet.create({
   },
   disclaimerTitle: {
     ...theme.typography.captionBold,
-    color: '#92400E',
+    color: theme.colors.primaryDark,
   },
   disclaimerBody: {
     ...theme.typography.caption,
-    color: '#92400E',
+    color: theme.colors.textSecondary,
     marginTop: 2,
     lineHeight: 16,
   },
@@ -741,15 +747,17 @@ const styles = StyleSheet.create({
   },
   quotationNotice: {
     flexDirection: 'row',
-    backgroundColor: '#FEF3C7',
+    backgroundColor: theme.colors.surfaceMuted,
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     marginTop: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     gap: 8,
   },
   quotationNoticeText: {
     ...theme.typography.caption,
-    color: '#92400E',
+    color: theme.colors.primaryDark,
     flex: 1,
   },
   viewBookingsBtn: {

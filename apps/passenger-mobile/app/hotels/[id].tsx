@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Linking,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -88,6 +89,13 @@ export default function HotelDetailScreen() {
     hotel.rooms.find((r) => r.id === selectedRoomId) || hotel.rooms[0];
 
   const handleProceedToReserve = () => {
+    if (
+      Platform.OS === 'web' &&
+      typeof document !== 'undefined' &&
+      document.activeElement instanceof HTMLElement
+    ) {
+      document.activeElement.blur();
+    }
     router.push({
       pathname: '/hotels/reserve',
       params: {
@@ -402,7 +410,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   thumbnailBtnActive: {
-    borderColor: theme.colors.hotelAccent,
+    borderColor: theme.colors.primary,
   },
   thumbnailImg: {
     width: '100%',
@@ -429,14 +437,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: theme.colors.surfaceMuted,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   cityText: {
     ...theme.typography.captionBold,
-    color: theme.colors.hotelAccent,
+    color: theme.colors.primaryDark,
   },
   ratingRow: {
     marginVertical: 4,
@@ -577,26 +587,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: '#FAF2D3',
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.md,
   },
   amenityText: {
     ...theme.typography.captionBold,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   roomCard: {
     borderRadius: theme.borderRadius.md,
-    borderWidth: 2,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
     backgroundColor: theme.colors.surface,
     overflow: 'hidden',
     marginBottom: theme.spacing.md,
+    ...theme.shadows.cardGold,
   },
   roomCardSelected: {
-    borderColor: theme.colors.hotelAccent,
-    backgroundColor: '#F8FAFC',
+    borderColor: theme.colors.brightGold,
+    backgroundColor: theme.colors.paleGold,
   },
   roomImage: {
     width: '100%',
@@ -613,10 +627,11 @@ const styles = StyleSheet.create({
   },
   roomTitle: {
     ...theme.typography.h4,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   selectedBadge: {
-    backgroundColor: theme.colors.hotelAccent,
+    backgroundColor: theme.colors.antiqueGold,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -624,6 +639,7 @@ const styles = StyleSheet.create({
   selectedBadgeText: {
     ...theme.typography.badge,
     color: '#FFFFFF',
+    fontWeight: '700',
   },
   roomDesc: {
     ...theme.typography.caption,
@@ -651,11 +667,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingTop: theme.spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.borderGold,
   },
   roomPrice: {
     ...theme.typography.h3,
-    color: theme.colors.primaryDark,
+    color: theme.colors.antiqueGold,
+    fontWeight: '800',
   },
   perNight: {
     ...theme.typography.caption,

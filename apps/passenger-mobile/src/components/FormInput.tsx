@@ -91,16 +91,17 @@ const styles = StyleSheet.create({
   inputContainer: {
     height: theme.layout.inputHeight,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#FFFDF9',
     borderWidth: 1.5,
-    borderColor: theme.colors.border,
+    borderColor: '#EDD987',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
   },
   focused: {
-    borderColor: theme.colors.primaryDark,
-    backgroundColor: theme.colors.surface,
+    borderColor: '#A36B31',
+    backgroundColor: '#FFFDF7',
+    ...theme.shadows.goldSubtle,
   },
   errorBorder: {
     borderColor: theme.colors.danger,

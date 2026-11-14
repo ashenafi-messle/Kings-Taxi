@@ -69,7 +69,7 @@ export const PaymentMethodCard: React.FC<PaymentMethodCardProps> = ({
       </View>
       <View style={styles.selectionIndicator}>
         {isSelected ? (
-          <CheckCircle2 size={22} color={theme.colors.primaryDark} fill={theme.colors.primaryLight} />
+          <CheckCircle2 size={22} color={theme.colors.antiqueGold} fill={theme.colors.surfaceGold} />
         ) : (
           <View style={styles.radioUnchecked} />
         )}
@@ -86,19 +86,23 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     backgroundColor: theme.colors.surface,
     borderWidth: 1.5,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderGold,
     marginBottom: theme.spacing.sm,
     ...theme.shadows.subtle,
   },
   selectedContainer: {
-    borderColor: theme.colors.primaryDark,
-    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.brightGold,
+    backgroundColor: theme.colors.paleGold,
+    borderWidth: 2,
+    ...theme.shadows.goldSubtle,
   },
   iconWrapper: {
     width: 44,
     height: 44,
     borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.surfaceGold,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.md,
@@ -113,7 +117,8 @@ const styles = StyleSheet.create({
   },
   name: {
     ...theme.typography.bodyBold,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   subtitle: {
     ...theme.typography.caption,
@@ -121,16 +126,17 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   badge: {
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: theme.colors.surfaceGold,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: theme.colors.primaryMuted,
+    borderColor: theme.colors.borderGold,
   },
   badgeText: {
     ...theme.typography.badge,
-    color: theme.colors.primaryDark,
+    color: theme.colors.antiqueGold,
+    fontWeight: '700',
   },
   selectionIndicator: {
     marginLeft: theme.spacing.sm,
@@ -139,7 +145,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    borderWidth: 2,
-    borderColor: theme.colors.borderStrong,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
   },
 });

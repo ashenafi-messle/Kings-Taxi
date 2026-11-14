@@ -50,7 +50,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             style={styles.backButton}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <ArrowLeft size={24} color={theme.colors.text} />
+            <View style={styles.backButtonCircle}>
+              <ArrowLeft size={18} color="#502D0A" />
+            </View>
           </TouchableOpacity>
         )}
         <View style={styles.titleContainer}>
@@ -65,14 +67,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    height: 56,
+    height: 58,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    backgroundColor: '#FFFDF7',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#D4A63C',
+    ...theme.shadows.subtle,
   },
   leftContainer: {
     flexDirection: 'row',
@@ -80,14 +83,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backButton: {
-    paddingRight: theme.spacing.md,
+    paddingRight: theme.spacing.sm,
+  },
+  backButtonCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FAF2D3',
+    borderWidth: 1,
+    borderColor: '#EDD987',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     flex: 1,
   },
   title: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: '#502D0A',
+    fontWeight: '800',
   },
   subtitle: {
     ...theme.typography.caption,

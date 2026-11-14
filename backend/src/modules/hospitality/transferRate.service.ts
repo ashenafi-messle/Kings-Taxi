@@ -6,14 +6,24 @@ import { parseCalendarDate } from './utils/addisDate';
 
 function isDbConnectionError(err: any): boolean {
   if (!err) return false;
-  const msg = typeof err.message === 'string' ? err.message : '';
+  const name = String(err.name || '');
+  const msg = String(err.message || '');
+  const code = String(err.code || '');
+
   return (
-    err.code === 'P1001' ||
-    err.code === 'P1002' ||
-    err.name === 'PrismaClientInitializationError' ||
+    name.includes('PrismaClient') ||
+    code.startsWith('P1') ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'EADDRNOTAVAIL' ||
+    code === 'EHOSTUNREACH' ||
     msg.includes("Can't reach database server") ||
     msg.includes('connection timed out') ||
-    msg.includes('Connection refused')
+    msg.includes('Connection refused') ||
+    msg.includes('connect ECONNREFUSED') ||
+    msg.includes('connect ETIMEDOUT') ||
+    msg.includes('database') ||
+    msg.includes('5433')
   );
 }
 

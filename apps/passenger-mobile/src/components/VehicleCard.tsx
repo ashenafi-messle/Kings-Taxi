@@ -70,7 +70,7 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
       <View style={styles.iconContainer}>
         <Car
           size={28}
-          color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+          color={isSelected ? theme.colors.antiqueGold : theme.colors.textSecondary}
         />
       </View>
       <View style={styles.detailsContainer}>
@@ -102,20 +102,24 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.lg,
     backgroundColor: theme.colors.surface,
-    borderWidth: 2,
-    borderColor: theme.colors.border,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderGold,
     marginBottom: theme.spacing.sm,
     ...theme.shadows.subtle,
   },
   selectedContainer: {
-    borderColor: theme.colors.primaryDark,
-    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.brightGold,
+    backgroundColor: theme.colors.paleGold,
+    borderWidth: 2,
+    ...theme.shadows.goldSubtle,
   },
   iconContainer: {
     width: 48,
     height: 48,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.surfaceGold,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.md,
@@ -130,7 +134,8 @@ const styles = StyleSheet.create({
   },
   name: {
     ...theme.typography.h4,
-    color: theme.colors.text,
+    color: theme.colors.deepChocolate,
+    fontWeight: '700',
   },
   capacityBadge: {
     flexDirection: 'row',
@@ -143,7 +148,7 @@ const styles = StyleSheet.create({
   },
   capacityText: {
     ...theme.typography.captionBold,
-    color: theme.colors.textMuted,
+    color: theme.colors.deepChocolateLight,
   },
   description: {
     ...theme.typography.caption,
@@ -158,7 +163,7 @@ const styles = StyleSheet.create({
   },
   etaText: {
     ...theme.typography.caption,
-    color: theme.colors.textSecondary,
+    color: theme.colors.deepChocolateLight,
   },
   priceContainer: {
     alignItems: 'flex-end',
@@ -166,7 +171,8 @@ const styles = StyleSheet.create({
   },
   price: {
     ...theme.typography.h3,
-    color: theme.colors.text,
+    color: theme.colors.antiqueGold,
+    fontWeight: '800',
   },
   estLabel: {
     ...theme.typography.caption,
