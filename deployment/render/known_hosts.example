@@ -1,0 +1,14 @@
+# ==============================================================================
+# Kings Taxi — Render Deployment Verified VPS Known Hosts Reference
+# ==============================================================================
+# Host: 196.188.250.186 (Zergaw VPS)
+# Key Type: ssh-ed25519
+# Fingerprint: SHA256:+TN6y/Ip+E2dvCZAOAQeXume9g558LMkD84NKeUtfgU
+# Target Account: kings-render-tunnel (Restricted port forwarding to 127.0.0.1:15432)
+#
+# In Render Dashboard -> Environment -> Secret Files:
+#   Filename: kings_render_known_hosts
+#   Content: Copy the exact line below (including trailing newline)
+# ==============================================================================
+196.188.250.186 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPvg3Ivn19Qap6zoq1EvIfLRKfWgAMBSFWU8sO/5O9vZ root@VM-64182358-0c9b-408a-8a3f-0794cc63e904
+

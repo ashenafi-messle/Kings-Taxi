@@ -1,0 +1,94 @@
+# ==============================================================================
+# Kings Taxi Monorepo — Root Docker Build Context Ignore (.dockerignore)
+# ==============================================================================
+# Ensures that secrets, dependencies, local caches, and mobile build artifacts
+# are NEVER copied into Docker images during build.
+# ==============================================================================
+
+# Version Control
+.git
+.gitignore
+.gitattributes
+
+# Environment & Sensitive Secret Files (CRITICAL SECURITY)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pub
+id_rsa*
+id_ed25519*
+known_hosts*
+secrets
+/etc/secrets
+
+# Dependencies (Installed cleanly inside Docker builder)
+node_modules
+*/node_modules
+*/*/node_modules
+
+# Build Outputs & Generated Artifacts
+dist
+*/dist
+*/*/dist
+build
+*/build
+*/*/build
+.expo
+*/.expo
+*/*/expo-build
+.output
+.next
+
+# Mobile Application Source & Platform Artifacts (Not needed for Backend API)
+apps/passenger-mobile/android
+apps/passenger-mobile/ios
+apps/passenger-mobile/.expo
+apps/passenger-mobile/.expo-shared
+apps/passenger-mobile/web-build
+apps/passenger-mobile/assets
+apps/passenger-mobile/src
+apps/passenger-mobile/app
+
+# Test, Coverage, and Inspection Artifacts
+coverage
+*/coverage
+.nyc_output
+*.lcov
+test-results
+__tests__
+*.test.ts
+*.spec.ts
+
+# Database Dumps, Local SQLite, Backups
+*.sql
+*.dump
+*.tar
+*.gz
+*.sqlite
+*.sqlite-journal
+*.db
+
+# Caches and Temporary Files
+.cache
+.npm
+.yarn
+.tmp
+*.tmp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS-Specific Metadata Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & Editor Configurations
+.idea
+.vscode
+*.swp
+*.swo
+

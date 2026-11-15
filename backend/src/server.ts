@@ -6,15 +6,18 @@ import { disconnectPrisma } from './core/database/prisma';
 
 const server = createServer(app);
 
-server.listen(env.PORT, () => {
+const HOST = '0.0.0.0';
+
+server.listen(env.PORT, HOST, () => {
   logger.info(
     {
+      host: HOST,
       port: env.PORT,
       env: env.NODE_ENV,
       prefix: env.API_PREFIX,
       docsUrl: `http://localhost:${env.PORT}${env.API_PREFIX}/docs`,
     },
-    `🚀 Kings Taxi Central Backend listening on port ${env.PORT}`
+    `🚀 Kings Taxi Central Backend listening on ${HOST}:${env.PORT}`
   );
 });
 

@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
+import { validateDatabaseIsolationAtStartup } from './database-isolation';
 
 // Load appropriate .env file based on NODE_ENV with path fallback
 const nodeEnv = process.env.NODE_ENV || 'development';
@@ -64,6 +65,12 @@ const envSchema = z.object({
   // Optional future service credentials
   CHAPA_SECRET_KEY: z.string().optional(),
   CHAPA_PUBLIC_KEY: z.string().optional(),
+
+  // Render Deployment & SSH Tunnel Configuration
+  SSH_KEY_PATH: z.string().optional(),
+  SSH_KNOWN_HOSTS_PATH: z.string().optional(),
+  RENDER: z.string().optional(),
+  STRICT_DB_ISOLATION: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -112,6 +119,10 @@ function parseEnv(): Env {
       .join('\n');
     console.error(`[FATAL] Invalid environment configuration:\n${errorDetails}`);
     throw new Error(`Invalid environment configuration:\n${errorDetails}`);
+  }
+
+  if (result.data.NODE_ENV !== 'test') {
+    validateDatabaseIsolationAtStartup(result.data.DATABASE_URL);
   }
 
   return result.data;
