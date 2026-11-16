@@ -42,31 +42,13 @@ function run() {
         }`
   );
 
-  // 2. wrapFetchWithCache.js - clone response before cache stream consumption
-  // Fix any previously injected duplicate let declaration
+  // 2. wrapFetchWithCache.js - clone response before cache stream consumption & avoid identifier collisions
   const wrapFetchPath = path.join(__dirname, '..', 'node_modules/@expo/cli/build/src/api/rest/cache/wrapFetchWithCache.js');
   if (fs.existsSync(wrapFetchPath)) {
     let wrapContent = fs.readFileSync(wrapFetchPath, 'utf8');
-    if (wrapContent.includes('let cachedResponse1 = null;')) {
-      wrapContent = wrapContent.replace('let cachedResponse1 = null;', 'cachedResponse1 = null;');
-      fs.writeFileSync(wrapFetchPath, wrapContent, 'utf8');
-      console.log('[Patch] Fixed duplicate cachedResponse1 declaration in wrapFetchWithCache.js');
-    }
-  }
-
-  patchFile(
-    'node_modules/@expo/cli/build/src/api/rest/cache/wrapFetchWithCache.js',
-    `            // Execute the fetch request
-            const response = await fetch(url, init);
-            if (!response.ok || !response.body) {
-                return response;
-            }
-            // Cache the response
-            cachedResponse1 = await cache.set(cacheKey, {
-                body: response.body,
-                info: (0, _responseCache.getResponseInfo)(response)
-            });`,
-    `            // Execute the fetch request
+    if (!wrapContent.includes('let storedResponse = null;')) {
+      const targetRegex = /\/\/ Execute the fetch request[\s\S]*?return new \(_undici\(\)\)\.Response\([^;]+\);/;
+      const replacement = `// Execute the fetch request
             const response = await fetch(url, init);
             if (!response.ok || !response.body) {
                 return response;
@@ -79,17 +61,32 @@ function run() {
                     bodyForCache = cloned.body;
                 } catch {}
             }
-            // Cache the response
-            cachedResponse1 = null;
+            // Cache the response using an isolated identifier
+            let storedResponse = null;
             try {
-                cachedResponse1 = await cache.set(cacheKey, {
+                storedResponse = await cache.set(cacheKey, {
                     body: bodyForCache,
                     info: (0, _responseCache.getResponseInfo)(response)
                 });
             } catch (err) {
                 debug(\`Failed to cache response for: \${url}\`, err);
-            }`
-  );
+            }
+            // Warn through debug logs that caching failed
+            if (!storedResponse) {
+                debug(\`Failed to cache response for: \${url}\`);
+                try { await cache.remove(cacheKey); } catch {}
+                return responseToReturn;
+            }
+            // Return the cached response
+            return new (_undici()).Response(storedResponse.body, storedResponse.info);`;
+
+      if (targetRegex.test(wrapContent)) {
+        wrapContent = wrapContent.replace(targetRegex, replacement);
+        fs.writeFileSync(wrapFetchPath, wrapContent, 'utf8');
+        console.log('[Patch] Successfully patched wrapFetchWithCache.js with isolated storedResponse');
+      }
+    }
+  }
 
   // 3. UserSettings.js - try/catch in getAnonymousId
   patchFile(
