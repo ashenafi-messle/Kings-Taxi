@@ -16,7 +16,7 @@ import { RegistrationMethod } from '../services/registrationAuth.service';
 import { RecoveryMethod } from '../services/passwordRecovery.service';
 import { BiometricAuthService } from '../services/biometricAuth.service';
 import { useSettingsStore } from './settings.store';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, registerAuthHandlers, buildApiUrl } from '../config/api';
 
 const REMEMBERED_EMAIL_KEY = '@kings_taxi_remembered_email';
 const AUTH_TOKEN_KEY = 'kings_taxi_session_jwt';
@@ -608,7 +608,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const currentAccessToken = get().token;
     try {
       if (currentAccessToken) {
-        await fetch(`${API_CONFIG.baseUrl}/auth/logout-all`, {
+        await fetch(buildApiUrl('/auth/logout-all'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -639,3 +639,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 }));
+
+// Wire authentication hooks into the centralized API transport layer
+registerAuthHandlers(
+  () => useAuthStore.getState().token,
+  () => useAuthStore.getState().refreshSession()
+);

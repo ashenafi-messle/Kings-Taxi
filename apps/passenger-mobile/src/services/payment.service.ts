@@ -1,5 +1,6 @@
 import { Linking, Platform } from 'react-native';
 import { mockPaymentMethods, mockTransactions } from '../mocks';
+import { API_CONFIG, apiFetch, buildApiUrl } from '../config/api';
 import {
   ApiResponse,
   PaymentMethodOption,
@@ -16,7 +17,6 @@ export interface PaymentGatewayHandshake {
 }
 
 export const PAYMENT_DEEP_LINK_SCHEME = 'kingstaxi://payments/callback';
-const BACKEND_PAYMENT_VERIFY_ENDPOINT = 'https://api.kingstaxi.et/api/v1/payments/verify';
 
 export class PaymentService {
   static async getSupportedPaymentMethods(): Promise<ApiResponse<PaymentMethodOption[]>> {
@@ -98,29 +98,32 @@ export class PaymentService {
   }
 
   /**
-   * Verifies payment status against backend server with development fallback
+   * Verifies payment status against backend server.
+   * In production, strictly queries the central backend and never mocks success.
+   * In development mock mode, returns simulated verification.
    */
   static async verifyPayment(
     transactionReference: string
   ): Promise<ApiResponse<{ verified: boolean; transaction: PaymentTransaction }>> {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
+    if (!API_CONFIG.isMockAuth) {
+      const res = await apiFetch<{ verified: boolean; transaction: PaymentTransaction }>(
+        `/payments/verify/${encodeURIComponent(transactionReference)}`
+      );
 
-      const response = await fetch(`${BACKEND_PAYMENT_VERIFY_ENDPOINT}/${transactionReference}`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-      }).catch(() => null);
-
-      clearTimeout(timeout);
-
-      if (response && response.ok) {
-        const json = await response.json();
-        return json;
+      if (res.success && res.data) {
+        return res;
       }
-    } catch {
-      // Fall through to simulated verified response
+
+      return {
+        success: false,
+        data: null as any,
+        error:
+          res.error ||
+          'Payment status verification is currently pending webhook confirmation on the central backend.',
+        message:
+          res.message ||
+          'Payment status verification is currently pending webhook confirmation on the central backend.',
+      };
     }
 
     const verifiedTxn: PaymentTransaction = {

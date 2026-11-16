@@ -14,7 +14,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { networkService, NetworkState } from './network.service';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 import { useAuthStore } from '../stores/auth.store';
 
 export interface OfflineGpsSample {
@@ -242,7 +242,7 @@ export class OfflineGpsQueueService {
     }
 
     const token = useAuthStore.getState().token;
-    const url = `${API_CONFIG.baseUrl}/trips/${tripId}/location`;
+    const url = buildApiUrl(`/trips/${tripId}/location`);
 
     const payload = {
       samples: samples.map((s) => ({

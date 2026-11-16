@@ -1,38 +1,43 @@
-import { Platform } from 'react-native';
+import {
+  API_BASE_URL,
+  PRODUCTION_API_URL,
+  resolveApiBaseUrl,
+  buildApiUrl,
+  apiFetch,
+  ApiFetchOptions,
+  registerAuthHandlers,
+} from './apiClient';
+
+export {
+  API_BASE_URL,
+  PRODUCTION_API_URL,
+  resolveApiBaseUrl,
+  buildApiUrl,
+  apiFetch,
+  ApiFetchOptions,
+  registerAuthHandlers,
+};
 
 /**
- * Kings Taxi Passenger Mobile - Central API Configuration & Network Layer
+ * Kings Taxi Passenger Mobile - Central API Configuration
  *
- * Configures communication with the Kings Taxi Central Backend.
- * Supports local development (Android emulator 10.0.2.2, iOS localhost, LAN IP)
+ * Configures communication with the Kings Taxi Central Backend on Render.
+ * Respects local development (Android emulator 10.0.2.2, iOS localhost, LAN IP)
  * and production deployment.
  */
 
-// Default backend port matching backend/.env PORT=5000
-const DEFAULT_PORT = 5000;
-const DEFAULT_PREFIX = '/api/v1';
+let currentBaseUrl: string = resolveApiBaseUrl();
 
-function resolveDefaultBaseUrl(): string {
-  // If explicitly specified in environment
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
-  }
+const isProduction =
+  process.env.NODE_ENV === 'production' ||
+  process.env.EXPO_PUBLIC_ENVIRONMENT === 'production';
 
-  // Android Emulator maps host localhost to 10.0.2.2
-  if (Platform.OS === 'android') {
-    return `http://10.0.2.2:${DEFAULT_PORT}${DEFAULT_PREFIX}`;
-  }
-
-  // iOS Simulator & Web & default
-  return `http://127.0.0.1:${DEFAULT_PORT}${DEFAULT_PREFIX}`;
-}
-
-let currentBaseUrl: string = resolveDefaultBaseUrl();
-
-// Explicit mock flag: true only if explicitly requested; otherwise false (real API mode)
+// Explicit mock flag: strictly disabled in production builds;
+// allowed in development only when explicitly requested
 let isMockAuthEnabled: boolean =
-  process.env.EXPO_PUBLIC_USE_MOCK_AUTH === 'true' ||
-  process.env.EXPO_PUBLIC_DATA_SOURCE === 'mock';
+  !isProduction &&
+  (process.env.EXPO_PUBLIC_USE_MOCK_AUTH === 'true' ||
+    process.env.EXPO_PUBLIC_DATA_SOURCE === 'mock');
 
 export const API_CONFIG = {
   get baseUrl(): string {
@@ -48,7 +53,11 @@ export const API_CONFIG = {
   },
 
   setMockAuth(enabled: boolean): void {
-    isMockAuthEnabled = enabled;
+    if (isProduction) {
+      isMockAuthEnabled = false;
+    } else {
+      isMockAuthEnabled = enabled;
+    }
   },
 
   endpoints: {
@@ -64,9 +73,11 @@ export const API_CONFIG = {
     recoveryReset: '/auth/recovery/reset',
     refresh: '/auth/refresh',
     logout: '/auth/logout',
+    logoutAll: '/auth/logout-all',
     me: '/auth/me',
     telegramVerify: '/auth/telegram/verify',
     status: '/auth/status',
+
     // Passenger Profile & Security routes
     passengerProfile: '/passenger/profile',
     passengerContactInitiate: '/passenger/profile/change-contact/initiate',
@@ -76,6 +87,38 @@ export const API_CONFIG = {
     passengerProfileImage: '/passenger/profile-image',
     passengerSecurity: '/passenger/security',
     passengerBiometric: '/passenger/security/biometric',
+
+    // Bookings & Activities
+    passengerBookings: '/passengers/bookings',
+    passengerRecentActivities: '/passengers/recent-activities',
+
+    // Transportation & Rides
+    subcities: '/subcities',
+    drivers: '/passengers/drivers',
+    estimateRide: '/passengers/rides/estimate',
+    rides: '/passengers/rides',
+
+    // Hospitality & Hotels
+    hotels: '/hotels',
+    featuredHotels: '/hotels/featured',
+    hotelQuote: '/hotel-bookings/quote',
+    hotelBookings: '/hotel-bookings',
+    lounges: '/lounges',
+    loungeReservations: '/lounge-reservations',
+
+    // Heritage & Tours
+    heritageSites: '/heritage/sites',
+    heritagePackages: '/heritage/packages',
+    heritageQuotes: '/heritage/quotes',
+    heritageBookings: '/heritage/bookings',
+
+    // Support
+    supportStatus: '/support/status',
+    supportTickets: '/support/tickets',
+
+    // Payments
+    paymentStatus: '/payments/status',
+    paymentWebhook: '/payments/webhook',
+    paymentVerify: '/payments/verify',
   },
 };
-

@@ -1,4 +1,4 @@
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 import { useAuthStore } from '../stores/auth.store';
 import {
   ApiResponse,
@@ -85,7 +85,7 @@ export class PassengerBookingsService {
 
     // 1. Primary Attempt: /passengers/bookings
     try {
-      const url = `${API_CONFIG.baseUrl}/passengers/bookings${qs}`;
+      const url = buildApiUrl(`/passengers/bookings${qs}`);
       const res = await fetch(url, { headers });
 
       if (res.ok) {
@@ -124,7 +124,7 @@ export class PassengerBookingsService {
 
       // If 404, try alias /bookings/history
       if (res.status === 404) {
-        const altUrl = `${API_CONFIG.baseUrl}/bookings/history${qs}`;
+        const altUrl = buildApiUrl(`/bookings/history${qs}`);
         const altRes = await fetch(altUrl, { headers });
         if (altRes.ok) {
           const altJson = await altRes.json().catch(() => null);
@@ -173,7 +173,7 @@ export class PassengerBookingsService {
     const fetchLoungesFn = async () => {
       if (!token) return { success: true, data: [] };
       try {
-        const res = await fetch(`${API_CONFIG.baseUrl}/lounge-reservations`, {
+        const res = await fetch(buildApiUrl('/lounge-reservations'), {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
@@ -403,7 +403,7 @@ export class PassengerBookingsService {
       };
     }
 
-    const url = `${API_CONFIG.baseUrl}/passengers/bookings/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
+    const url = buildApiUrl(`/passengers/bookings/${encodeURIComponent(type)}/${encodeURIComponent(id)}`);
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -456,7 +456,7 @@ export class PassengerBookingsService {
 
     // Primary attempt: /passenger/recent-activities
     try {
-      const url = `${API_CONFIG.baseUrl}/passenger/recent-activities?limit=${limit}`;
+      const url = buildApiUrl(`/passenger/recent-activities?limit=${limit}`);
       const res = await fetch(url, { headers });
       if (res.ok) {
         const json = await res.json().catch(() => null);
@@ -474,7 +474,7 @@ export class PassengerBookingsService {
 
     // Secondary attempt: /passengers/recent-activities
     try {
-      const altUrl = `${API_CONFIG.baseUrl}/passengers/recent-activities?limit=${limit}`;
+      const altUrl = buildApiUrl(`/passengers/recent-activities?limit=${limit}`);
       const altRes = await fetch(altUrl, { headers });
       if (altRes.ok) {
         const json = await altRes.json().catch(() => null);

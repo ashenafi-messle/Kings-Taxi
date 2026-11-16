@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, apiFetch } from '../config/api';
 import {
   ApiResponse,
   PassengerProfile,
@@ -26,30 +26,11 @@ export class PassengerProfileService {
    * Fetches latest passenger profile from PostgreSQL backend.
    */
   static async getProfile(accessToken?: string | null): Promise<ApiResponse<PassengerProfile>> {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerProfile}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(accessToken),
-        }
-      );
-      const json = await response.json();
-      if (!response.ok) {
-        return {
-          success: false,
-          error: json.message || 'Failed to retrieve profile',
-          data: {} as PassengerProfile,
-        };
-      }
-      return { success: true, data: json.data || json };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err.message || 'Network error fetching profile',
-        data: {} as PassengerProfile,
-      };
-    }
+    return apiFetch<PassengerProfile>(
+      API_CONFIG.endpoints.passengerProfile,
+      { method: 'GET' },
+      accessToken
+    );
   }
 
   /**
@@ -59,31 +40,14 @@ export class PassengerProfileService {
     dto: UpdatePassengerProfileDto,
     accessToken?: string | null
   ): Promise<ApiResponse<PassengerProfile>> {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerProfile}`,
-        {
-          method: 'PATCH',
-          headers: this.getHeaders(accessToken),
-          body: JSON.stringify(dto),
-        }
-      );
-      const json = await response.json();
-      if (!response.ok) {
-        return {
-          success: false,
-          error: json.message || 'Failed to update profile',
-          data: {} as PassengerProfile,
-        };
-      }
-      return { success: true, data: json.data || json, message: json.message };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err.message || 'Network error updating profile',
-        data: {} as PassengerProfile,
-      };
-    }
+    return apiFetch<PassengerProfile>(
+      API_CONFIG.endpoints.passengerProfile,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(dto),
+      },
+      accessToken
+    );
   }
 
   /**
@@ -93,31 +57,14 @@ export class PassengerProfileService {
     dto: InitiateContactChangeDto,
     accessToken?: string | null
   ): Promise<ApiResponse<{ sessionId: string; message: string; devOtp?: string }>> {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerContactInitiate}`,
-        {
-          method: 'POST',
-          headers: this.getHeaders(accessToken),
-          body: JSON.stringify(dto),
-        }
-      );
-      const json = await response.json();
-      if (!response.ok) {
-        return {
-          success: false,
-          error: json.message || 'Failed to initiate contact verification',
-          data: {} as any,
-        };
-      }
-      return { success: true, data: json.data || json, message: json.message };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err.message || 'Network error initiating contact change',
-        data: {} as any,
-      };
-    }
+    return apiFetch<{ sessionId: string; message: string; devOtp?: string }>(
+      API_CONFIG.endpoints.passengerContactInitiate,
+      {
+        method: 'POST',
+        body: JSON.stringify(dto),
+      },
+      accessToken
+    );
   }
 
   /**
@@ -127,31 +74,29 @@ export class PassengerProfileService {
     dto: VerifyContactChangeDto,
     accessToken?: string | null
   ): Promise<ApiResponse<PassengerProfile>> {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerContactVerify}`,
-        {
-          method: 'POST',
-          headers: this.getHeaders(accessToken),
-          body: JSON.stringify(dto),
-        }
-      );
-      const json = await response.json();
-      if (!response.ok) {
-        return {
-          success: false,
-          error: json.message || 'Failed to verify contact code',
-          data: {} as PassengerProfile,
-        };
-      }
-      return { success: true, data: json.data?.passenger || json.data, message: json.message };
-    } catch (err: any) {
+    const res = await apiFetch<any>(
+      API_CONFIG.endpoints.passengerContactVerify,
+      {
+        method: 'POST',
+        body: JSON.stringify(dto),
+      },
+      accessToken
+    );
+
+    if (res.success && res.data) {
       return {
-        success: false,
-        error: err.message || 'Network error verifying contact change',
-        data: {} as PassengerProfile,
+        success: true,
+        data: res.data.passenger || res.data,
+        message: res.message,
       };
     }
+
+    return {
+      success: false,
+      data: {} as PassengerProfile,
+      error: res.error || 'Failed to verify contact code',
+      message: res.message,
+    };
   }
 
   /**
@@ -160,30 +105,11 @@ export class PassengerProfileService {
   static async getCloudinaryUploadSignature(
     accessToken?: string | null
   ): Promise<ApiResponse<CloudinarySignatureData>> {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerUploadSignature}`,
-        {
-          method: 'POST',
-          headers: this.getHeaders(accessToken),
-        }
-      );
-      const json = await response.json();
-      if (!response.ok) {
-        return {
-          success: false,
-          error: json.message || 'Failed to generate upload signature',
-          data: {} as CloudinarySignatureData,
-        };
-      }
-      return { success: true, data: json.data || json };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err.message || 'Network error obtaining upload signature',
-        data: {} as CloudinarySignatureData,
-      };
-    }
+    return apiFetch<CloudinarySignatureData>(
+      API_CONFIG.endpoints.passengerUploadSignature,
+      { method: 'POST' },
+      accessToken
+    );
   }
 
   /**
@@ -516,80 +442,36 @@ export class PassengerProfileService {
     publicId?: string,
     accessToken?: string | null
   ): Promise<ApiResponse<PassengerProfile>> {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerProfileImage}`,
-        {
-          method: 'PATCH',
-          headers: this.getHeaders(accessToken),
-          body: JSON.stringify({ imageUrl, publicId }),
-        }
-      );
-      const json = await response.json();
-      if (!response.ok) {
-        return {
-          success: false,
-          error: json.message || 'Failed to update profile picture',
-          data: {} as PassengerProfile,
-        };
-      }
-      return { success: true, data: json.data || json, message: json.message };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err.message || 'Network error updating profile picture',
-        data: {} as PassengerProfile,
-      };
-    }
+    return apiFetch<PassengerProfile>(
+      API_CONFIG.endpoints.passengerProfileImage,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ imageUrl, publicId }),
+      },
+      accessToken
+    );
   }
 
   /**
    * Clears custom profile image from the passenger record.
    */
   static async removeProfileImage(accessToken?: string | null): Promise<ApiResponse<any>> {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerProfileImage}`,
-        {
-          method: 'DELETE',
-          headers: this.getHeaders(accessToken),
-        }
-      );
-      const json = await response.json();
-      if (!response.ok) {
-        return {
-          success: false,
-          error: json.message || 'Failed to remove profile picture',
-          data: null,
-        };
-      }
-      return { success: true, data: json.data || json, message: json.message };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err.message || 'Network error removing profile picture',
-        data: null,
-      };
-    }
+    return apiFetch<any>(
+      API_CONFIG.endpoints.passengerProfileImage,
+      { method: 'DELETE' },
+      accessToken
+    );
   }
 
   /**
    * Retrieves security and session status from backend.
    */
   static async getSecurityInfo(accessToken?: string | null): Promise<ApiResponse<any>> {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerSecurity}`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(accessToken),
-        }
-      );
-      const json = await response.json();
-      return { success: response.ok, data: json.data || json };
-    } catch (err: any) {
-      return { success: false, error: err.message, data: null };
-    }
+    return apiFetch<any>(
+      API_CONFIG.endpoints.passengerSecurity,
+      { method: 'GET' },
+      accessToken
+    );
   }
 }
 

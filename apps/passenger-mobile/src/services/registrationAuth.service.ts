@@ -16,6 +16,7 @@ import {
   maskContact,
 } from '../utils/crypto';
 import { mockPassenger } from '../mocks';
+import { buildApiUrl } from '../config/api';
 
 export type RegistrationMethod = 'email' | 'telegram';
 
@@ -52,7 +53,7 @@ export interface RegisteredAccountRecord {
 
 const REGISTERED_ACCOUNTS_STORAGE_KEY = '@kings_taxi_registered_accounts_db';
 const ACTIVE_SESSIONS_STORAGE_KEY = '@kings_taxi_active_reg_sessions';
-const BACKEND_API_BASE = 'https://api.kingstaxi.et/api/v1/auth';
+const getBackendApiBase = () => buildApiUrl('/auth');
 
 // In-memory active registration sessions
 const activeSessions = new Map<string, RegistrationSession>();
@@ -245,7 +246,7 @@ export class RegistrationAuthService {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 1800);
-      const res = await fetch(`${BACKEND_API_BASE}/register/initiate`, {
+      const res = await fetch(`${getBackendApiBase()}/register/initiate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ method, identifier: cleanIdentifier, fullName: cleanFullName }),

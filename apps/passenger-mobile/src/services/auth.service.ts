@@ -17,7 +17,7 @@
  */
 
 import { Platform } from 'react-native';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, apiFetch } from '../config/api';
 import {
   ApiResponse,
   PassengerProfile,
@@ -42,71 +42,7 @@ async function executeApiRequest<T>(
   options: RequestInit = {},
   accessToken?: string | null
 ): Promise<ApiResponse<T>> {
-  const url = `${API_CONFIG.baseUrl}${endpoint}`;
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  };
-
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 second network timeout
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    const json = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      const errorMessage =
-        json?.message ||
-        json?.error?.message ||
-        json?.error ||
-        `Request failed with status ${response.status}`;
-
-      return {
-        success: false,
-        data: (json?.data || {}) as T,
-        error: errorMessage,
-        message: errorMessage,
-      };
-    }
-
-    return {
-      success: true,
-      data: json?.data ?? (json as any),
-      message: json?.message,
-    };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-
-    if (err.name === 'AbortError') {
-      return {
-        success: false,
-        data: {} as T,
-        error: 'Network request timed out. Please check your connection and try again.',
-      };
-    }
-
-    return {
-      success: false,
-      data: {} as T,
-      error:
-        err.message ||
-        'Unable to connect to Kings Taxi server. Please verify network connectivity.',
-    };
-  }
+  return apiFetch<T>(endpoint, options, accessToken);
 }
 
 export class AuthService {

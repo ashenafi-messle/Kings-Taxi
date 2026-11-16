@@ -11,7 +11,7 @@
  */
 
 import { Platform } from 'react-native';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 
 export type NetworkType = 'wifi' | 'cellular_3g' | 'cellular_4g' | 'cellular_5g' | 'none' | 'unknown';
 
@@ -142,13 +142,13 @@ class NetworkService {
       const timeoutId = setTimeout(() => controller.abort(), 3500);
 
       // Probe health endpoint or root
-      const probeUrl = `${API_CONFIG.baseUrl}/health/live`;
+      const probeUrl = buildApiUrl('/health/live');
       const res = await fetch(probeUrl, {
         method: 'GET',
         signal: controller.signal,
       }).catch(async () => {
         // Fallback probe
-        return await fetch(API_CONFIG.baseUrl, {
+        return await fetch(buildApiUrl('/health'), {
           method: 'GET',
           signal: controller.signal,
         });

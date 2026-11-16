@@ -1,4 +1,4 @@
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, apiFetch } from '../config/api';
 import { useAuthStore } from '../stores/auth.store';
 import {
   ApiResponse,
@@ -18,51 +18,7 @@ async function requestWithAuth<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  const token = useAuthStore.getState().token;
-  const cleanEndpoint = endpoint.startsWith('/api/v1')
-    ? endpoint.slice('/api/v1'.length)
-    : endpoint;
-  const normalized = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
-  const url = `${API_CONFIG.baseUrl}${normalized}`;
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-    ...((options.headers as Record<string, string>) || {}),
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  try {
-    const res = await fetch(url, { ...options, headers });
-    const json = await res.json().catch(() => null);
-
-    if (!res.ok) {
-      return {
-        success: false,
-        data: null as any,
-        error:
-          json?.message ||
-          json?.error?.message ||
-          (typeof json?.error === 'string' ? json.error : null) ||
-          `Request failed with status ${res.status}`,
-      };
-    }
-
-    return {
-      success: true,
-      data: json?.data !== undefined ? json.data : json,
-      message: json?.message,
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      data: null as any,
-      error: err.message || 'Network connection failed.',
-    };
-  }
+  return apiFetch<T>(endpoint, options);
 }
 
 function mapBackendHotelToMobile(h: any): Hotel {

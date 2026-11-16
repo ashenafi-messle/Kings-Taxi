@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { SecureStorageUtil } from '../utils/secureStorage';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 
 export type BiometricType = 'FACE_ID' | 'FINGERPRINT' | 'IRIS' | 'DEVICE_PIN' | 'NONE';
 
@@ -146,7 +146,7 @@ export class BiometricAuthService {
       // Notify backend to register session biometric status
       if (accessToken && !API_CONFIG.isMockAuth) {
         const capability = await this.checkCapability();
-        fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerBiometric}`, {
+        fetch(buildApiUrl(API_CONFIG.endpoints.passengerBiometric), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -175,7 +175,7 @@ export class BiometricAuthService {
       await SecureStorageUtil.removeItem(BIOMETRIC_USER_ID_KEY);
 
       if (accessToken && !API_CONFIG.isMockAuth) {
-        fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.passengerBiometric}`, {
+        fetch(buildApiUrl(API_CONFIG.endpoints.passengerBiometric), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

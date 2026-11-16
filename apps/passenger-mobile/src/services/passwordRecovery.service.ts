@@ -17,7 +17,7 @@ import {
   RegisteredAccountRecord,
 } from './registrationAuth.service';
 import { APP_CONFIG } from '../config/appLinks';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 
 export type RecoveryMethod = 'email' | 'telegram';
 
@@ -40,7 +40,7 @@ export interface PasswordRecoverySession {
   lastDevOtp?: string;
 }
 
-const getBackendApiBase = () => `${API_CONFIG.baseUrl}/auth/recovery`;
+const getBackendApiBase = () => buildApiUrl('/auth/recovery');
 
 // Active in-memory recovery sessions
 const activeRecoverySessions = new Map<string, PasswordRecoverySession>();

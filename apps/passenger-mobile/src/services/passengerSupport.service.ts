@@ -1,4 +1,4 @@
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 import { useAuthStore } from '../stores/auth.store';
 
 export type SupportCategory =
@@ -84,7 +84,7 @@ export class PassengerSupportService {
    * Create a new support ticket with an initial passenger message.
    */
   static async createTicket(params: CreateTicketParams): Promise<SupportTicketDetail> {
-    const url = `${API_CONFIG.baseUrl}/support/tickets`;
+    const url = buildApiUrl('/support/tickets');
     const response = await fetch(url, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -115,7 +115,7 @@ export class PassengerSupportService {
     if (query?.limit) queryParts.push(`limit=${query.limit}`);
 
     const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-    const url = `${API_CONFIG.baseUrl}/support/tickets${qs}`;
+    const url = buildApiUrl(`/support/tickets${qs}`);
 
     const response = await fetch(url, {
       method: 'GET',
@@ -134,7 +134,7 @@ export class PassengerSupportService {
    * Retrieve ticket details with full message history and mark unread admin responses as read.
    */
   static async getTicketDetail(ticketId: string): Promise<SupportTicketDetail> {
-    const url = `${API_CONFIG.baseUrl}/support/tickets/${ticketId}`;
+    const url = buildApiUrl(`/support/tickets/${ticketId}`);
     const response = await fetch(url, {
       method: 'GET',
       headers: this.getHeaders(),
@@ -152,7 +152,7 @@ export class PassengerSupportService {
    * Send a passenger reply to an existing open support ticket.
    */
   static async replyTicket(ticketId: string, message: string): Promise<SupportMessage> {
-    const url = `${API_CONFIG.baseUrl}/support/tickets/${ticketId}/messages`;
+    const url = buildApiUrl(`/support/tickets/${ticketId}/messages`);
     const response = await fetch(url, {
       method: 'POST',
       headers: this.getHeaders(),

@@ -35,20 +35,25 @@ export default function PaymentCallbackScreen() {
       return true;
     });
 
-    // Verify transaction with backend
+    // Verify transaction strictly with backend
     const rawStatus = (params.status as string)?.toLowerCase();
-    const shouldVerify = rawStatus !== 'failed' && rawStatus !== 'cancelled';
+    const isDirectFailure = rawStatus === 'failed' || rawStatus === 'cancelled';
 
-    PaymentService.verifyPayment(transactionRef)
-      .then((res) => {
-        setIsSuccess(shouldVerify && !!res?.success);
-      })
-      .catch(() => {
-        setIsSuccess(shouldVerify);
-      })
-      .finally(() => {
-        setIsVerifying(false);
-      });
+    if (isDirectFailure) {
+      setIsSuccess(false);
+      setIsVerifying(false);
+    } else {
+      PaymentService.verifyPayment(transactionRef)
+        .then((res) => {
+          setIsSuccess(!!res?.success && !!res?.data?.verified);
+        })
+        .catch(() => {
+          setIsSuccess(false);
+        })
+        .finally(() => {
+          setIsVerifying(false);
+        });
+    }
 
     return () => {
       backSubscription.remove();
