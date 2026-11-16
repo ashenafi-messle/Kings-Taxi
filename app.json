@@ -7,7 +7,9 @@
       "eas": {
         "projectId": "dea6e1f4-dcc5-4129-b016-cd36af49c3bf"
       }
+    },
+    "android": {
+      "package": "com.ardabtechsolutions22.kingstaxiworkspace"
     }
   }
 }
-

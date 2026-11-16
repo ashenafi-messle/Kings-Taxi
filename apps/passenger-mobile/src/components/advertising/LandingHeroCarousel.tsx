@@ -100,6 +100,7 @@ export const LandingHeroCarousel: React.FC = () => {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        removeClippedSubviews={true}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         onScrollBeginDrag={() => {

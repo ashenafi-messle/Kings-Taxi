@@ -13,6 +13,8 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes cache garbage collection to release RAM
+      refetchOnWindowFocus: false, // Prevent redundant background fetches and memory spikes
     },
   },
 });

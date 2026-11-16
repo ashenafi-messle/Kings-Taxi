@@ -20,10 +20,46 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_DATA_SOURCE": "real",
+        "EXPO_PUBLIC_API_URL": "https://kings-taxi.onrender.com/api/v1"
       },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PreactNativeArchitectures=arm64-v8a"
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview-universal": {
+      "distribution": "internal",
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_DATA_SOURCE": "real",
+        "EXPO_PUBLIC_API_URL": "https://kings-taxi.onrender.com/api/v1"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a"
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview-armv7": {
+      "distribution": "internal",
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_DATA_SOURCE": "real",
+        "EXPO_PUBLIC_API_URL": "https://kings-taxi.onrender.com/api/v1"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PreactNativeArchitectures=armeabi-v7a"
       },
       "ios": {
         "simulator": true

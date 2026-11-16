@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -367,6 +368,11 @@ export default function BookingsScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.scrollList}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={Platform.OS === 'android'}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          initialNumToRender={6}
+          updateCellsBatchingPeriod={50}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.4}
           ListFooterComponent={renderFooter}
