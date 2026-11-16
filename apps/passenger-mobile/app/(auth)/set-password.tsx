@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -51,6 +52,7 @@ export default function SetPasswordScreen() {
   const [error, setError] = useState('');
   const [successToast, setSuccessToast] = useState(false);
   const [langModalVisible, setLangModalVisible] = useState(false);
+  const confirmPasswordRef = useRef<TextInput>(null);
 
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
@@ -222,9 +224,13 @@ export default function SetPasswordScreen() {
               showStrengthMeter
               disableAutofill
               importantForAutofill="no"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+              blurOnSubmit={false}
             />
 
             <PasswordInput
+              ref={confirmPasswordRef}
               label={t('confirmPasswordLabel')}
               placeholder={t('confirmPasswordPlaceholder')}
               value={confirmPassword}
@@ -235,6 +241,8 @@ export default function SetPasswordScreen() {
               isNewPassword
               disableAutofill
               importantForAutofill="no"
+              returnKeyType="done"
+              onSubmitEditing={handleSavePassword}
             />
 
             {/* Password Requirements Checklist */}

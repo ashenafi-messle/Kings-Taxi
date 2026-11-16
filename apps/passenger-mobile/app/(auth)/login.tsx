@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -46,6 +47,7 @@ export default function LoginScreen() {
   const [rememberEmail, setRememberEmail] = useState(false);
   const [error, setError] = useState('');
   const [langModalVisible, setLangModalVisible] = useState(false);
+  const passwordInputRef = useRef<TextInput>(null);
 
   // Initialize and pre-fill remembered email
   useEffect(() => {
@@ -204,10 +206,14 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoComplete="email"
               textContentType="emailAddress"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordInputRef.current?.focus()}
+              blurOnSubmit={false}
               leftIcon={<Mail size={18} color={colors.secondaryText} />}
             />
 
             <PasswordInput
+              ref={passwordInputRef}
               label={t('passwordLabel')}
               placeholder={t('passwordPlaceholder')}
               value={password}
@@ -215,6 +221,8 @@ export default function LoginScreen() {
                 setPassword(text);
                 setError('');
               }}
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
             />
 
             {/* Remember Email & Forgot Password Row */}

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -50,6 +51,7 @@ export default function RegisterScreen() {
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [error, setError] = useState('');
   const [langModalVisible, setLangModalVisible] = useState(false);
+  const secondInputRef = useRef<TextInput>(null);
 
   // Android BackHandler
   useEffect(() => {
@@ -321,12 +323,16 @@ export default function RegisterScreen() {
               }}
               autoComplete="name"
               textContentType="name"
+              returnKeyType="next"
+              onSubmitEditing={() => secondInputRef.current?.focus()}
+              blurOnSubmit={false}
               leftIcon={<User size={18} color={colors.secondaryText} />}
             />
 
             {/* Option A: Email Input */}
             {method === 'email' ? (
               <FormInput
+                ref={secondInputRef}
                 label={t('emailAddressLabel')}
                 placeholder={t('emailAddressPlaceholder')}
                 value={email}
@@ -338,6 +344,8 @@ export default function RegisterScreen() {
                 autoCapitalize="none"
                 autoComplete="email"
                 textContentType="emailAddress"
+                returnKeyType="done"
+                onSubmitEditing={handleContinue}
                 leftIcon={<Mail size={18} color={colors.secondaryText} />}
               />
             ) : (
@@ -351,6 +359,7 @@ export default function RegisterScreen() {
                   </View>
                   <View style={styles.phoneFieldContainer}>
                     <FormInput
+                      ref={secondInputRef}
                       placeholder={t('phonePlaceholder')}
                       value={phone}
                       onChangeText={(text) => {
@@ -360,8 +369,10 @@ export default function RegisterScreen() {
                       keyboardType="phone-pad"
                       autoComplete="tel"
                       textContentType="telephoneNumber"
+                      returnKeyType="done"
+                      onSubmitEditing={handleContinue}
                       leftIcon={<Phone size={18} color={colors.secondaryText} />}
-                      style={{ marginBottom: 0 }}
+                      containerStyle={{ marginBottom: 0 }}
                     />
                   </View>
                 </View>

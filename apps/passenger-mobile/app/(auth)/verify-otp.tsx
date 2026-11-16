@@ -302,6 +302,9 @@ export default function VerifyOtpScreen() {
             }}
             keyboardType="number-pad"
             maxLength={6}
+            autoCorrect={false}
+            autoComplete="one-time-code"
+            textContentType="oneTimeCode"
             style={styles.hiddenInput}
             autoFocus
           />

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -62,6 +63,7 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState('');
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const phoneInputRef = useRef<TextInput>(null);
 
   // Android BackHandler
   useEffect(() => {
@@ -366,6 +368,8 @@ export default function ForgotPasswordScreen() {
                   autoCapitalize="none"
                   autoComplete="email"
                   textContentType="emailAddress"
+                  returnKeyType="done"
+                  onSubmitEditing={handleInitiateRecovery}
                   leftIcon={<Mail size={18} color={colors.secondaryText} />}
                 />
                 <Text style={styles.helperNotice}>
@@ -387,8 +391,12 @@ export default function ForgotPasswordScreen() {
                   </TouchableOpacity>
 
                   {/* Phone Number Input */}
-                  <View style={styles.phoneNumberWrapper}>
+                  <Pressable
+                    style={styles.phoneNumberWrapper}
+                    onPress={() => phoneInputRef.current?.focus()}
+                  >
                     <TextInput
+                      ref={phoneInputRef}
                       style={styles.phoneTextInput}
                       placeholder="91 123 4567"
                       placeholderTextColor={colors.textLight}
@@ -399,8 +407,12 @@ export default function ForgotPasswordScreen() {
                       }}
                       keyboardType="phone-pad"
                       maxLength={14}
+                      autoCorrect={false}
+                      underlineColorAndroid="transparent"
+                      returnKeyType="done"
+                      onSubmitEditing={handleInitiateRecovery}
                     />
-                  </View>
+                  </Pressable>
                 </View>
 
                 {/* Country Code Picker Dropdown */}
@@ -703,6 +715,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.dark,
+    flex: 1,
+    height: '100%',
+    paddingVertical: Platform.OS === 'android' ? 0 : undefined,
+    textAlignVertical: 'center',
   },
   countryDropdown: {
     backgroundColor: colors.white,

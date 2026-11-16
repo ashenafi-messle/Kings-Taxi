@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
   TextInput,
+  TextInputProps,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ViewStyle,
   Platform,
@@ -11,7 +13,8 @@ import {
 import { Lock, Eye, EyeOff } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
 
-interface PasswordInputProps {
+export interface PasswordInputProps
+  extends Omit<TextInputProps, 'value' | 'onChangeText' | 'secureTextEntry'> {
   label: string;
   placeholder: string;
   value: string;
@@ -21,126 +24,173 @@ interface PasswordInputProps {
   showStrengthMeter?: boolean;
   style?: ViewStyle;
   disableAutofill?: boolean;
-  importantForAutofill?: 'auto' | 'no' | 'noExcludeDescendants' | 'yes' | 'yesExcludeDescendants';
+  importantForAutofill?:
+    | 'auto'
+    | 'no'
+    | 'noExcludeDescendants'
+    | 'yes'
+    | 'yesExcludeDescendants';
 }
 
-export const PasswordInput: React.FC<PasswordInputProps> = ({
-  label,
-  placeholder,
-  value,
-  onChangeText,
-  error,
-  isNewPassword = false,
-  showStrengthMeter = false,
-  style,
-  disableAutofill = false,
-  importantForAutofill,
-}) => {
-  const [isSecure, setIsSecure] = useState(true);
-  const [isFocused, setIsFocused] = useState(false);
+export const PasswordInput = React.forwardRef<TextInput, PasswordInputProps>(
+  (
+    {
+      label,
+      placeholder,
+      value,
+      onChangeText,
+      error,
+      isNewPassword = false,
+      showStrengthMeter = false,
+      style,
+      disableAutofill = false,
+      importantForAutofill,
+      autoCorrect = false,
+      editable = true,
+      onFocus,
+      onBlur,
+      ...props
+    },
+    ref
+  ) => {
+    const [isSecure, setIsSecure] = useState(true);
+    const [isFocused, setIsFocused] = useState(false);
+    const innerRef = useRef<TextInput>(null);
 
-  // Compute password strength
-  const getStrength = (pwd: string) => {
-    if (!pwd) return { score: 0, label: '', color: colors.border };
-    let score = 0;
-    if (pwd.length >= 8) score++;
-    if (/[A-Z]/.test(pwd)) score++;
-    if (/[0-9]/.test(pwd)) score++;
-    if (/[^A-Za-z0-9]/.test(pwd)) score++;
+    useImperativeHandle(ref, () => innerRef.current as TextInput);
 
-    if (score <= 1) return { score: 1, label: 'Weak', color: colors.error };
-    if (score <= 3) return { score: 2, label: 'Medium', color: colors.warning };
-    return { score: 3, label: 'Strong', color: colors.success };
-  };
+    // Compute password strength
+    const getStrength = (pwd: string) => {
+      if (!pwd) return { score: 0, label: '', color: colors.border };
+      let score = 0;
+      if (pwd.length >= 8) score++;
+      if (/[A-Z]/.test(pwd)) score++;
+      if (/[0-9]/.test(pwd)) score++;
+      if (/[^A-Za-z0-9]/.test(pwd)) score++;
 
-  const strength = getStrength(value);
+      if (score <= 1) return { score: 1, label: 'Weak', color: colors.error };
+      if (score <= 3) return { score: 2, label: 'Medium', color: colors.warning };
+      return { score: 3, label: 'Strong', color: colors.success };
+    };
 
-  // Prevent Google Password Manager / Autofill overlay from freezing/locking input on Android
-  const shouldDisableAutofill = disableAutofill || (Platform.OS === 'android' && isNewPassword);
+    const strength = getStrength(value);
 
-  return (
-    <View style={[styles.container, style]}>
-      <Text style={styles.label}>{label}</Text>
+    // Prevent Google Password Manager / Autofill overlay from freezing/locking input on Android
+    const shouldDisableAutofill =
+      disableAutofill || (Platform.OS === 'android' && isNewPassword);
 
-      <View
-        style={[
-          styles.inputRow,
-          isFocused ? styles.inputFocused : null,
-          error ? styles.inputError : null,
-        ]}
-      >
-        <Lock
-          size={18}
-          color={isFocused ? colors.primaryGold : colors.secondaryText}
-          style={styles.leftIcon}
-        />
+    const handleContainerPress = () => {
+      if (editable && innerRef.current) {
+        innerRef.current.focus();
+      }
+    };
 
-        <TextInput
-          style={styles.input}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textLight}
-          value={value}
-          onChangeText={onChangeText}
-          secureTextEntry={isSecure}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete={isNewPassword ? 'new-password' : 'password'}
-          textContentType={isNewPassword ? 'newPassword' : 'password'}
-          importantForAutofill={
-            importantForAutofill || (shouldDisableAutofill ? 'no' : 'auto')
-          }
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-        />
+    return (
+      <View style={[styles.container, style]}>
+        <Text style={styles.label}>{label}</Text>
 
-        <TouchableOpacity
-          onPress={() => setIsSecure(!isSecure)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          style={styles.eyeBtn}
-          accessibilityRole="button"
-          accessibilityLabel={isSecure ? 'Show password' : 'Hide password'}
+        <Pressable
+          onPress={handleContainerPress}
+          style={[
+            styles.inputRow,
+            isFocused ? styles.inputFocused : null,
+            error ? styles.inputError : null,
+          ]}
         >
-          {isSecure ? (
-            <EyeOff size={18} color={colors.secondaryText} />
-          ) : (
-            <Eye size={18} color={colors.primaryGold} />
-          )}
-        </TouchableOpacity>
-      </View>
+          <Lock
+            size={18}
+            color={isFocused ? colors.primaryGold : colors.secondaryText}
+            style={styles.leftIcon}
+          />
 
-      {/* Optional Password Strength Indicator */}
-      {showStrengthMeter && value.length > 0 && (
-        <View style={styles.meterContainer}>
-          <View style={styles.meterBars}>
-            <View
-              style={[
-                styles.bar,
-                { backgroundColor: strength.score >= 1 ? strength.color : colors.border },
-              ]}
-            />
-            <View
-              style={[
-                styles.bar,
-                { backgroundColor: strength.score >= 2 ? strength.color : colors.border },
-              ]}
-            />
-            <View
-              style={[
-                styles.bar,
-                { backgroundColor: strength.score >= 3 ? strength.color : colors.border },
-              ]}
-            />
+          <TextInput
+            ref={innerRef}
+            style={styles.input}
+            placeholder={placeholder}
+            placeholderTextColor={colors.textLight}
+            value={value}
+            onChangeText={onChangeText}
+            secureTextEntry={isSecure}
+            autoCapitalize="none"
+            autoCorrect={autoCorrect}
+            editable={editable}
+            autoComplete={isNewPassword ? 'new-password' : 'current-password'}
+            textContentType={isNewPassword ? 'newPassword' : 'password'}
+            importantForAutofill={
+              importantForAutofill || (shouldDisableAutofill ? 'no' : 'auto')
+            }
+            underlineColorAndroid="transparent"
+            onFocus={(e) => {
+              setIsFocused(true);
+              onFocus?.(e);
+            }}
+            onBlur={(e) => {
+              setIsFocused(false);
+              onBlur?.(e);
+            }}
+            {...props}
+          />
+
+          <TouchableOpacity
+            onPress={() => setIsSecure((prev) => !prev)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.eyeBtn}
+            accessibilityRole="button"
+            accessibilityLabel={isSecure ? 'Show password' : 'Hide password'}
+          >
+            {isSecure ? (
+              <EyeOff size={18} color={colors.secondaryText} />
+            ) : (
+              <Eye size={18} color={colors.primaryGold} />
+            )}
+          </TouchableOpacity>
+        </Pressable>
+
+        {/* Optional Password Strength Indicator */}
+        {showStrengthMeter && value.length > 0 && (
+          <View style={styles.meterContainer}>
+            <View style={styles.meterBars}>
+              <View
+                style={[
+                  styles.bar,
+                  {
+                    backgroundColor:
+                      strength.score >= 1 ? strength.color : colors.border,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.bar,
+                  {
+                    backgroundColor:
+                      strength.score >= 2 ? strength.color : colors.border,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.bar,
+                  {
+                    backgroundColor:
+                      strength.score >= 3 ? strength.color : colors.border,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={[styles.strengthLabel, { color: strength.color }]}>
+              {strength.label}
+            </Text>
           </View>
-          <Text style={[styles.strengthLabel, { color: strength.color }]}>
-            {strength.label}
-          </Text>
-        </View>
-      )}
+        )}
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-    </View>
-  );
-};
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      </View>
+    );
+  }
+);
+
+PasswordInput.displayName = 'PasswordInput';
 
 const styles = StyleSheet.create({
   container: {
@@ -177,6 +227,8 @@ const styles = StyleSheet.create({
     height: '100%',
     color: colors.deepChocolate,
     fontSize: 15,
+    paddingVertical: Platform.OS === 'android' ? 0 : undefined,
+    textAlignVertical: 'center',
   },
   eyeBtn: {
     padding: 6,
@@ -209,4 +261,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-
