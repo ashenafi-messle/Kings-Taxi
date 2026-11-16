@@ -43,6 +43,17 @@ function run() {
   );
 
   // 2. wrapFetchWithCache.js - clone response before cache stream consumption
+  // Fix any previously injected duplicate let declaration
+  const wrapFetchPath = path.join(__dirname, '..', 'node_modules/@expo/cli/build/src/api/rest/cache/wrapFetchWithCache.js');
+  if (fs.existsSync(wrapFetchPath)) {
+    let wrapContent = fs.readFileSync(wrapFetchPath, 'utf8');
+    if (wrapContent.includes('let cachedResponse1 = null;')) {
+      wrapContent = wrapContent.replace('let cachedResponse1 = null;', 'cachedResponse1 = null;');
+      fs.writeFileSync(wrapFetchPath, wrapContent, 'utf8');
+      console.log('[Patch] Fixed duplicate cachedResponse1 declaration in wrapFetchWithCache.js');
+    }
+  }
+
   patchFile(
     'node_modules/@expo/cli/build/src/api/rest/cache/wrapFetchWithCache.js',
     `            // Execute the fetch request
@@ -69,7 +80,7 @@ function run() {
                 } catch {}
             }
             // Cache the response
-            let cachedResponse1 = null;
+            cachedResponse1 = null;
             try {
                 cachedResponse1 = await cache.set(cacheKey, {
                     body: bodyForCache,
