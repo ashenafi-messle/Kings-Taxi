@@ -9,9 +9,7 @@ import {
   BackHandler,
   useWindowDimensions,
   Image,
-  Share,
   Platform,
-  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -27,7 +25,7 @@ import Svg, {
   Ellipse,
   Circle,
 } from 'react-native-svg';
-import { Globe, Mail, Share2 } from 'lucide-react-native';
+import { Globe } from 'lucide-react-native';
 import { LanguageSelectorModal } from '../../src/components/common/LanguageSelectorModal';
 import { useTranslation, SUPPORTED_LANGUAGES } from '../../src/i18n';
 import { useSettingsStore, useAuthStore } from '../../src/stores';
@@ -41,32 +39,6 @@ const ROYAL_KT_3D_ARTWORK_URL =
   'https://res.cloudinary.com/oxzqogef/image/upload/v1794851350/Gemini_Generated_Image_76y38g76y38g76y3.jpg';
 const ROYAL_KT_3D_ARTWORK_LOCAL = require('../../assets/branding/kt-royal-crown-3d.jpg');
 const MONOGRAM_SOURCE = require('../../assets/branding/kings-taxi-monogram.png');
-
-/**
- * Pixel-Perfect Android Bugdroid Robot SVG Icon
- */
-const AndroidRobotIcon = ({ size = 20, color = '#FFFFFF' }: { size?: number; color?: string }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    {/* Antennae */}
-    <Path d="M7 4 L5 1.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
-    <Path d="M17 4 L19 1.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
-    {/* Head dome */}
-    <Path d="M4 8.5 C4 4.5 7.5 2.5 12 2.5 C16.5 2.5 20 4.5 20 8.5 Z" fill={color} />
-    {/* Eyes */}
-    <Circle cx="8" cy="6" r="1.1" fill="#66370D" />
-    <Circle cx="16" cy="6" r="1.1" fill="#66370D" />
-    {/* Torso */}
-    <Rect x="4" y="9.8" width="16" height="8.8" rx="2" fill={color} />
-    {/* Left Arm */}
-    <Rect x="1" y="9.8" width="2.2" height="7" rx="1.1" fill={color} />
-    {/* Right Arm */}
-    <Rect x="20.8" y="9.8" width="2.2" height="7" rx="1.1" fill={color} />
-    {/* Left Leg */}
-    <Rect x="6.8" y="18.8" width="3" height="4.2" rx="1.5" fill={color} />
-    {/* Right Leg */}
-    <Rect x="14.2" y="18.8" width="3" height="4.2" rx="1.5" fill={color} />
-  </Svg>
-);
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -83,7 +55,6 @@ export default function WelcomeScreen() {
   const isMediumDevice = height >= 700 && height < 820;
 
   // Adaptive font and graphic dimensions
-  const headlineLine1Size = isSmallDevice ? 30 : isMediumDevice ? 35 : 38;
   const headlineLine2Size = isSmallDevice ? 35 : isMediumDevice ? 41 : 45;
   const illustrationWidth = isSmallDevice ? 168 : isMediumDevice ? 208 : 244;
   const illustrationHeight = Math.round(illustrationWidth / 1.543);
@@ -109,28 +80,6 @@ export default function WelcomeScreen() {
 
   const currentLangLabel =
     SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName || 'English';
-
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        title: 'Kings Taxi — Premium Class Transport',
-        message:
-          'Kings Taxi: The Royal Standard of Ethiopian Mobility. Experience comfort, safety and convenience. Visit https://kingstaxi.et',
-      });
-    } catch (err) {
-      console.warn('Share Kings Taxi error:', err);
-    }
-  };
-
-  const handleEmailContact = () => {
-    Linking.openURL('mailto:support@kingstaxi.et').catch(() => {
-      router.push('/support');
-    });
-  };
-
-  const handleAndroidAction = () => {
-    router.push('/support');
-  };
 
   const handleSignInNavigation = () => {
     if (isAuthenticated) {
@@ -272,7 +221,7 @@ export default function WelcomeScreen() {
           styles.scrollContent,
           {
             paddingTop: Math.max(insets.top, 24) + 6,
-            paddingBottom: Math.max(insets.bottom, 16) + 12,
+            paddingBottom: Math.max(insets.bottom, 16) + 20,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -318,30 +267,17 @@ export default function WelcomeScreen() {
             {t('auth:welcomeToKingsTaxi')}
           </Text>
 
-          {/* 3.D. Main Hero Headline (Two lines, lightweight first line, extra-bold second line) */}
+          {/* 3.D. Main Hero Headline */}
           <View style={styles.headlineWrapper}>
-            <Text
-              style={[
-                styles.headlineLine1,
-                { fontSize: headlineLine1Size, lineHeight: headlineLine1Size * 1.15 },
-              ]}
-            >
-              {t('auth:designedFor')}
-            </Text>
             <Text
               style={[
                 styles.headlineLine2,
                 { fontSize: headlineLine2Size, lineHeight: headlineLine2Size * 1.15 },
               ]}
             >
-              {t('auth:betterTravel')}
+              {t('auth:premiumClassTransport').toUpperCase()}
             </Text>
           </View>
-
-          {/* 3.E. Description (Two lines) */}
-          <Text style={styles.heroDescription}>
-            {t('auth:welcomeHeroDesc')}
-          </Text>
 
           {/* 3.F. Get Started Button (Prominent Gold Gradient Pill Button) */}
           <TouchableOpacity
@@ -432,42 +368,6 @@ export default function WelcomeScreen() {
               />
             </View>
           </View>
-        </View>
-
-        {/* 3.J. Bottom Social / Contact Icons (Three circular translucent golden buttons) */}
-        <View style={styles.bottomSocialIconRow}>
-          {/* 1. Email / Envelope */}
-          <TouchableOpacity
-            style={styles.socialCircleButton}
-            onPress={handleEmailContact}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityLabel={t('auth:helpAndSupport')}
-          >
-            <Mail size={19} color="#FFFFFF" strokeWidth={2} />
-          </TouchableOpacity>
-
-          {/* 2. Android Robot */}
-          <TouchableOpacity
-            style={styles.socialCircleButton}
-            onPress={handleAndroidAction}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityLabel="Android App"
-          >
-            <AndroidRobotIcon size={19} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          {/* 3. Share Icon */}
-          <TouchableOpacity
-            style={styles.socialCircleButton}
-            onPress={handleShare}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityLabel={t('auth:shareKingsTaxi')}
-          >
-            <Share2 size={18} color="#FFFFFF" strokeWidth={2} />
-          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -577,25 +477,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   headlineWrapper: {
-    marginBottom: 10,
-  },
-  headlineLine1: {
-    fontWeight: '300',
-    color: '#66370D',
-    letterSpacing: -0.5,
+    marginBottom: 24,
   },
   headlineLine2: {
     fontWeight: '900',
     color: '#66370D',
     letterSpacing: -0.5,
-  },
-  heroDescription: {
-    fontSize: 15,
-    lineHeight: 23,
-    color: '#66370D',
-    fontWeight: '500',
-    marginBottom: 24,
-    maxWidth: 340,
   },
   getStartedPillButton: {
     width: '100%',
@@ -683,29 +570,5 @@ const styles = StyleSheet.create({
   },
   floorReflectionImage: {
     borderRadius: 20,
-  },
-  bottomSocialIconRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 22,
-    paddingTop: 8,
-    paddingBottom: 4,
-    zIndex: 10,
-  },
-  socialCircleButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(217, 154, 40, 0.35)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.70)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#B8750B',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    elevation: 2,
   },
 });

@@ -46,7 +46,7 @@ export default function RegisterScreen() {
   const [method, setMethod] = useState<RegistrationMethod>('email');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('0911234567');
+  const [phone, setPhone] = useState('');
   const [countryCode, setCountryCode] = useState('+251');
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [error, setError] = useState('');

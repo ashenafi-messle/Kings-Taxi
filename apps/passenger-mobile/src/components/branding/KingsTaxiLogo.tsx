@@ -14,6 +14,11 @@ interface KingsTaxiLogoProps {
   scale?: number;
 }
 
+// Official Kings Taxi Authentication Logo (Cloudinary URI + Local Bundled Asset)
+export const OFFICIAL_AUTH_LOGO_URL =
+  'https://res.cloudinary.com/oxzqogef/image/upload/v1794923454/Gemini_Generated_Image_9rs3pd9rs3pd9rs3.jpg';
+export const OFFICIAL_AUTH_LOGO_LOCAL = require('../../../assets/branding/kings-taxi-official-auth-logo.jpg');
+
 // Focused bold monogram (crown + bold KT letterforms)
 const MONOGRAM_SOURCE = require('../../../assets/branding/kings-taxi-monogram.png');
 // Focused cropped full logo
@@ -28,6 +33,11 @@ export const KingsTaxiLogo: React.FC<KingsTaxiLogoProps> = ({
   inverted = false,
   scale = 1,
 }) => {
+  const [remoteFailed, setRemoteFailed] = React.useState(false);
+  const officialAuthLogoSource = remoteFailed
+    ? OFFICIAL_AUTH_LOGO_LOCAL
+    : { uri: OFFICIAL_AUTH_LOGO_URL };
+
   const getDimensions = () => {
     switch (variant) {
       case 'hero':
@@ -35,14 +45,18 @@ export const KingsTaxiLogo: React.FC<KingsTaxiLogoProps> = ({
           size: Math.round(210 * scale),
           borderRadius: 32,
           borderWidth: 2.5,
-          source: CROPPED_LOGO_SOURCE,
+          source: officialAuthLogoSource,
+          defaultSource: OFFICIAL_AUTH_LOGO_LOCAL,
+          resizeMode: 'contain' as const,
         };
       case 'full':
         return {
-          size: Math.round(130 * scale),
-          borderRadius: 22,
+          size: Math.round(148 * scale),
+          borderRadius: 24,
           borderWidth: 2,
-          source: CROPPED_LOGO_SOURCE,
+          source: officialAuthLogoSource,
+          defaultSource: OFFICIAL_AUTH_LOGO_LOCAL,
+          resizeMode: 'contain' as const,
         };
       case 'monogram':
         return {
@@ -50,6 +64,8 @@ export const KingsTaxiLogo: React.FC<KingsTaxiLogoProps> = ({
           borderRadius: 18,
           borderWidth: 2,
           source: MONOGRAM_SOURCE,
+          defaultSource: undefined,
+          resizeMode: 'cover' as const,
         };
       case 'compact':
         return {
@@ -57,6 +73,8 @@ export const KingsTaxiLogo: React.FC<KingsTaxiLogoProps> = ({
           borderRadius: 10,
           borderWidth: 1.5,
           source: MONOGRAM_SOURCE,
+          defaultSource: undefined,
+          resizeMode: 'cover' as const,
         };
       case 'header':
       default:
@@ -66,11 +84,13 @@ export const KingsTaxiLogo: React.FC<KingsTaxiLogoProps> = ({
           borderRadius: 14,
           borderWidth: 1.8,
           source: MONOGRAM_SOURCE,
+          defaultSource: undefined,
+          resizeMode: 'cover' as const,
         };
     }
   };
 
-  const { size, borderRadius, borderWidth, source } = getDimensions();
+  const { size, borderRadius, borderWidth, source, defaultSource, resizeMode } = getDimensions();
 
   if (variant === 'header') {
     return (
@@ -92,12 +112,14 @@ export const KingsTaxiLogo: React.FC<KingsTaxiLogoProps> = ({
         >
           <Image
             source={source}
+            defaultSource={defaultSource}
             style={[
               styles.logoImage,
               { width: size - 4, height: size - 4, borderRadius: borderRadius - 2 },
               imageStyle,
             ]}
-            resizeMode="cover"
+            resizeMode={resizeMode}
+            onError={() => setRemoteFailed(true)}
           />
         </View>
 
@@ -139,12 +161,15 @@ export const KingsTaxiLogo: React.FC<KingsTaxiLogoProps> = ({
       >
         <Image
           source={source}
+          defaultSource={defaultSource}
           style={[
             styles.logoImage,
             { width: size, height: size, borderRadius },
+            variant === 'full' && styles.authLogoImage,
             imageStyle,
           ]}
-          resizeMode="cover"
+          resizeMode={resizeMode}
+          onError={() => setRemoteFailed(true)}
         />
       </View>
 
@@ -156,7 +181,16 @@ export const KingsTaxiLogo: React.FC<KingsTaxiLogoProps> = ({
               inverted && styles.textInverted,
             ]}
           >
-            KINGS <Text style={{ color: colors.primaryGold }}>TAXI</Text>
+            KINGS{' '}
+            <Text
+              style={
+                variant === 'hero'
+                  ? { color: colors.primaryGold }
+                  : { color: '#1455A0' }
+              }
+            >
+              TAXI
+            </Text>
           </Text>
           {showTagline && (
             <Text
@@ -204,9 +238,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 18,
     elevation: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   logoImage: {
     overflow: 'hidden',
+  },
+  authLogoImage: {
+    transform: [{ scale: 1.3 }],
   },
   textContainer: {
     alignItems: 'center',
@@ -226,7 +266,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: 2.5,
-    color: colors.dark,
+    color: '#1455A0',
     textAlign: 'center',
   },
   brandTitleHeader: {
@@ -247,7 +287,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2.2,
-    color: colors.secondaryText,
+    color: '#1455A0',
     marginTop: 4,
     textTransform: 'uppercase',
   },

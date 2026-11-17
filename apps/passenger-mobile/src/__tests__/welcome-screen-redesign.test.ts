@@ -26,17 +26,16 @@ describe('Kings Taxi Premium Welcome Screen Pixel-Perfect Verification', () => {
   it('implements the exact required visual hierarchy and branding content', () => {
     // Welcome Greeting
     expect(welcomeSrc).toContain("t('auth:welcomeToKingsTaxi')");
-    // Main Two-Line Headline
-    expect(welcomeSrc).toContain("t('auth:designedFor')");
-    expect(welcomeSrc).toContain("t('auth:betterTravel')");
-    // Supporting Description
-    expect(welcomeSrc).toContain("t('auth:welcomeHeroDesc')");
+    // Simplified uppercase bold hero headline
+    expect(welcomeSrc).toContain("t('auth:premiumClassTransport').toUpperCase()");
+    // Removed old headline and description
+    expect(welcomeSrc).not.toContain("t('auth:designedFor')");
+    expect(welcomeSrc).not.toContain("t('auth:betterTravel')");
+    expect(welcomeSrc).not.toContain("t('auth:welcomeHeroDesc')");
     // Primary & Secondary Actions
     expect(welcomeSrc).toContain("t('auth:getStarted')");
     expect(welcomeSrc).toContain("t('auth:alreadyHaveAccount')");
     expect(welcomeSrc).toContain("t('auth:signInBtn')");
-    // Subtitle
-    expect(welcomeSrc).toContain("t('auth:premiumClassTransport')");
   });
 
   it('verifies GET STARTED button navigates to the registration flow', () => {
@@ -86,12 +85,12 @@ describe('Kings Taxi Premium Welcome Screen Pixel-Perfect Verification', () => {
     expect(welcomeSrc).toContain('bottomRibbonGold');
   });
 
-  it('includes the three circular translucent golden buttons with Mail, Android Robot, and Share icons', () => {
-    expect(welcomeSrc).toContain('bottomSocialIconRow');
-    expect(welcomeSrc).toContain('socialCircleButton');
-    expect(welcomeSrc).toContain('AndroidRobotIcon');
-    expect(welcomeSrc).toContain('Share2');
-    expect(welcomeSrc).toContain('Mail');
+  it('completely removes the bottom three circular buttons and contact icons', () => {
+    expect(welcomeSrc).not.toContain('bottomSocialIconRow');
+    expect(welcomeSrc).not.toContain('socialCircleButton');
+    expect(welcomeSrc).not.toContain('AndroidRobotIcon');
+    expect(welcomeSrc).not.toContain('Share2');
+    expect(welcomeSrc).not.toContain('Mail');
   });
 
   it('configures transparent status bar with light content icons', () => {
@@ -103,7 +102,6 @@ describe('Kings Taxi Premium Welcome Screen Pixel-Perfect Verification', () => {
   it('applies Android-responsive dimensions for small, medium and large displays', () => {
     expect(welcomeSrc).toContain('isSmallDevice');
     expect(welcomeSrc).toContain('isMediumDevice');
-    expect(welcomeSrc).toContain('headlineLine1Size');
     expect(welcomeSrc).toContain('headlineLine2Size');
     expect(welcomeSrc).toContain('illustrationSize');
   });
