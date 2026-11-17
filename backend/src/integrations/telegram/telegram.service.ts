@@ -3,7 +3,7 @@ import { ITelegramProvider, TelegramSendResult } from './index';
 import { logger } from '../../core/logging/logger';
 import { env } from '../../config/env';
 import { TelegramIdentityStore } from './telegramIdentity.store';
-import { normalizeEthiopianPhone, isManualPhoneInput, maskPhone } from '../../utils/phone';
+import { normalizeEthiopianPhone, maskPhone } from '../../utils/phone';
 
 export interface TelegramDeliveryAudit {
   id: string;
