@@ -34,8 +34,6 @@ export interface RegistrationSession {
   isVerified: boolean;
   registrationToken: string | null;
   createdAt: number;
-  // Dev hint for testing & verification
-  lastDevOtp?: string;
 }
 
 export interface RegisteredAccountRecord {
@@ -178,6 +176,13 @@ export class RegistrationAuthService {
   }
 
   /**
+   * Checks if an active in-memory or persisted registration session exists
+   */
+  static hasActiveSession(sessionId: string): boolean {
+    return activeSessions.has(sessionId);
+  }
+
+  /**
    * Step 1 & 2: Initiate Registration & Generate Channel-Specific OTP
    */
   static async initiateRegistration(
@@ -191,7 +196,6 @@ export class RegistrationAuthService {
       maskedIdentifier: string;
       expiresInSeconds: number;
       resendCooldownSeconds: number;
-      devOtp?: string;
     }>
   > {
     await loadRegisteredDb();
@@ -284,7 +288,6 @@ export class RegistrationAuthService {
       isVerified: false,
       registrationToken: null,
       createdAt: Date.now(),
-      lastDevOtp: plainOtp,
     };
 
     activeSessions.set(sessionId, session);
@@ -297,7 +300,6 @@ export class RegistrationAuthService {
         maskedIdentifier: maskContact(cleanIdentifier),
         expiresInSeconds: ttlSeconds,
         resendCooldownSeconds: cooldownSeconds,
-        devOtp: plainOtp, // Supplied for developer & automated test verification
       },
     };
   }
@@ -311,7 +313,6 @@ export class RegistrationAuthService {
     ApiResponse<{
       success: boolean;
       resendCooldownSeconds: number;
-      devOtp?: string;
     }>
   > {
     const session = activeSessions.get(sessionId);
@@ -338,7 +339,6 @@ export class RegistrationAuthService {
     session.otpExpiresAt = Date.now() + 300 * 1000;
     session.resendCooldownUntil = Date.now() + 60 * 1000;
     session.attempts = 0; // reset attempts for new OTP
-    session.lastDevOtp = newOtp;
 
     activeSessions.set(sessionId, session);
 
@@ -347,7 +347,6 @@ export class RegistrationAuthService {
       data: {
         success: true,
         resendCooldownSeconds: 60,
-        devOtp: newOtp,
       },
     };
   }

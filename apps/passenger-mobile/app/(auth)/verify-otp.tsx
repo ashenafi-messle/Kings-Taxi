@@ -36,7 +36,6 @@ export default function VerifyOtpScreen() {
   const identifier = (params.identifier as string) || '';
   const fullName = (params.fullName as string) || '';
   const maskedIdentifier = (params.maskedIdentifier as string) || identifier;
-  const initialDevOtp = (params.devOtp as string) || '';
   const initialTelegramBotUrl = (params.telegramBotUrl as string) || '';
 
   const {
@@ -51,9 +50,9 @@ export default function VerifyOtpScreen() {
   const [code, setCode] = useState('');
   const [timer, setTimer] = useState(60);
   const [error, setError] = useState('');
-  const [devOtp, setDevOtp] = useState(initialDevOtp);
   const [telegramBotUrl, setTelegramBotUrl] = useState(initialTelegramBotUrl);
   const [langModalVisible, setLangModalVisible] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(true);
   const inputRef = useRef<TextInput>(null);
 
   const currentLangLabel =
@@ -100,7 +99,7 @@ export default function VerifyOtpScreen() {
 
     if (response.success && response.data) {
       const { registrationToken } = response.data;
-      // Navigate to Step 5: Set Password
+      // Navigate to Set Password screen
       router.push({
         pathname: '/(auth)/set-password',
         params: {
@@ -124,9 +123,6 @@ export default function VerifyOtpScreen() {
       const res = await resendRecoveryOtp(sessionId);
       if (res.success && res.data) {
         setTimer(res.data.resendCooldownSeconds || 60);
-        if (res.data.devOtp) {
-          setDevOtp(res.data.devOtp);
-        }
         if ((res.data as any).telegramBotUrl) {
           setTelegramBotUrl((res.data as any).telegramBotUrl);
         }
@@ -139,9 +135,6 @@ export default function VerifyOtpScreen() {
     const res = await resendRegistrationOtp(sessionId);
     if (res.success && res.data) {
       setTimer(res.data.resendCooldownSeconds || 60);
-      if (res.data.devOtp) {
-        setDevOtp(res.data.devOtp);
-      }
       if ((res.data as any).telegramBotUrl) {
         setTelegramBotUrl((res.data as any).telegramBotUrl);
       }
@@ -158,6 +151,18 @@ export default function VerifyOtpScreen() {
       // fallback
     }
   };
+
+  const displayTitle =
+    flow === 'recovery'
+      ? 'Password Recovery Code'
+      : method === 'email'
+      ? t('verifyEmailTitle')
+      : t('verifyTitle');
+
+  const displaySubtitle =
+    method === 'email'
+      ? t('verifyEmailSubtitle', { email: maskedIdentifier })
+      : t('verifySubtitle', { phone: maskedIdentifier });
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -212,9 +217,7 @@ export default function VerifyOtpScreen() {
 
           {/* Verification Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>
-              {flow === 'recovery' ? 'Password Recovery Code' : t('verifyTitle')}
-            </Text>
+            <Text style={styles.title}>{displayTitle}</Text>
 
             {/* Delivery Channel Badge */}
             <View
@@ -242,9 +245,7 @@ export default function VerifyOtpScreen() {
               </Text>
             </View>
 
-            <Text style={styles.subtitle}>
-              {t('verifySubtitle', { phone: maskedIdentifier })}
-            </Text>
+            <Text style={styles.subtitle}>{displaySubtitle}</Text>
 
             {/* Telegram App Open Shortcut */}
             {method === 'telegram' && (
@@ -267,47 +268,50 @@ export default function VerifyOtpScreen() {
             </View>
           ) : null}
 
-          {/* 6-Digit OTP Box Grid */}
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => inputRef.current?.focus()}
-            style={styles.otpGrid}
-          >
-            {[0, 1, 2, 3, 4, 5].map((index) => {
-              const char = code[index] || '';
-              const isCurrent = index === code.length;
-              return (
-                <View
-                  key={index}
-                  style={[
-                    styles.otpBox,
-                    char ? styles.otpBoxFilled : null,
-                    isCurrent ? styles.otpBoxActive : null,
-                  ]}
-                >
-                  <Text style={styles.otpText}>{char}</Text>
-                </View>
-              );
-            })}
-          </TouchableOpacity>
+          {/* 6-Digit Native-Reliable OTP Container */}
+          <View style={styles.otpContainer}>
+            <View style={styles.otpGrid} pointerEvents="none">
+              {[0, 1, 2, 3, 4, 5].map((index) => {
+                const char = code[index] || '';
+                const isFocused = isInputFocused && index === Math.min(code.length, 5);
+                return (
+                  <View
+                    key={index}
+                    style={[
+                      styles.otpBox,
+                      char ? styles.otpBoxFilled : null,
+                      isFocused ? styles.otpBoxActive : null,
+                    ]}
+                  >
+                    <Text style={styles.otpText}>{char}</Text>
+                  </View>
+                );
+              })}
+            </View>
 
-          {/* Hidden Real Input for Keyboard */}
-          <TextInput
-            ref={inputRef}
-            value={code}
-            onChangeText={(text) => {
-              const cleaned = text.replace(/[^0-9]/g, '').slice(0, 6);
-              setCode(cleaned);
-              setError('');
-            }}
-            keyboardType="number-pad"
-            maxLength={6}
-            autoCorrect={false}
-            autoComplete="one-time-code"
-            textContentType="oneTimeCode"
-            style={styles.hiddenInput}
-            autoFocus
-          />
+            {/* Transparent Full-Coverage TextInput — Directly receives Android touch & native keyboard events */}
+            <TextInput
+              ref={inputRef}
+              value={code}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/[^0-9]/g, '').slice(0, 6);
+                setCode(cleaned);
+                setError('');
+              }}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setIsInputFocused(false)}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoCorrect={false}
+              autoCapitalize="none"
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
+              importantForAutofill="yes"
+              caretHidden={true}
+              style={styles.fullCoverInput}
+              autoFocus
+            />
+          </View>
 
           {/* Resend OTP Row */}
           <View style={styles.resendRow}>
@@ -410,6 +414,7 @@ const styles = StyleSheet.create({
     color: colors.deepChocolate,
     letterSpacing: -0.3,
     marginBottom: 8,
+    textAlign: 'center',
   },
   channelBadge: {
     flexDirection: 'row',
@@ -455,30 +460,6 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '700',
   },
-  devHintBox: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: colors.lightGold,
-    borderWidth: 1.5,
-    borderColor: colors.borderGold,
-    borderRadius: 14,
-    padding: 10,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  devHintLabel: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: colors.deepGold,
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  devHintCode: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 4,
-    color: colors.dark,
-  },
   errorBanner: {
     width: '100%',
     maxWidth: 420,
@@ -487,7 +468,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   errorBannerText: {
     color: colors.error,
@@ -495,13 +476,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  otpContainer: {
+    position: 'relative',
+    width: '100%',
+    maxWidth: 400,
+    height: 64,
+    marginBottom: 24,
+    justifyContent: 'center',
+  },
   otpGrid: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
     width: '100%',
-    maxWidth: 400,
-    marginBottom: 24,
+    height: '100%',
   },
   otpBox: {
     flex: 1,
@@ -532,11 +520,15 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.deepChocolate,
   },
-  hiddenInput: {
+  fullCoverInput: {
     position: 'absolute',
-    opacity: 0,
-    width: 1,
-    height: 1,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.01,
+    color: 'transparent',
+    backgroundColor: 'transparent',
   },
   resendRow: {
     alignItems: 'center',

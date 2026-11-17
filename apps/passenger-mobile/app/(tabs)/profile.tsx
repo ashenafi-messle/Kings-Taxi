@@ -99,7 +99,6 @@ export default function ProfileScreen() {
   const [contactOtpCode, setContactOtpCode] = useState('');
   const [contactLoading, setContactLoading] = useState(false);
   const [contactError, setContactError] = useState('');
-  const [contactDevOtp, setContactDevOtp] = useState<string | null>(null);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
   const [localAvatarCache, setLocalAvatarCache] = useState<string | null>(null);
 
@@ -414,7 +413,6 @@ export default function ProfileScreen() {
     setContactError('');
     setContactSessionId('');
     setContactOtpCode('');
-    setContactDevOtp(null);
     setShowContactModal(true);
   };
 
@@ -440,7 +438,6 @@ export default function ProfileScreen() {
 
       if (res.success && res.data?.sessionId) {
         setContactSessionId(res.data.sessionId);
-        setContactDevOtp(res.data.devOtp || null);
         setContactStep('OTP');
       } else {
         setContactError(res.error || 'Could not send verification code.');
@@ -1093,12 +1090,6 @@ export default function ProfileScreen() {
                   Enter the 6-digit verification code sent to {newContactValue}.
                 </Text>
 
-                {contactDevOtp ? (
-                  <View style={styles.devOtpBox}>
-                    <Text style={styles.devOtpText}>Development OTP: {contactDevOtp}</Text>
-                  </View>
-                ) : null}
-
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>6-Digit OTP Code</Text>
                   <TextInput
@@ -1517,18 +1508,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     lineHeight: 18,
-  },
-  devOtpBox: {
-    backgroundColor: colors.lightGold,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  devOtpText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.brandDark,
   },
 });

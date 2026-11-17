@@ -10,17 +10,19 @@ export interface EmailDeliveryAudit {
   status: 'SUCCESS' | 'FAILED' | 'SIMULATED';
   timestamp: string;
   durationMs: number;
+  provider?: string;
   errorMessage?: string;
 }
 
 export class EmailService implements IEmailProvider {
   private static instance: EmailService;
-  private transporter: Transporter | null = null;
+  private primaryTransporter: Transporter | null = null;
+  private fallbackTransporter: Transporter | null = null;
   private recentAudits: EmailDeliveryAudit[] = [];
   private readonly maxAuditHistory = 50;
 
   private constructor() {
-    this.initTransporter();
+    this.initTransporters();
   }
 
   public static getInstance(): EmailService {
@@ -30,17 +32,40 @@ export class EmailService implements IEmailProvider {
     return EmailService.instance;
   }
 
-  private initTransporter(): void {
+  /**
+   * Cleans and sanitizes the configured sender address, stripping any accidental surrounding quotes.
+   */
+  public getSenderDetails(): { name: string; email: string; full: string } {
+    const raw = (env.SMTP_FROM || 'Kings Taxi <ashenafimesele78@gmail.com>')
+      .replace(/^["']+|["']+$/g, '')
+      .trim();
+    const match = raw.match(/^(.*?)\s*<([^>]+)>$/);
+    if (match) {
+      return {
+        name: match[1].trim() || 'Kings Taxi',
+        email: match[2].trim(),
+        full: raw,
+      };
+    }
+    return {
+      name: 'Kings Taxi',
+      email: raw,
+      full: `Kings Taxi <${raw}>`,
+    };
+  }
+
+  private initTransporters(): void {
     if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) {
-      logger.warn('[EmailService] SMTP credentials not fully configured; email sending will be simulated or fail.');
+      logger.warn('[EmailService] SMTP credentials not fully configured; checking for REST API keys.');
       return;
     }
 
     try {
-      this.transporter = nodemailer.createTransport({
+      // Primary SMTP Transporter
+      this.primaryTransporter = nodemailer.createTransport({
         host: env.SMTP_HOST,
         port: env.SMTP_PORT,
-        secure: env.SMTP_SECURE, // false for port 587 (STARTTLS)
+        secure: env.SMTP_SECURE || env.SMTP_PORT === 465,
         auth: {
           user: env.SMTP_USER,
           pass: env.SMTP_PASS,
@@ -51,17 +76,39 @@ export class EmailService implements IEmailProvider {
         pool: true,
         maxConnections: 5,
         maxMessages: 100,
-        connectionTimeout: 10000, // 10s
-        greetingTimeout: 5000,
-        socketTimeout: 15000,
+        connectionTimeout: 5000, // 5s fast timeout to prevent hanging requests
+        greetingTimeout: 4000,
+        socketTimeout: 8000,
       });
+
+      // If host is Brevo and port is 587, prepare alternate port 2525 fallback
+      // (Render and certain cloud hosts block ports 25, 465, 587 on free tiers; Brevo accepts 2525)
+      if (env.SMTP_PORT === 587 && env.SMTP_HOST.includes('brevo.com')) {
+        this.fallbackTransporter = nodemailer.createTransport({
+          host: env.SMTP_HOST,
+          port: 2525,
+          secure: false,
+          auth: {
+            user: env.SMTP_USER,
+            pass: env.SMTP_PASS,
+          },
+          tls: {
+            rejectUnauthorized: env.NODE_ENV === 'production',
+          },
+          connectionTimeout: 5000,
+          greetingTimeout: 4000,
+          socketTimeout: 8000,
+        });
+      }
+
       logger.info(
-        { host: env.SMTP_HOST, port: env.SMTP_PORT, secure: env.SMTP_SECURE },
-        '[EmailService] Brevo SMTP Transporter initialized successfully'
+        { host: env.SMTP_HOST, port: env.SMTP_PORT, fallbackPort: this.fallbackTransporter ? 2525 : null },
+        '[EmailService] Email transporters initialized'
       );
     } catch (err: any) {
-      logger.error({ err: err.message }, '[EmailService] Failed to initialize Nodemailer transporter');
-      this.transporter = null;
+      logger.error({ err: err.message }, '[EmailService] Failed to initialize Nodemailer transporters');
+      this.primaryTransporter = null;
+      this.fallbackTransporter = null;
     }
   }
 
@@ -84,25 +131,157 @@ export class EmailService implements IEmailProvider {
   }
 
   /**
-   * Health check / Diagnostics: verifies SMTP connection without sending an email
+   * Health check / Diagnostics: verifies available email delivery channels
    */
-  public async verifyConnection(): Promise<{ success: boolean; latencyMs: number; error?: string }> {
-    if (!this.transporter) {
-      this.initTransporter();
-    }
-    if (!this.transporter) {
-      return { success: false, latencyMs: 0, error: 'SMTP transporter not configured or credentials missing' };
+  public async verifyConnection(): Promise<{ success: boolean; latencyMs: number; provider: string; error?: string }> {
+    const start = Date.now();
+
+    // 1. Check Brevo REST API if configured
+    const brevoApiKey = env.BREVO_API_KEY || (env.SMTP_PASS?.startsWith('xkeysib-') ? env.SMTP_PASS : undefined);
+    if (brevoApiKey) {
+      try {
+        const res = await fetch('https://api.brevo.com/v3/account', {
+          headers: { 'api-key': brevoApiKey },
+        });
+        const latencyMs = Date.now() - start;
+        if (res.ok) {
+          return { success: true, latencyMs, provider: 'Brevo HTTPS REST API' };
+        }
+      } catch (err: any) {
+        // continue to test SMTP
+      }
     }
 
-    const start = Date.now();
+    // 2. Check Resend REST API if configured
+    if (env.RESEND_API_KEY) {
+      try {
+        const res = await fetch('https://api.resend.com/api-keys', {
+          headers: { Authorization: `Bearer ${env.RESEND_API_KEY}` },
+        });
+        const latencyMs = Date.now() - start;
+        if (res.ok) {
+          return { success: true, latencyMs, provider: 'Resend HTTPS REST API' };
+        }
+      } catch (err: any) {
+        // continue to test SMTP
+      }
+    }
+
+    // 3. Check Primary SMTP
+    if (!this.primaryTransporter) {
+      this.initTransporters();
+    }
+
+    if (this.primaryTransporter) {
+      try {
+        await this.primaryTransporter.verify();
+        const latencyMs = Date.now() - start;
+        return { success: true, latencyMs, provider: `SMTP (${env.SMTP_HOST}:${env.SMTP_PORT})` };
+      } catch (primaryErr: any) {
+        // 4. Try Fallback SMTP (port 2525) if configured
+        if (this.fallbackTransporter) {
+          try {
+            await this.fallbackTransporter.verify();
+            const latencyMs = Date.now() - start;
+            return { success: true, latencyMs, provider: `SMTP Fallback (${env.SMTP_HOST}:2525)` };
+          } catch (fallbackErr: any) {
+            const latencyMs = Date.now() - start;
+            return {
+              success: false,
+              latencyMs,
+              provider: 'SMTP (587 & 2525)',
+              error: `Primary: ${primaryErr.message}; Fallback: ${fallbackErr.message}`,
+            };
+          }
+        }
+        const latencyMs = Date.now() - start;
+        return { success: false, latencyMs, provider: 'SMTP', error: primaryErr.message };
+      }
+    }
+
+    return {
+      success: false,
+      latencyMs: 0,
+      provider: 'None',
+      error: 'No email provider credentials configured (SMTP or HTTPS API)',
+    };
+  }
+
+  /**
+   * Attempts delivery via Brevo HTTPS REST API (Port 443 — never blocked by firewalls)
+   */
+  private async sendViaBrevoApi(
+    to: string,
+    recipientName: string,
+    subject: string,
+    htmlContent: string,
+    plainText: string
+  ): Promise<boolean> {
+    const apiKey = env.BREVO_API_KEY || (env.SMTP_PASS?.startsWith('xkeysib-') ? env.SMTP_PASS : undefined);
+    if (!apiKey) return false;
+
+    const sender = this.getSenderDetails();
     try {
-      await this.transporter.verify();
-      const latencyMs = Date.now() - start;
-      return { success: true, latencyMs };
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: sender.name, email: sender.email },
+          to: [{ email: to, name: recipientName || 'Passenger' }],
+          subject,
+          htmlContent,
+          textContent: plainText,
+        }),
+      });
+
+      if (res.ok) {
+        return true;
+      }
+      const err = await res.json().catch(() => ({}));
+      logger.warn({ err }, '[EmailService] Brevo HTTPS REST API error response');
+      return false;
     } catch (err: any) {
-      const latencyMs = Date.now() - start;
-      logger.error({ error: err.message }, '[EmailService] Brevo SMTP verification failed');
-      return { success: false, latencyMs, error: err.message || 'SMTP verification failed' };
+      logger.warn({ error: err.message }, '[EmailService] Brevo HTTPS REST API network request failed');
+      return false;
+    }
+  }
+
+  /**
+   * Attempts delivery via Resend HTTPS REST API (Port 443)
+   */
+  private async sendViaResendApi(
+    to: string,
+    subject: string,
+    htmlContent: string,
+    plainText: string
+  ): Promise<boolean> {
+    if (!env.RESEND_API_KEY) return false;
+
+    const sender = this.getSenderDetails();
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: sender.full,
+          to: [to],
+          subject,
+          html: htmlContent,
+          text: plainText,
+        }),
+      });
+
+      return res.ok;
+    } catch (err: any) {
+      logger.warn({ error: err.message }, '[EmailService] Resend HTTPS REST API network request failed');
+      return false;
     }
   }
 
@@ -113,7 +292,7 @@ export class EmailService implements IEmailProvider {
     const startTime = Date.now();
     const maskedTo = this.maskEmail(to);
 
-    // Validate email format
+    // 1. Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(to.trim())) {
       logger.warn({ recipient: maskedTo }, '[EmailService] Invalid recipient email address');
@@ -130,7 +309,7 @@ export class EmailService implements IEmailProvider {
     }
 
     // In non-production test mode where SMTP is deliberately unconfigured, simulate safely
-    if (!this.transporter && env.NODE_ENV === 'test') {
+    if (!this.primaryTransporter && !env.BREVO_API_KEY && !env.RESEND_API_KEY && env.NODE_ENV === 'test') {
       logger.info({ recipient: maskedTo }, '[EmailService] [TEST MODE] Simulating email delivery');
       this.recordAudit({
         id: `aud_${Date.now()}`,
@@ -139,30 +318,13 @@ export class EmailService implements IEmailProvider {
         status: 'SIMULATED',
         timestamp: new Date().toISOString(),
         durationMs: 5,
+        provider: 'Test Simulator',
       });
       return true;
     }
 
-    if (!this.transporter) {
-      this.initTransporter();
-    }
-
-    if (!this.transporter) {
-      logger.error({ recipient: maskedTo }, '[EmailService] Cannot send email: SMTP transporter is not initialized');
-      this.recordAudit({
-        id: `aud_${Date.now()}`,
-        recipient: maskedTo,
-        purpose: 'OTP_VERIFICATION',
-        status: 'FAILED',
-        timestamp: new Date().toISOString(),
-        durationMs: Date.now() - startTime,
-        errorMessage: 'SMTP transporter not initialized',
-      });
-      return false;
-    }
-
-    const fromAddress = env.SMTP_FROM || 'Kings Taxi <ashenafimesele78@gmail.com>';
-    const subject = `${otp} is your Kings Taxi verification code`;
+    const sender = this.getSenderDetails();
+    const subject = 'Kings Taxi — Verify Your Email Address';
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -170,7 +332,7 @@ export class EmailService implements IEmailProvider {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kings Taxi Verification Code</title>
+  <title>Kings Taxi — Verify Your Email Address</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -184,29 +346,31 @@ export class EmailService implements IEmailProvider {
       margin: 30px auto;
       background-color: #161a22;
       border: 1px solid #2d333b;
-      border-radius: 12px;
+      border-radius: 14px;
       overflow: hidden;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
     }
     .header {
       background: linear-gradient(135deg, #1c2128 0%, #111418 100%);
-      padding: 28px 32px;
-      border-bottom: 2px solid #E6B800;
+      padding: 30px 32px 24px;
+      border-bottom: 2px solid #D99A28;
       text-align: center;
     }
     .brand-title {
-      color: #E6B800;
-      font-size: 24px;
+      color: #D99A28;
+      font-size: 26px;
       font-weight: 800;
       letter-spacing: 1.5px;
       margin: 0;
       text-transform: uppercase;
     }
     .brand-sub {
-      color: #8b949e;
-      font-size: 13px;
-      margin-top: 4px;
-      letter-spacing: 0.5px;
+      color: #F5D69E;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-top: 6px;
+      text-transform: uppercase;
     }
     .content {
       padding: 32px 32px 28px;
@@ -225,8 +389,8 @@ export class EmailService implements IEmailProvider {
     }
     .otp-card {
       background: #0d1117;
-      border: 2px dashed #E6B800;
-      border-radius: 10px;
+      border: 2px dashed #D99A28;
+      border-radius: 12px;
       padding: 24px;
       text-align: center;
       margin-bottom: 28px;
@@ -236,47 +400,40 @@ export class EmailService implements IEmailProvider {
       text-transform: uppercase;
       letter-spacing: 2px;
       color: #8b949e;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .otp-code {
       font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-      font-size: 38px;
+      font-size: 40px;
       font-weight: 800;
-      color: #E6B800;
-      letter-spacing: 8px;
+      color: #FFC04A;
+      letter-spacing: 10px;
       margin: 0;
     }
     .expiry-note {
       font-size: 13px;
-      color: #ff7b72;
-      margin-top: 12px;
-      font-weight: 500;
+      color: #F5D69E;
+      margin-top: 14px;
+      font-weight: 600;
     }
     .security-notice {
       background: #1c2128;
-      border-left: 4px solid #E6B800;
-      border-radius: 4px;
+      border-left: 4px solid #D99A28;
+      border-radius: 6px;
       padding: 14px 18px;
       margin-bottom: 24px;
       font-size: 13px;
-      color: #8b949e;
       line-height: 1.5;
-    }
-    .security-notice strong {
-      color: #f0f6fc;
+      color: #e0e6ed;
     }
     .footer {
-      background-color: #0f1419;
       padding: 20px 32px;
+      background-color: #0d1117;
       border-top: 1px solid #21262d;
       text-align: center;
       font-size: 12px;
-      color: #6e7681;
+      color: #8b949e;
       line-height: 1.5;
-    }
-    .footer a {
-      color: #58a6ff;
-      text-decoration: none;
     }
   </style>
 </head>
@@ -284,18 +441,18 @@ export class EmailService implements IEmailProvider {
   <div class="wrapper">
     <div class="header">
       <div class="brand-title">🚕 KINGS TAXI</div>
-      <div class="brand-sub">Gondar City's Premier Transportation Platform</div>
+      <div class="brand-sub">PREMIUM CLASS TRANSPORT</div>
     </div>
     <div class="content">
       <p class="greeting">Hello <strong>${recipientName || 'Passenger'}</strong>,</p>
       <p class="message">
-        Thank you for choosing Kings Taxi. Use the verification code below to complete your authentication.
+        Thank you for choosing Kings Taxi. Use the six-digit verification code below to verify your email address and continue with your registration:
       </p>
 
       <div class="otp-card">
         <div class="otp-label">Verification Code</div>
         <div class="otp-code">${otp}</div>
-        <div class="expiry-note">⏱ This code expires in 5 minutes</div>
+        <div class="expiry-note">⏱ This verification code expires in 5 minutes</div>
       </div>
 
       <div class="security-notice">
@@ -303,7 +460,7 @@ export class EmailService implements IEmailProvider {
       </div>
 
       <p class="message" style="margin-bottom: 0; font-size: 13px; color: #8b949e;">
-        If you did not request this verification code, please ignore this email or contact Kings Taxi Gondar Passenger Support.
+        If you did not request this verification code, please ignore this email or contact Kings Taxi Passenger Support.
       </p>
     </div>
     <div class="footer">
@@ -316,88 +473,159 @@ export class EmailService implements IEmailProvider {
     `;
 
     const plainText = `
-KINGS TAXI — Gondar City Passenger Verification
+KINGS TAXI — PREMIUM CLASS TRANSPORT
 ==================================================
 
 Hello ${recipientName || 'Passenger'},
 
-Your Kings Taxi verification code is:
+Thank you for choosing Kings Taxi. Your six-digit verification code is:
 
     ${otp}
 
 * This code expires in 5 minutes.
-* SECURITY WARNING: Never share this code with anyone. Kings Taxi staff will never ask for your code.
+* SECURITY WARNING: Never share this verification code with anyone. Kings Taxi staff will never ask for your code.
 * If you did not request this code, you can safely ignore this email.
 
 Kings Taxi Transport Service, Gondar, Ethiopia.
     `.trim();
 
-    try {
-      const info = await this.transporter.sendMail({
-        from: fromAddress,
-        to,
-        subject,
-        text: plainText,
-        html: htmlContent,
-      });
-
+    // 2. Try HTTPS REST API first if configured (immune to firewall port blocks)
+    const sentViaBrevoApi = await this.sendViaBrevoApi(to, recipientName, subject, htmlContent, plainText);
+    if (sentViaBrevoApi) {
       const durationMs = Date.now() - startTime;
-      logger.info(
-        {
-          recipient: maskedTo,
-          messageId: info.messageId,
-          durationMs,
-        },
-        '[EmailService] OTP email delivered successfully via Brevo SMTP'
-      );
-
+      logger.info({ recipient: maskedTo, durationMs }, '[EmailService] OTP email delivered via Brevo HTTPS API');
       this.recordAudit({
-        id: info.messageId || `aud_${Date.now()}`,
+        id: `aud_${Date.now()}`,
         recipient: maskedTo,
         purpose: 'OTP_VERIFICATION',
         status: 'SUCCESS',
         timestamp: new Date().toISOString(),
         durationMs,
+        provider: 'Brevo HTTPS API',
       });
-
       return true;
-    } catch (err: any) {
-      const durationMs = Date.now() - startTime;
-      logger.error(
-        {
-          recipient: maskedTo,
-          error: err.message,
-          code: err.code,
-          command: err.command,
-          durationMs,
-        },
-        '[EmailService] Failed to send OTP email via Brevo SMTP'
-      );
+    }
 
+    const sentViaResendApi = await this.sendViaResendApi(to, subject, htmlContent, plainText);
+    if (sentViaResendApi) {
+      const durationMs = Date.now() - startTime;
+      logger.info({ recipient: maskedTo, durationMs }, '[EmailService] OTP email delivered via Resend HTTPS API');
       this.recordAudit({
         id: `aud_${Date.now()}`,
         recipient: maskedTo,
         purpose: 'OTP_VERIFICATION',
-        status: 'FAILED',
+        status: 'SUCCESS',
         timestamp: new Date().toISOString(),
         durationMs,
-        errorMessage: err.message || 'SMTP dispatch error',
+        provider: 'Resend HTTPS API',
       });
-
-      return false;
+      return true;
     }
+
+    // 3. Try Primary SMTP Transporter
+    if (!this.primaryTransporter) {
+      this.initTransporters();
+    }
+
+    if (this.primaryTransporter) {
+      try {
+        const info = await this.primaryTransporter.sendMail({
+          from: sender.full,
+          to,
+          subject,
+          text: plainText,
+          html: htmlContent,
+        });
+
+        const durationMs = Date.now() - startTime;
+        logger.info(
+          { recipient: maskedTo, messageId: info.messageId, durationMs },
+          '[EmailService] OTP email delivered successfully via primary SMTP'
+        );
+
+        this.recordAudit({
+          id: info.messageId || `aud_${Date.now()}`,
+          recipient: maskedTo,
+          purpose: 'OTP_VERIFICATION',
+          status: 'SUCCESS',
+          timestamp: new Date().toISOString(),
+          durationMs,
+          provider: `SMTP (${env.SMTP_HOST}:${env.SMTP_PORT})`,
+        });
+
+        return true;
+      } catch (primaryErr: any) {
+        logger.warn(
+          { recipient: maskedTo, error: primaryErr.message, code: primaryErr.code },
+          '[EmailService] Primary SMTP delivery failed; checking for fallback transporter'
+        );
+
+        // 4. Try Fallback Transporter (port 2525) if available
+        if (this.fallbackTransporter) {
+          try {
+            const info = await this.fallbackTransporter.sendMail({
+              from: sender.full,
+              to,
+              subject,
+              text: plainText,
+              html: htmlContent,
+            });
+
+            const durationMs = Date.now() - startTime;
+            logger.info(
+              { recipient: maskedTo, messageId: info.messageId, durationMs },
+              '[EmailService] OTP email delivered successfully via fallback SMTP (port 2525)'
+            );
+
+            this.recordAudit({
+              id: info.messageId || `aud_${Date.now()}`,
+              recipient: maskedTo,
+              purpose: 'OTP_VERIFICATION',
+              status: 'SUCCESS',
+              timestamp: new Date().toISOString(),
+              durationMs,
+              provider: `SMTP Fallback (${env.SMTP_HOST}:2525)`,
+            });
+
+            return true;
+          } catch (fallbackErr: any) {
+            logger.error(
+              { recipient: maskedTo, error: fallbackErr.message },
+              '[EmailService] Fallback SMTP (port 2525) delivery also failed'
+            );
+          }
+        }
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    logger.error({ recipient: maskedTo, durationMs }, '[EmailService] All email delivery transports failed');
+
+    this.recordAudit({
+      id: `aud_${Date.now()}`,
+      recipient: maskedTo,
+      purpose: 'OTP_VERIFICATION',
+      status: 'FAILED',
+      timestamp: new Date().toISOString(),
+      durationMs,
+      errorMessage: 'All email delivery transports failed (SMTP and HTTPS API)',
+    });
+
+    return false;
   }
 
   async sendSecurityAlert(to: string, title: string, details: string): Promise<boolean> {
     const maskedTo = this.maskEmail(to);
-    if (!this.transporter) {
+    const sender = this.getSenderDetails();
+
+    if (!this.primaryTransporter) {
       logger.info({ recipient: maskedTo, title }, '[EmailService] Security alert logged (transporter offline)');
       return true;
     }
 
     try {
-      await this.transporter.sendMail({
-        from: env.SMTP_FROM || 'Kings Taxi <ashenafimesele78@gmail.com>',
+      await this.primaryTransporter.sendMail({
+        from: sender.full,
         to,
         subject: `[Kings Taxi Security Alert] ${title}`,
         text: `Kings Taxi Security Notice:\n\n${details}\n\nIf you did not perform this action, please secure your account immediately.`,

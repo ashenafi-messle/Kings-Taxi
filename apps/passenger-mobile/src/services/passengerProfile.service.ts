@@ -56,8 +56,8 @@ export class PassengerProfileService {
   static async initiateContactChange(
     dto: InitiateContactChangeDto,
     accessToken?: string | null
-  ): Promise<ApiResponse<{ sessionId: string; message: string; devOtp?: string }>> {
-    return apiFetch<{ sessionId: string; message: string; devOtp?: string }>(
+  ): Promise<ApiResponse<{ sessionId: string; message: string }>> {
+    return apiFetch<{ sessionId: string; message: string }>(
       API_CONFIG.endpoints.passengerContactInitiate,
       {
         method: 'POST',

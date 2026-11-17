@@ -27,7 +27,6 @@ export interface RegistrationSessionData {
   isVerified: boolean;
   registrationToken: string | null;
   createdAt: number;
-  devOtp?: string;
 }
 
 export interface PasswordRecoverySessionData {
@@ -48,7 +47,6 @@ export interface PasswordRecoverySessionData {
   isVerified: boolean;
   recoveryToken: string | null;
   createdAt: number;
-  devOtp?: string;
 }
 
 
@@ -426,7 +424,6 @@ export class AuthService {
       isVerified: false,
       registrationToken: null,
       createdAt: Date.now(),
-      devOtp: env.NODE_ENV !== 'production' ? plainOtp : undefined,
     };
 
     activeRegSessions.set(sessionId, session);
@@ -462,9 +459,30 @@ export class AuthService {
     if (method === 'email') {
       const emailSent = await this.emailService.sendOtpEmail(cleanIdentifier, plainOtp, cleanFullName);
       if (!emailSent) {
+        // Rollback active session from memory
+        activeRegSessions.delete(sessionId);
+
+        // Mark pending OTP verification as consumed in database so undelivered codes are invalidated
+        try {
+          await prisma.oTPVerification.updateMany({
+            where: {
+              identifier: normalized,
+              purpose: 'REGISTRATION',
+              codeHash: otpHash,
+              isConsumed: false,
+            },
+            data: {
+              isConsumed: true,
+              consumedAt: new Date(),
+            },
+          });
+        } catch (cleanupErr) {
+          logger.warn({ cleanupErr }, '[AuthService] Failed to invalidate undelivered OTP in database');
+        }
+
         throw new AppError(
           'Failed to deliver verification code to your email address. Please verify your email and try again.',
-          502,
+          503,
           'EMAIL_DELIVERY_FAILED'
         );
       }
@@ -489,13 +507,13 @@ export class AuthService {
       } else {
         throw new AppError(
           tgRes.error || 'Failed to dispatch Telegram verification message. Please try again.',
-          502,
+          503,
           'TELEGRAM_DELIVERY_FAILED'
         );
       }
     }
 
-    return {
+    const responseData: any = {
       sessionId,
       method,
       maskedIdentifier: this.maskIdentifier(cleanIdentifier),
@@ -507,8 +525,13 @@ export class AuthService {
       message: telegramChatRequired
         ? `Please open @${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'} on Telegram to receive your verification code.`
         : undefined,
-      devOtp: env.NODE_ENV !== 'production' ? plainOtp : undefined,
     };
+
+    if (process.env.NODE_ENV === 'test') {
+      responseData.devOtp = plainOtp;
+    }
+
+    return responseData;
   }
 
   public async resendRegistrationOtp(sessionId: string) {
@@ -531,7 +554,6 @@ export class AuthService {
     session.otpExpiresAt = Date.now() + 300 * 1000;
     session.resendCooldownUntil = Date.now() + 60 * 1000;
     session.attempts = 0;
-    session.devOtp = env.NODE_ENV !== 'production' ? newOtp : undefined;
 
     activeRegSessions.set(sessionId, session);
 
@@ -566,7 +588,7 @@ export class AuthService {
       if (!emailSent) {
         throw new AppError(
           'Failed to deliver verification code to your email address. Please try again.',
-          502,
+          503,
           'EMAIL_DELIVERY_FAILED'
         );
       }
@@ -591,20 +613,25 @@ export class AuthService {
       } else {
         throw new AppError(
           tgRes.error || 'Failed to dispatch Telegram verification message. Please try again.',
-          502,
+          503,
           'TELEGRAM_DELIVERY_FAILED'
         );
       }
     }
 
-    return {
+    const responseData: any = {
       success: true,
       resendCooldownSeconds: 60,
       telegramBotUrl,
       telegramChatLinked,
       telegramChatRequired,
-      devOtp: env.NODE_ENV !== 'production' ? newOtp : undefined,
     };
+
+    if (process.env.NODE_ENV === 'test') {
+      responseData.devOtp = newOtp;
+    }
+
+    return responseData;
   }
 
   public async verifyRegistrationOtp(sessionId: string, code: string) {
@@ -625,7 +652,12 @@ export class AuthService {
     session.attempts++;
 
     const inputHash = this.hashOtp(code.trim(), session.sessionSalt);
-    if (inputHash !== session.otpHash) {
+    const isMatch =
+      Boolean(session.otpHash) &&
+      inputHash.length === session.otpHash.length &&
+      crypto.timingSafeEqual(Buffer.from(inputHash, 'hex'), Buffer.from(session.otpHash, 'hex'));
+
+    if (!isMatch) {
       const remaining = session.maxAttempts - session.attempts;
       throw new AppError(`Invalid verification code. ${remaining} attempt(s) remaining.`, 400, 'INVALID_OTP');
     }
@@ -635,6 +667,24 @@ export class AuthService {
     session.isVerified = true;
     session.registrationToken = `tok_${Date.now()}_${crypto.randomBytes(16).toString('hex')}`;
     activeRegSessions.set(sessionId, session);
+
+    // Atomically mark OTP consumed in database
+    try {
+      await prisma.oTPVerification.updateMany({
+        where: {
+          identifier: normalizeIdentifier(session.identifier),
+          purpose: 'REGISTRATION',
+          codeHash: inputHash,
+          isConsumed: false,
+        },
+        data: {
+          isConsumed: true,
+          consumedAt: new Date(),
+        },
+      });
+    } catch (dbErr) {
+      logger.warn({ dbErr }, '[AuthService] Failed to mark registration OTP consumed in database');
+    }
 
     return {
       registrationToken: session.registrationToken,
@@ -886,7 +936,6 @@ export class AuthService {
       isVerified: false,
       recoveryToken: null,
       createdAt: Date.now(),
-      devOtp: env.NODE_ENV !== 'production' ? plainOtp : undefined,
     };
 
     // Persist OTP in database before activating session and before dispatching message
@@ -919,9 +968,27 @@ export class AuthService {
     if (method === 'email') {
       const emailSent = await this.emailService.sendOtpEmail(clean, plainOtp, passenger.fullName);
       if (!emailSent) {
+        activeRecSessions.delete(sessionId);
+        try {
+          await prisma.oTPVerification.updateMany({
+            where: {
+              identifier: normalized,
+              purpose: 'PASSWORD_RESET',
+              codeHash: otpHash,
+              isConsumed: false,
+            },
+            data: {
+              isConsumed: true,
+              consumedAt: new Date(),
+            },
+          });
+        } catch (cleanupErr) {
+          logger.warn({ cleanupErr }, '[AuthService] Failed to clean up undelivered recovery OTP in DB');
+        }
+
         throw new AppError(
           'Failed to deliver recovery code to your email address. Please try again.',
-          502,
+          503,
           'EMAIL_DELIVERY_FAILED'
         );
       }
@@ -946,13 +1013,13 @@ export class AuthService {
       } else {
         throw new AppError(
           tgRes.error || 'Failed to dispatch Telegram recovery message. Please try again.',
-          502,
+          503,
           'TELEGRAM_DELIVERY_FAILED'
         );
       }
     }
 
-    return {
+    const responseData: any = {
       sessionId,
       method,
       maskedIdentifier: session.maskedIdentifier,
@@ -962,8 +1029,13 @@ export class AuthService {
       telegramBotUrl,
       telegramChatLinked,
       telegramChatRequired,
-      devOtp: env.NODE_ENV !== 'production' ? plainOtp : undefined,
     };
+
+    if (process.env.NODE_ENV === 'test') {
+      responseData.devOtp = plainOtp;
+    }
+
+    return responseData;
   }
 
   public async resendRecoveryOtp(sessionId: string) {
@@ -986,7 +1058,6 @@ export class AuthService {
     session.otpExpiresAt = Date.now() + 300 * 1000;
     session.resendCooldownUntil = Date.now() + 60 * 1000;
     session.attempts = 0;
-    session.devOtp = env.NODE_ENV !== 'production' ? newOtp : undefined;
 
     // Persist OTP in database
     try {
@@ -1021,7 +1092,7 @@ export class AuthService {
       if (!emailSent) {
         throw new AppError(
           'Failed to deliver recovery code to your email address. Please try again.',
-          502,
+          503,
           'EMAIL_DELIVERY_FAILED'
         );
       }
@@ -1046,20 +1117,25 @@ export class AuthService {
       } else {
         throw new AppError(
           tgRes.error || 'Failed to dispatch Telegram recovery message. Please try again.',
-          502,
+          503,
           'TELEGRAM_DELIVERY_FAILED'
         );
       }
     }
 
-    return {
+    const responseData: any = {
       success: true,
       resendCooldownSeconds: 60,
       telegramBotUrl,
       telegramChatLinked,
       telegramChatRequired,
-      devOtp: env.NODE_ENV !== 'production' ? newOtp : undefined,
     };
+
+    if (process.env.NODE_ENV === 'test') {
+      responseData.devOtp = newOtp;
+    }
+
+    return responseData;
   }
 
   public async verifyRecoveryOtp(sessionId: string, code: string) {
@@ -1080,7 +1156,12 @@ export class AuthService {
     session.attempts++;
 
     const inputHash = this.hashOtp(code.trim(), session.sessionSalt);
-    if (inputHash !== session.otpHash) {
+    const isMatch =
+      Boolean(session.otpHash) &&
+      inputHash.length === session.otpHash.length &&
+      crypto.timingSafeEqual(Buffer.from(inputHash, 'hex'), Buffer.from(session.otpHash, 'hex'));
+
+    if (!isMatch) {
       const remaining = session.maxAttempts - session.attempts;
       throw new AppError(`Invalid verification code. ${remaining} attempt(s) remaining.`, 400, 'INVALID_OTP');
     }
@@ -1089,6 +1170,24 @@ export class AuthService {
     session.otpHash = '';
     session.isVerified = true;
     session.recoveryToken = `rec_tok_${Date.now()}_${crypto.randomBytes(16).toString('hex')}`;
+
+    // Atomically mark OTP consumed in database
+    try {
+      await prisma.oTPVerification.updateMany({
+        where: {
+          identifier: normalizeIdentifier(session.identifier),
+          purpose: 'PASSWORD_RESET',
+          codeHash: inputHash,
+          isConsumed: false,
+        },
+        data: {
+          isConsumed: true,
+          consumedAt: new Date(),
+        },
+      });
+    } catch (dbErr) {
+      logger.warn({ dbErr }, '[AuthService] Failed to mark recovery OTP consumed in database');
+    }
     activeRecSessions.set(sessionId, session);
 
     return {
@@ -1241,28 +1340,28 @@ export class AuthService {
       });
     } else {
       try {
+        const updateResult = await withDbTimeout(
+          prisma.refreshToken.updateMany({
+            where: { id: storedToken.id, isRevoked: false },
+            data: { isRevoked: true, revokedAt: new Date() },
+          })
+        );
+
+        if (updateResult.count !== 1) {
+          throw new Error('CONCURRENCY_CONFLICT');
+        }
+
         await withDbTimeout(
-          prisma.$transaction(async (tx) => {
-            const updateResult = await tx.refreshToken.updateMany({
-              where: { id: storedToken.id, isRevoked: false },
-              data: { isRevoked: true, revokedAt: new Date() },
-            });
-
-            if (updateResult.count !== 1) {
-              throw new Error('CONCURRENCY_CONFLICT');
-            }
-
-            await tx.refreshToken.create({
-              data: {
-                id: newId,
-                userId: passenger.id,
-                userType: 'PASSENGER',
-                tokenHash: tokenHashNew,
-                familyId: storedToken.familyId,
-                expiresAt,
-                passengerId: passenger.id,
-              },
-            });
+          prisma.refreshToken.create({
+            data: {
+              id: newId,
+              userId: passenger.id,
+              userType: 'PASSENGER',
+              tokenHash: tokenHashNew,
+              familyId: storedToken.familyId,
+              expiresAt,
+              passengerId: passenger.id,
+            },
           })
         );
       } catch (err: any) {
@@ -1332,6 +1431,7 @@ export class AuthService {
       } catch (err: any) {
         if (!isDbConnectionError(err)) {
           logger.error({ err }, '[AuthService] Database error revoking refresh token on logout');
+          throw new AppError('Session persistence unavailable. Please try again later.', 503, 'SERVICE_UNAVAILABLE');
         }
       }
     }

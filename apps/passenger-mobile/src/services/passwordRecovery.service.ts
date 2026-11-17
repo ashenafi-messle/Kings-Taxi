@@ -37,7 +37,6 @@ export interface PasswordRecoverySession {
   isVerified: boolean;
   recoveryToken: string | null;
   createdAt: number;
-  lastDevOtp?: string;
 }
 
 const getBackendApiBase = () => buildApiUrl('/auth/recovery');
@@ -61,7 +60,6 @@ export class PasswordRecoveryService {
       expiresInSeconds: number;
       resendCooldownSeconds: number;
       telegramBotUrl?: string;
-      devOtp?: string;
     }>
   > {
     const cleanIdentifier = identifier.trim();
@@ -147,7 +145,6 @@ export class PasswordRecoveryService {
       isVerified: false,
       recoveryToken: null,
       createdAt: Date.now(),
-      lastDevOtp: plainOtp,
     };
 
     activeRecoverySessions.set(sessionId, session);
@@ -167,7 +164,6 @@ export class PasswordRecoveryService {
         expiresInSeconds: ttlSeconds,
         resendCooldownSeconds: cooldownSeconds,
         telegramBotUrl,
-        devOtp: plainOtp, // Supplied for developer & automated test verification
       },
     };
   }
@@ -181,7 +177,6 @@ export class PasswordRecoveryService {
     ApiResponse<{
       success: boolean;
       resendCooldownSeconds: number;
-      devOtp?: string;
     }>
   > {
     const session = activeRecoverySessions.get(sessionId);
@@ -208,7 +203,6 @@ export class PasswordRecoveryService {
     session.otpExpiresAt = Date.now() + 300 * 1000;
     session.resendCooldownUntil = Date.now() + 60 * 1000;
     session.attempts = 0; // reset attempts for fresh code
-    session.lastDevOtp = newOtp;
 
     activeRecoverySessions.set(sessionId, session);
 
@@ -217,7 +211,6 @@ export class PasswordRecoveryService {
       data: {
         success: true,
         resendCooldownSeconds: 60,
-        devOtp: newOtp,
       },
     };
   }

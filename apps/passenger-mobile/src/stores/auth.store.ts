@@ -84,7 +84,6 @@ interface AuthState {
     ApiResponse<{
       success: boolean;
       resendCooldownSeconds: number;
-      devOtp?: string;
     }>
   >;
   verifyRegistrationOtp: (
@@ -107,7 +106,6 @@ interface AuthState {
     ApiResponse<{
       success: boolean;
       resendCooldownSeconds: number;
-      devOtp?: string;
     }>
   >;
   verifyRecoveryOtp: (

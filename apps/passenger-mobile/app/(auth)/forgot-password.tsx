@@ -148,7 +148,6 @@ export default function ForgotPasswordScreen() {
         sessionId,
         maskedIdentifier,
         fullName,
-        devOtp,
         telegramBotUrl,
         telegramChatRequired,
       } = res.data;
@@ -163,7 +162,6 @@ export default function ForgotPasswordScreen() {
           fullName: fullName || '',
           maskedIdentifier: maskedIdentifier || identifier,
           telegramBotUrl: telegramBotUrl || '',
-          devOtp: devOtp || '',
         },
       });
 

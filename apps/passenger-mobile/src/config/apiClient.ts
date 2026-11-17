@@ -114,10 +114,11 @@ function mapHttpError(status: number, responseBody: any): string {
     case 429:
       return serverMsg || 'Too many requests. Please wait a moment and try again.';
     case 500:
+      return 'The Kings Taxi service is momentarily unavailable. Please try again shortly.';
     case 502:
     case 503:
     case 504:
-      return 'The Kings Taxi service is momentarily unavailable. Please try again shortly.';
+      return serverMsg || 'The Kings Taxi service is momentarily unavailable. Please try again shortly.';
     default:
       return serverMsg || `Request completed with status code ${status}.`;
   }

@@ -72,7 +72,6 @@ export interface InitiateAuthData {
   telegramBotUrl?: string;
   telegramChatLinked?: boolean;
   telegramChatRequired?: boolean;
-  devOtp?: string;
 }
 
 export interface VerifyRegistrationOtpData {

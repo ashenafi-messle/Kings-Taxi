@@ -118,7 +118,7 @@ export default function RegisterScreen() {
     const response = await initiateRegistration(method, identifier, fullName.trim());
 
     if (response.success && response.data) {
-      const { sessionId, maskedIdentifier, devOtp, telegramBotUrl } = response.data;
+      const { sessionId, maskedIdentifier, telegramBotUrl } = response.data;
       router.push({
         pathname: '/(auth)/verify-otp',
         params: {
@@ -127,7 +127,6 @@ export default function RegisterScreen() {
           identifier,
           fullName: fullName.trim(),
           maskedIdentifier,
-          devOtp: devOtp || '',
           telegramBotUrl: telegramBotUrl || '',
         },
       });

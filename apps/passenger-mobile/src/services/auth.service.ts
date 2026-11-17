@@ -130,14 +130,6 @@ export class AuthService {
     const cleanIdentifier = identifier.trim().toLowerCase();
     const cleanFullName = fullName.trim();
 
-    if (API_CONFIG.isMockAuth) {
-      return (await RegistrationAuthService.initiateRegistration(
-        method,
-        cleanIdentifier,
-        cleanFullName
-      )) as any;
-    }
-
     return await executeApiRequest<InitiateAuthData>(
       API_CONFIG.endpoints.registerInitiate,
       {
@@ -153,11 +145,7 @@ export class AuthService {
 
   static async resendRegistrationOtp(
     sessionId: string
-  ): Promise<ApiResponse<{ success: boolean; resendCooldownSeconds: number; devOtp?: string }>> {
-    if (API_CONFIG.isMockAuth) {
-      return (await RegistrationAuthService.resendOtp(sessionId)) as any;
-    }
-
+  ): Promise<ApiResponse<{ success: boolean; resendCooldownSeconds: number }>> {
     return await executeApiRequest(API_CONFIG.endpoints.registerResendOtp, {
       method: 'POST',
       body: JSON.stringify({ sessionId }),
@@ -168,10 +156,6 @@ export class AuthService {
     sessionId: string,
     code: string
   ): Promise<ApiResponse<VerifyRegistrationOtpData>> {
-    if (API_CONFIG.isMockAuth) {
-      return (await RegistrationAuthService.verifyOtp(sessionId, code)) as any;
-    }
-
     return await executeApiRequest<VerifyRegistrationOtpData>(
       API_CONFIG.endpoints.registerVerifyOtp,
       {
@@ -188,14 +172,6 @@ export class AuthService {
     deviceId?: string,
     platform: 'ANDROID' | 'IOS' | 'WEB' | 'UNKNOWN' = getClientPlatform()
   ): Promise<ApiResponse<AuthSessionData>> {
-    if (API_CONFIG.isMockAuth) {
-      return (await RegistrationAuthService.setPasswordAndComplete(
-        sessionId,
-        registrationToken,
-        password
-      )) as any;
-    }
-
     return await executeApiRequest<AuthSessionData>(
       API_CONFIG.endpoints.registerComplete,
       {
@@ -221,10 +197,6 @@ export class AuthService {
   ): Promise<ApiResponse<InitiateAuthData>> {
     const cleanIdentifier = identifier.trim().toLowerCase();
 
-    if (API_CONFIG.isMockAuth) {
-      return (await PasswordRecoveryService.initiateRecovery(method, cleanIdentifier)) as any;
-    }
-
     return await executeApiRequest<InitiateAuthData>(
       API_CONFIG.endpoints.recoveryInitiate,
       {
@@ -236,11 +208,7 @@ export class AuthService {
 
   static async resendRecoveryOtp(
     sessionId: string
-  ): Promise<ApiResponse<{ success: boolean; resendCooldownSeconds: number; devOtp?: string }>> {
-    if (API_CONFIG.isMockAuth) {
-      return (await PasswordRecoveryService.resendOtp(sessionId)) as any;
-    }
-
+  ): Promise<ApiResponse<{ success: boolean; resendCooldownSeconds: number }>> {
     return await executeApiRequest(API_CONFIG.endpoints.recoveryResendOtp, {
       method: 'POST',
       body: JSON.stringify({ sessionId }),

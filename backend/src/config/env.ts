@@ -39,7 +39,9 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 mins
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
 
-  // Email / SMTP (Brevo)
+  // Email / SMTP (Brevo, Resend, Standard SMTP)
+  BREVO_API_KEY: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SECURE: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
