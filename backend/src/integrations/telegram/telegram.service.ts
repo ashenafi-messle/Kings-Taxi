@@ -25,7 +25,11 @@ interface TelegramApiResponse {
 }
 
 export interface SessionOtpCallback {
-  (sessionOrPhone: string, chatId: string): Promise<{ otp: string; purpose: string; recipientName?: string } | null>;
+  (
+    sessionOrPhone: string,
+    chatId: string,
+    userMeta?: { fromId?: string; username?: string; firstName?: string; lastName?: string }
+  ): Promise<{ otp: string; purpose: string; recipientName?: string } | { error: string } | null>;
 }
 
 export class TelegramService implements ITelegramProvider {
@@ -264,20 +268,8 @@ export class TelegramService implements ITelegramProvider {
       };
     }
 
-    // Official Kings Taxi OTP message format
-    const messageText = `
-🚕 <b>KINGS TAXI ETHIOPIA</b>
-━━━━━━━━━━━━━━━━━━━━
-Your passenger registration verification code is:
-
-<code>${otp}</code>
-
-⏱ <b>This OTP expires in 5 minutes.</b>
-
-⚠️ <i>Do not share this code with anyone. Kings Taxi staff will never ask for your OTP.</i>
-
-Thank you for choosing Kings Taxi!
-    `.trim();
+    // Official Kings Taxi OTP message format: exactly one concise line per spec
+    const messageText = `Your Kings Taxi verification OTP is: ${otp}`;
 
     try {
       const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -401,273 +393,53 @@ Thank you for choosing Kings Taxi!
     const fromId = String(message.from?.id);
     const text = message.text ? message.text.trim() : '';
 
-    // =========================================================================
-    // 1. Handle Contact Sharing Update (Real Telegram Contact Button)
-    // =========================================================================
-    if (message.contact && message.contact.phone_number) {
-      const contactUserId = message.contact.user_id ? String(message.contact.user_id) : undefined;
-      const rawPhone = message.contact.phone_number;
-
-      // Security check: Verify that message.contact.user_id matches message.from.id
-      if (!contactUserId || contactUserId !== fromId) {
-        logger.warn(
-          { fromId, contactUserId, chatId },
-          '[TelegramService] Contact spoofing detected: shared contact does not belong to sender'
-        );
-        await this.sendSpoofingWarning(chatId);
-        return;
-      }
-
-      // Normalize Ethiopian phone number
-      const phoneValidation = normalizeEthiopianPhone(rawPhone);
-      if (!phoneValidation.isValid) {
-        logger.warn(
-          { rawPhone, chatId },
-          '[TelegramService] Invalid Ethiopian phone number provided in contact update'
-        );
-        await this.sendInvalidPhoneWarning(chatId);
-        return;
-      }
-
-      const normalizedPhone = phoneValidation.normalized;
-
-      // Save identity link persistently
-      await this.identityStore.linkIdentity({
-        telegramUserId: fromId,
-        chatId,
-        phone: normalizedPhone,
-        username: message.from?.username,
-        firstName: message.from?.first_name,
-        lastName: message.from?.last_name,
-        linkedAt: new Date().toISOString(),
-        isVerified: true,
-      });
-
-      // Check for pending registration session
-      let pendingSessionId = this.pendingSessionByChat.get(chatId);
-      let sessionData = null;
-
-      if (this.sessionResolver) {
-        // Try resolving by pending sessionId first
-        if (pendingSessionId) {
-          sessionData = await this.sessionResolver(pendingSessionId, chatId);
-        }
-        // Fallback: check if an active session exists for this phone
-        if (!sessionData) {
-          sessionData = await this.sessionResolver(normalizedPhone, chatId);
-        }
-      }
-
-      if (sessionData) {
-        // Dispatch OTP immediately
-        await this.sendOtpMessage(chatId, sessionData.otp, {
-          sessionId: pendingSessionId || normalizedPhone,
-          purpose: sessionData.purpose,
-          recipientName: sessionData.recipientName,
-        });
-
-        await this.sendDirectMessage(
-          chatId,
-          `✅ <b>Telegram Account Successfully Linked!</b>\n━━━━━━━━━━━━━━━━━━━━\nConnected Phone: <code>${maskPhone(
-            normalizedPhone
-          )}</code>\n\nYour verification code has been dispatched above. Please return to the Kings Taxi app to enter your code.`
-        );
-      } else {
-        // Inform user that linking succeeded and they can now request OTP from the app
-        await this.sendDirectMessage(
-          chatId,
-          `🚕 <b>KINGS TAXI ETHIOPIA</b>\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>Telegram Account Successfully Linked!</b>\n\nConnected Phone: <code>${maskPhone(
-            normalizedPhone
-          )}</code>\n\nYour Telegram account is now securely linked to Kings Taxi. You will receive OTP verification codes and trip updates directly in this chat.`
-        );
-      }
-
-      this.pendingSessionByChat.delete(chatId);
-      return;
-    }
-
-    // =========================================================================
-    // 2. Intercept Manual Phone Number Typed as Ordinary Text
-    // =========================================================================
-    if (text && isManualPhoneInput(text)) {
-      logger.info({ chatId, textPreview: maskPhone(text) }, '[TelegramService] User typed phone number manually as text');
-      await this.sendManualPhoneWarning(chatId);
-      return;
-    }
-
-    // =========================================================================
-    // 3. Handle /start Command
-    // =========================================================================
+    // Handle /start Command
     if (text.startsWith('/start')) {
       const parts = text.split(' ');
       const startParam = parts[1] ? parts[1].trim() : '';
 
-      logger.info({ chatId, fromId, startParam }, '[TelegramService] Received /start command');
+      logger.info({ chatId, fromId, hasParam: Boolean(startParam) }, '[TelegramService] Received /start command');
 
-      // Check if user is already linked
-      const existingLink =
-        this.identityStore.getLinkByChatId(chatId) || this.identityStore.getLinkByUserId(fromId);
+      // Case A: Deep link parameter provided (e.g. /start reg_<token> or /start rec_<token>)
+      if (startParam && this.sessionResolver) {
+        const sessionData = await this.sessionResolver(startParam, chatId, {
+          fromId,
+          username: message.from?.username,
+          firstName: message.from?.first_name,
+          lastName: message.from?.last_name,
+        });
 
-      // Case A: Deep link parameter provided (e.g. /start reg_<sessionId>)
-      if (startParam) {
-        this.pendingSessionByChat.set(chatId, startParam);
-
-        if (existingLink && this.sessionResolver) {
-          const sessionData = await this.sessionResolver(startParam, chatId);
-          if (sessionData) {
-            await this.sendOtpMessage(chatId, sessionData.otp, {
-              sessionId: startParam,
-              purpose: sessionData.purpose,
-              recipientName: sessionData.recipientName,
-            });
-
-            await this.sendDirectMessage(
-              chatId,
-              `✅ <b>Connected!</b> Your verification code has been dispatched above.\n\nPlease return to the Kings Taxi app to enter your code.`
-            );
-            this.pendingSessionByChat.delete(chatId);
-            return;
-          }
-        }
-
-        // If not linked or session needs linking, request contact
-        if (!existingLink) {
-          await this.sendContactPrompt(
+        if (sessionData && 'otp' in sessionData) {
+          // Exactly one concise message with the OTP:
+          // "Your Kings Taxi verification OTP is: 123456"
+          await this.sendDirectMessage(
             chatId,
-            `🚕 <b>Kings Taxi Verification</b>\n━━━━━━━━━━━━━━━━━━━━\nTo link your passenger account and receive your OTP code, please tap the button below to share your phone number.`
+            `Your Kings Taxi verification OTP is: ${sessionData.otp}`
           );
           return;
         }
-      }
 
-      // Case B: Plain /start without parameters
-      if (existingLink) {
-        await this.sendAlreadyLinkedMessage(chatId, existingLink.phone);
+        // Invalid or expired token
+        await this.sendDirectMessage(
+          chatId,
+          'Invalid or expired verification link. Please request a new code from the Kings Taxi app.'
+        );
         return;
       }
 
-      // Case C: First-time or unlinked user
-      await this.sendWelcomeMessage(chatId);
+      // Case B: Plain /start without parameters
+      await this.sendDirectMessage(
+        chatId,
+        'Welcome to Kings Taxi. To verify your account, please start from the Kings Taxi mobile application.'
+      );
       return;
     }
 
-    // =========================================================================
-    // 4. Default / Unhandled Text Response
-    // =========================================================================
-    const isLinked = this.identityStore.isChatLinked(chatId);
-    if (!isLinked) {
-      await this.sendContactPrompt(chatId);
-    } else {
-      await this.sendDirectMessage(
-        chatId,
-        `🚕 <b>Kings Taxi Ethiopia</b>\n━━━━━━━━━━━━━━━━━━━━\nYour Telegram account is active and connected. To request a verification code or book a ride, please use the Kings Taxi mobile application.`
-      );
-    }
-  }
-
-  /**
-   * Sends the official Telegram contact-requesting ReplyKeyboardMarkup button
-   */
-  public async sendContactPrompt(chatId: string, customMessage?: string): Promise<boolean> {
-    if (!env.TELEGRAM_BOT_TOKEN) return false;
-
-    const text =
-      customMessage ||
-      `
-🚕 <b>Kings Taxi Ethiopia</b>
-━━━━━━━━━━━━━━━━━━━━
-Please tap the button below to securely share your phone number with Kings Taxi.
-      `.trim();
-
-    try {
-      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text,
-          parse_mode: 'HTML',
-          reply_markup: {
-            keyboard: [
-              [
-                {
-                  text: '📱 Share My Phone Number',
-                  request_contact: true,
-                },
-              ],
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: true,
-          },
-        }),
-        signal: AbortSignal.timeout(5000),
-      });
-
-      const data = (await res.json()) as TelegramApiResponse;
-      return data.ok;
-    } catch (err: any) {
-      logger.warn({ error: err.message }, '[TelegramService] Failed to send contact prompt');
-      return false;
-    }
-  }
-
-  private async sendWelcomeMessage(chatId: string): Promise<void> {
-    const text = `
-🚕 <b>Welcome to Kings Taxi Ethiopia!</b>
-━━━━━━━━━━━━━━━━━━━━
-Gondar City's Premier Transportation Platform.
-
-To receive instant OTP verification codes and trip notifications here, please tap the button below to link your phone number.
-    `.trim();
-
-    await this.sendContactPrompt(chatId, text);
-  }
-
-  private async sendAlreadyLinkedMessage(chatId: string, phone: string): Promise<void> {
-    const text = `
-🚕 <b>Kings Taxi Ethiopia</b>
-━━━━━━━━━━━━━━━━━━━━
-✅ <b>Your Telegram account is linked!</b>
-
-Connected Phone: <code>${maskPhone(phone)}</code>
-
-Your account is ready to receive instant OTP verification codes and trip updates.
-To request a verification code, please return to the Kings Taxi mobile application.
-    `.trim();
-
-    await this.sendDirectMessage(chatId, text);
-  }
-
-  private async sendManualPhoneWarning(chatId: string): Promise<void> {
-    const text = `
-⚠️ <b>Action Required</b>
-━━━━━━━━━━━━━━━━━━━━
-Please use the <b>Share My Phone Number</b> button below to securely link your Telegram account.
-
-<i>Manual text entry cannot be verified for security.</i>
-    `.trim();
-
-    await this.sendContactPrompt(chatId, text);
-  }
-
-  private async sendSpoofingWarning(chatId: string): Promise<void> {
-    const text = `
-⚠️ <b>Verification Failed</b>
-━━━━━━━━━━━━━━━━━━━━
-You must share your own phone number using the button below. Contacts belonging to other users cannot be linked.
-    `.trim();
-
-    await this.sendContactPrompt(chatId, text);
-  }
-
-  private async sendInvalidPhoneWarning(chatId: string): Promise<void> {
-    const text = `
-⚠️ <b>Invalid Phone Number</b>
-━━━━━━━━━━━━━━━━━━━━
-Please ensure your Telegram account is registered with a valid Ethiopian mobile number (+251 9... or +251 7...).
-    `.trim();
-
-    await this.sendContactPrompt(chatId, text);
+    // Default response for unhandled text messages
+    await this.sendDirectMessage(
+      chatId,
+      'Welcome to Kings Taxi. To request a verification code or book a ride, please use the Kings Taxi mobile application.'
+    );
   }
 
   public async sendDirectMessage(chatId: string, text: string): Promise<boolean> {

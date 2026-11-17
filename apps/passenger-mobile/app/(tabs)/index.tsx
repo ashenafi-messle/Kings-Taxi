@@ -62,7 +62,7 @@ function formatRelativeTime(dateString?: string): string {
 export default function HomeScreen() {
   const router = useRouter();
   const { t } = useTranslation(['home', 'transportation', 'common', 'navigation']);
-  const { user, isAuthenticated, token } = useAuthStore();
+  const { user, isAuthenticated, token, isSessionReady } = useAuthStore();
   const { currentRide, setDestination, setPickup } = useRideStore();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -70,12 +70,12 @@ export default function HomeScreen() {
   const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [activitiesError, setActivitiesError] = useState<string | null>(null);
 
-  // Unauthenticated access guard: redirect to welcome
+  // Unauthenticated access guard: redirect to welcome only when session initialization is resolved
   useEffect(() => {
-    if (!isAuthenticated && !user && !token) {
+    if (isSessionReady && !isAuthenticated && !user && !token) {
       router.replace('/(auth)/welcome');
     }
-  }, [isAuthenticated, user, token, router]);
+  }, [isSessionReady, isAuthenticated, user, token, router]);
 
   // Account-isolated recent activities loader
   const loadRecentActivities = useCallback(async () => {
@@ -125,6 +125,14 @@ export default function HomeScreen() {
   useEffect(() => {
     useRideStore.getState().fetchRideHistory();
   }, []);
+
+  if (!isSessionReady) {
+    return (
+      <View style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={theme.colors.antiqueGold} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>

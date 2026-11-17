@@ -91,9 +91,9 @@ describe('Telegram Phone Linking and OTP Flow (Section 10 Test Suite)', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Case 1: /start first-time user
+  // Case 1: /start plain message (no deep-link param)
   // --------------------------------------------------------------------------
-  it('1. /start first-time user: triggers welcome message and contact prompt button', async () => {
+  it('1. /start plain: triggers instructions without keyboard or phone-sharing button', async () => {
     const update = {
       update_id: 1001,
       message: {
@@ -106,163 +106,153 @@ describe('Telegram Phone Linking and OTP Flow (Section 10 Test Suite)', () => {
 
     await telegramService.handleUpdate(update);
 
-    expect(sentTelegramRequests.length).toBeGreaterThan(0);
+    expect(sentTelegramRequests.length).toBe(1);
     const sentReq = sentTelegramRequests[0];
     expect(String(sentReq.body.chat_id)).toBe('111222');
-    expect(sentReq.body.text).toContain('Welcome to Kings Taxi Ethiopia!');
-    expect(sentReq.body.reply_markup?.keyboard).toBeDefined();
-    expect(sentReq.body.reply_markup.keyboard[0][0].request_contact).toBe(true);
-    expect(sentReq.body.reply_markup.keyboard[0][0].text).toContain('Share My Phone Number');
+    expect(sentReq.body.text).toContain('Welcome to Kings Taxi');
+    expect(sentReq.body.reply_markup).toBeUndefined();
   });
 
   // --------------------------------------------------------------------------
-  // Case 2: /start already-linked user
+  // Case 2: /start reg_<token> deep-link
   // --------------------------------------------------------------------------
-  it('2. /start already-linked user: confirms account is linked and does not send duplicate OTP', async () => {
-    // Pre-link user
-    await identityStore.linkIdentity({
-      telegramUserId: '222333',
-      chatId: '222333',
-      phone: '+251946084865',
-      linkedAt: new Date().toISOString(),
-      isVerified: true,
-    });
+  it('2. /start reg_<token>: receives OTP and links identity in single step', async () => {
+    const regRes = await authService.initiateRegistration('telegram', '0946084865', 'Kassahun Melaku');
+    expect(regRes.telegramBotUrl).toBeDefined();
 
-    const update = {
+    const url = new URL(regRes.telegramBotUrl!);
+    const startParam = url.searchParams.get('start')!;
+    expect(startParam.startsWith('reg_')).toBe(true);
+
+    sentTelegramRequests = [];
+
+    // User presses /start <startParam>
+    await telegramService.handleUpdate({
       update_id: 1002,
       message: {
         message_id: 2,
-        from: { id: 222333, first_name: 'Dawit' },
-        chat: { id: 222333, type: 'private' },
-        text: '/start',
+        from: { id: 333444, first_name: 'Kassahun', username: 'kassahun_m' },
+        chat: { id: 333444, type: 'private' },
+        text: `/start ${startParam}`,
       },
-    };
+    });
 
-    await telegramService.handleUpdate(update);
+    // Verify phone was linked to chat immediately
+    expect(identityStore.isPhoneLinked('+251946084865')).toBe(true);
+    expect(identityStore.getLinkByPhone('0946084865')?.chatId).toBe('333444');
 
+    // Verify exact OTP message sent
     expect(sentTelegramRequests.length).toBe(1);
     const sentReq = sentTelegramRequests[0];
-    expect(sentReq.body.text).toContain('Your Telegram account is linked!');
-    expect(sentReq.body.text).toContain(maskPhone('+251946084865'));
-    // Ensure no OTP code was broadcast on plain /start
-    expect(sentReq.body.text).not.toContain('verification code is');
+    expect(String(sentReq.body.chat_id)).toBe('333444');
+    expect(sentReq.body.text).toMatch(/^Your Kings Taxi verification OTP is: \d{6}$/);
+    expect(sentReq.body.reply_markup).toBeUndefined();
   });
 
   // --------------------------------------------------------------------------
-  // Case 3: Contact-sharing update
+  // Case 3: Replaying single-use token
   // --------------------------------------------------------------------------
-  it('3. Contact-sharing update: processes valid contact matching sender ID and triggers pending session OTP', async () => {
-    // Initiate registration in auth service first
-    const regRes = await authService.initiateRegistration('telegram', '0946084865', 'Kassahun Melaku');
-    expect(regRes.telegramChatRequired).toBe(true);
-    const sessionId = regRes.sessionId;
+  it('3. Replaying single-use token: rejects subsequent start with token already used', async () => {
+    const regRes = await authService.initiateRegistration('telegram', '0911223344', 'Dawit Tsige');
+    const url = new URL(regRes.telegramBotUrl!);
+    const startParam = url.searchParams.get('start')!;
 
-    // Simulate user tapping the bot with start param /start reg_<sessionId>
+    // First use
     await telegramService.handleUpdate({
       update_id: 1003,
       message: {
         message_id: 3,
-        from: { id: 333444, first_name: 'Kassahun' },
-        chat: { id: 333444, type: 'private' },
-        text: `/start ${sessionId}`,
+        from: { id: 555111, first_name: 'Dawit' },
+        chat: { id: 555111, type: 'private' },
+        text: `/start ${startParam}`,
       },
     });
 
     sentTelegramRequests = [];
 
-    // Now user shares valid contact matching sender ID
+    // Second use (replay)
     await telegramService.handleUpdate({
       update_id: 1004,
       message: {
         message_id: 4,
-        from: { id: 333444, first_name: 'Kassahun' },
-        chat: { id: 333444, type: 'private' },
-        contact: {
-          phone_number: '0946084865',
-          user_id: 333444,
-          first_name: 'Kassahun',
-        },
+        from: { id: 555111, first_name: 'Dawit' },
+        chat: { id: 555111, type: 'private' },
+        text: `/start ${startParam}`,
       },
     });
 
-    // Verify identity was stored
-    expect(identityStore.isPhoneLinked('+251946084865')).toBe(true);
-    expect(identityStore.getLinkByPhone('0946084865')?.chatId).toBe('333444');
-
-    // Verify OTP message was dispatched
-    const otpMsg = sentTelegramRequests.find((r) => r.body.text?.includes('KINGS TAXI ETHIOPIA'));
-    expect(otpMsg).toBeDefined();
-    expect(otpMsg?.body.text).toContain('<code>');
-    expect(otpMsg?.body.text).toContain('expires in 5 minutes');
+    expect(sentTelegramRequests.length).toBe(1);
+    expect(sentTelegramRequests[0].body.text).toContain('Invalid or expired verification link');
   });
 
   // --------------------------------------------------------------------------
-  // Case 4: Missing contact information
+  // Case 4: Password recovery deep-link
   // --------------------------------------------------------------------------
-  it('4. Missing contact information: handles null or missing contact payload gracefully', async () => {
-    const update = {
+  it('4. Password recovery /start rec_<token>: receives OTP for password recovery', async () => {
+    vi.spyOn(prisma.passenger, 'findFirst').mockResolvedValue({
+      id: 'pass_123',
+      fullName: 'Almaz Ayana',
+      email: null,
+      phoneNumber: '+251911998877',
+      passwordHash: 'hash:salt',
+      isVerified: true,
+      accountStatus: 'ACTIVE',
+    } as any);
+
+    const recRes = await authService.initiateRecovery('telegram', '0911998877');
+    const url = new URL(recRes.telegramBotUrl!);
+    const startParam = url.searchParams.get('start')!;
+    expect(startParam.startsWith('rec_')).toBe(true);
+
+    sentTelegramRequests = [];
+
+    await telegramService.handleUpdate({
       update_id: 1005,
       message: {
         message_id: 5,
-        from: { id: 444555 },
-        chat: { id: 444555, type: 'private' },
-        contact: null,
+        from: { id: 777222, first_name: 'Almaz' },
+        chat: { id: 777222, type: 'private' },
+        text: `/start ${startParam}`,
       },
-    };
+    });
 
-    await expect(telegramService.handleUpdate(update)).resolves.not.toThrow();
+    expect(sentTelegramRequests.length).toBe(1);
+    expect(sentTelegramRequests[0].body.text).toMatch(/^Your Kings Taxi verification OTP is: \d{6}$/);
   });
 
   // --------------------------------------------------------------------------
-  // Case 5: Invalid phone number
+  // Case 5: Invalid or unknown start token
   // --------------------------------------------------------------------------
-  it('5. Invalid phone number: rejects non-Ethiopian mobile numbers', async () => {
+  it('5. Invalid or unknown start token: rejects with friendly error message', async () => {
     await telegramService.handleUpdate({
       update_id: 1006,
       message: {
         message_id: 6,
-        from: { id: 555666 },
-        chat: { id: 555666, type: 'private' },
-        contact: {
-          phone_number: '+12025550199', // US phone number
-          user_id: 555666,
-        },
+        from: { id: 888333 },
+        chat: { id: 888333, type: 'private' },
+        text: '/start reg_invalidtoken1234567890',
       },
     });
 
-    expect(identityStore.isChatLinked('555666')).toBe(false);
-    expect(sentTelegramRequests.length).toBeGreaterThan(0);
-    const sentReq = sentTelegramRequests[0];
-    expect(sentReq.body.text).toContain('Invalid Phone Number');
+    expect(sentTelegramRequests.length).toBe(1);
+    expect(sentTelegramRequests[0].body.text).toContain('Invalid or expired verification link');
   });
 
   // --------------------------------------------------------------------------
-  // Case 6: Contact belonging to another user (spoofing prevention)
+  // Case 6: Handles missing or unexpected update payloads gracefully
   // --------------------------------------------------------------------------
-  it('6. Contact belonging to another user (spoofing): rejects contact where user_id does not match from.id', async () => {
-    const attackerFromId = 777000;
-    const victimUserId = 888111;
-
-    await telegramService.handleUpdate({
+  it('6. Missing or unexpected message payload: handles gracefully without crashing', async () => {
+    const update = {
       update_id: 1007,
       message: {
         message_id: 7,
-        from: { id: attackerFromId },
-        chat: { id: attackerFromId, type: 'private' },
-        contact: {
-          phone_number: '+251911223344',
-          user_id: victimUserId, // Forwarded contact belonging to someone else!
-        },
+        from: { id: 444555 },
+        chat: { id: 444555, type: 'private' },
+        text: '',
       },
-    });
+    };
 
-    expect(identityStore.isPhoneLinked('+251911223344')).toBe(false);
-    expect(identityStore.isChatLinked(String(attackerFromId))).toBe(false);
-
-    expect(sentTelegramRequests.length).toBeGreaterThan(0);
-    const sentReq = sentTelegramRequests[0];
-    expect(sentReq.body.text).toContain('Verification Failed');
-    expect(sentReq.body.text).toContain('You must share your own phone number');
+    await expect(telegramService.handleUpdate(update)).resolves.not.toThrow();
   });
 
   // --------------------------------------------------------------------------
@@ -354,7 +344,7 @@ describe('Telegram Phone Linking and OTP Flow (Section 10 Test Suite)', () => {
   // --------------------------------------------------------------------------
   // Case 12: Successful Telegram OTP delivery
   // --------------------------------------------------------------------------
-  it('12. Successful Telegram OTP delivery: dispatches HTML message with monospace <code>{otp}</code>', async () => {
+  it('12. Successful Telegram OTP delivery: dispatches exact spec format "Your Kings Taxi verification OTP is: {otp}"', async () => {
     await identityStore.linkIdentity({
       telegramUserId: '500500',
       chatId: '500500',
@@ -369,10 +359,7 @@ describe('Telegram Phone Linking and OTP Flow (Section 10 Test Suite)', () => {
 
     const sentReq = sentTelegramRequests.find((r) => String(r.body.chat_id) === '500500');
     expect(sentReq).toBeDefined();
-    expect(sentReq!.body.text).toContain('<code>654321</code>');
-    expect(sentReq!.body.text).toContain('KINGS TAXI ETHIOPIA');
-    expect(sentReq!.body.text).toContain('expires in 5 minutes');
-    expect(sentReq!.body.parse_mode).toBe('HTML');
+    expect(sentReq!.body.text).toBe('Your Kings Taxi verification OTP is: 654321');
   });
 
   // --------------------------------------------------------------------------
@@ -485,5 +472,72 @@ describe('Telegram Phone Linking and OTP Flow (Section 10 Test Suite)', () => {
     const webhookRes = await authService.handleTelegramWebhook(webhookPayload);
     expect(webhookRes).toEqual({ ok: true });
     expect(sentTelegramRequests.length).toBe(1);
+  });
+
+  // --------------------------------------------------------------------------
+  // Case 19: Unified Login with Email Address
+  // --------------------------------------------------------------------------
+  it('19. Unified Login: allows login with email address and password', async () => {
+    const salt = authService.generateSalt();
+    const hash = authService.hashPasswordSync('SecurePass123!', salt);
+
+    vi.spyOn(prisma.passenger, 'findFirst').mockResolvedValue({
+      id: 'pass_email_001',
+      fullName: 'Abebe Bikila',
+      email: 'abebe.bikila@kingstaxi.et',
+      phoneNumber: null,
+      passwordHash: `${hash}:${salt}`,
+      isVerified: true,
+      accountStatus: 'ACTIVE',
+      language: 'en',
+      city: 'Gondar',
+    } as any);
+
+    const loginRes = await authService.login('abebe.bikila@kingstaxi.et', 'SecurePass123!');
+    expect(loginRes.token).toBeDefined();
+    expect(loginRes.user.email).toBe('abebe.bikila@kingstaxi.et');
+  });
+
+  // --------------------------------------------------------------------------
+  // Case 20: Unified Login with Telegram Phone Number in Various Formats
+  // --------------------------------------------------------------------------
+  it('20. Unified Login: allows login with Telegram phone number in various Ethiopian formats', async () => {
+    const salt = authService.generateSalt();
+    const hash = authService.hashPasswordSync('SecurePass123!', salt);
+
+    vi.spyOn(prisma.passenger, 'findFirst').mockImplementation(async (query: any) => {
+      const orConditions = query?.where?.OR || [];
+      // Check if any condition matched the normalized phone or variations
+      const matchesPhone = orConditions.some(
+        (cond: any) =>
+          cond.phoneNumber === '+251946084865' ||
+          cond.phoneNumber === '0946084865' ||
+          cond.phoneNumber === '946084865'
+      );
+      if (matchesPhone) {
+        return {
+          id: 'pass_phone_002',
+          fullName: 'Kassahun Melaku',
+          email: null,
+          phoneNumber: '+251946084865',
+          passwordHash: `${hash}:${salt}`,
+          isVerified: true,
+          accountStatus: 'ACTIVE',
+          language: 'en',
+          city: 'Gondar',
+        } as any;
+      }
+      return null;
+    });
+
+    // Login with local Ethiopian format (0946084865)
+    const loginLocal = await authService.login('0946084865', 'SecurePass123!');
+    expect(loginLocal.token).toBeDefined();
+    expect(loginLocal.user.fullName).toBe('Kassahun Melaku');
+
+    // Login with E.164 format (+251946084865)
+    const loginE164 = await authService.login('+251946084865', 'SecurePass123!');
+    expect(loginE164.token).toBeDefined();
+    expect(loginE164.user.fullName).toBe('Kassahun Melaku');
   });
 });

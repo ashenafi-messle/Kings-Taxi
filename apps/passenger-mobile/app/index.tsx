@@ -14,32 +14,17 @@ import { colors } from '../src/theme/colors';
  */
 export default function IndexScreen() {
   const router = useRouter();
-  const { loadInitialAuth } = useAuthStore();
+  const { loadInitialAuth, isSessionReady } = useAuthStore();
 
   useEffect(() => {
-    let isMounted = true;
+    loadInitialAuth();
+  }, [loadInitialAuth]);
 
-    const initializeApp = async () => {
-      try {
-        // Securely restore passenger session tokens from SecureStore
-        await loadInitialAuth();
-      } catch (err) {
-        console.warn('Startup session initialization warning:', err);
-      }
-
-      if (isMounted) {
-        // Always present official landing page on startup & restart
-        router.replace('/(auth)/welcome');
-      }
-    };
-
-    const timeout = setTimeout(initializeApp, 150);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timeout);
-    };
-  }, [loadInitialAuth, router]);
+  useEffect(() => {
+    if (isSessionReady) {
+      router.replace('/(auth)/welcome');
+    }
+  }, [isSessionReady, router]);
 
   return (
     <View style={styles.container}>

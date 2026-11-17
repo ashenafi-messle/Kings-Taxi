@@ -11,7 +11,7 @@ export class SecureStorageUtil {
         await AsyncStorage.setItem(`@secure_${key}`, value);
       }
     } catch {
-      // Fallback
+      // Fallback when SecureStore fails (e.g. Android 2048-byte limit or Keystore error)
       await AsyncStorage.setItem(`@secure_${key}`, value);
     }
   }
@@ -19,7 +19,12 @@ export class SecureStorageUtil {
   static async getItem(key: string): Promise<string | null> {
     try {
       if (Platform.OS !== 'web') {
-        return await SecureStore.getItemAsync(key);
+        const val = await SecureStore.getItemAsync(key);
+        if (val !== null && val !== undefined) {
+          return val;
+        }
+        // Fallback to AsyncStorage if SecureStore had failed on setItem or returned null
+        return await AsyncStorage.getItem(`@secure_${key}`);
       } else {
         return await AsyncStorage.getItem(`@secure_${key}`);
       }
@@ -32,12 +37,14 @@ export class SecureStorageUtil {
     try {
       if (Platform.OS !== 'web') {
         await SecureStore.deleteItemAsync(key);
-      } else {
-        await AsyncStorage.removeItem(`@secure_${key}`);
       }
     } catch {
+      // Non-blocking
+    }
+    try {
       await AsyncStorage.removeItem(`@secure_${key}`);
+    } catch {
+      // Non-blocking
     }
   }
 }
-

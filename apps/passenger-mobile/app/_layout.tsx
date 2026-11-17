@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { theme } from '../src/theme';
-import { useSettingsStore } from '../src/stores';
+import { useSettingsStore, useAuthStore } from '../src/stores';
 import '../src/i18n';
 
 const queryClient = new QueryClient({
@@ -26,6 +26,7 @@ export default function RootLayout() {
     initSettings().catch((err) => {
       console.warn('Failed to restore language settings:', err);
     });
+    useAuthStore.getState().loadInitialAuth().catch(() => null);
   }, [initSettings]);
 
   // Web accessibility focus guard: prevents "Blocked aria-hidden on an element because its descendant retained focus"

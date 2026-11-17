@@ -20,6 +20,9 @@ export interface RegistrationSessionData {
   sessionSalt: string;
   plainOtp?: string;
   telegramChatId?: string;
+  telegramTokenHash?: string;
+  telegramTokenExpiresAt?: number;
+  telegramTokenUsed?: boolean;
   otpExpiresAt: number;
   attempts: number;
   maxAttempts: number;
@@ -40,6 +43,9 @@ export interface PasswordRecoverySessionData {
   sessionSalt: string;
   plainOtp?: string;
   telegramChatId?: string;
+  telegramTokenHash?: string;
+  telegramTokenExpiresAt?: number;
+  telegramTokenUsed?: boolean;
   otpExpiresAt: number;
   attempts: number;
   maxAttempts: number;
@@ -139,61 +145,173 @@ export class AuthService {
   private telegramService = TelegramService.getInstance();
 
   constructor() {
-    this.telegramService.setSessionResolver(async (sessionOrPhone: string, chatId: string) => {
-      // 1. Check registration session (by sessionId or by matching phone number)
-      let regSession = activeRegSessions.get(sessionOrPhone);
-      if (!regSession) {
-        for (const s of activeRegSessions.values()) {
-          const sNorm = normalizeEthiopianPhone(s.identifier);
-          const pNorm = normalizeEthiopianPhone(sessionOrPhone);
-          if (
-            (sNorm.isValid && pNorm.isValid && sNorm.normalized === pNorm.normalized) ||
-            s.identifier === sessionOrPhone
-          ) {
-            regSession = s;
-            break;
+    this.telegramService.setSessionResolver(
+      async (
+        startParamOrPhone: string,
+        chatId: string,
+        userMeta?: { fromId?: string; username?: string; firstName?: string; lastName?: string }
+      ) => {
+        const param = (startParamOrPhone || '').trim();
+
+        // 1. Check if startParam is a registration deep-link token (e.g. reg_<token>)
+        if (param.startsWith('reg_')) {
+          const rawToken = param.slice(4);
+          const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+          let targetSession: RegistrationSessionData | undefined;
+          for (const s of activeRegSessions.values()) {
+            if (
+              (s.telegramTokenHash && s.telegramTokenHash === tokenHash) ||
+              s.sessionId === param ||
+              s.sessionId === rawToken
+            ) {
+              targetSession = s;
+              break;
+            }
+          }
+
+          if (targetSession) {
+            if (targetSession.telegramTokenExpiresAt && Date.now() > targetSession.telegramTokenExpiresAt) {
+              return { error: 'EXPIRED' };
+            }
+            if (targetSession.telegramTokenUsed) {
+              return { error: 'TOKEN_ALREADY_USED' };
+            }
+            if (targetSession.isVerified) {
+              return { error: 'ALREADY_VERIFIED' };
+            }
+
+            targetSession.telegramTokenUsed = true;
+            targetSession.telegramChatId = chatId;
+
+            await this.telegramService.linkPhoneToChat(
+              targetSession.identifier,
+              chatId,
+              userMeta?.fromId,
+              userMeta
+            );
+
+            if (!targetSession.plainOtp) {
+              targetSession.plainOtp = this.generateOtp();
+              targetSession.otpHash = this.hashOtp(targetSession.plainOtp, targetSession.sessionSalt);
+              targetSession.otpExpiresAt = Date.now() + 300 * 1000;
+            }
+
+            return {
+              otp: targetSession.plainOtp,
+              purpose: 'REGISTRATION',
+              recipientName: targetSession.fullName,
+            };
           }
         }
-      }
 
-      if (regSession && !regSession.isVerified && Date.now() < regSession.otpExpiresAt) {
-        regSession.telegramChatId = chatId;
-        await this.telegramService.linkPhoneToChat(regSession.identifier, chatId);
-        return {
-          otp: regSession.plainOtp || '',
-          purpose: 'REGISTRATION',
-          recipientName: regSession.fullName,
-        };
-      }
+        // 2. Check if startParam is a recovery deep-link token (e.g. rec_<token>)
+        if (param.startsWith('rec_')) {
+          const rawToken = param.slice(4);
+          const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
-      // 2. Check password recovery session (by sessionId or by matching phone number)
-      let recSession = activeRecSessions.get(sessionOrPhone);
-      if (!recSession) {
-        for (const s of activeRecSessions.values()) {
-          const sNorm = normalizeEthiopianPhone(s.identifier);
-          const pNorm = normalizeEthiopianPhone(sessionOrPhone);
-          if (
-            (sNorm.isValid && pNorm.isValid && sNorm.normalized === pNorm.normalized) ||
-            s.identifier === sessionOrPhone
-          ) {
-            recSession = s;
-            break;
+          let targetSession: PasswordRecoverySessionData | undefined;
+          for (const s of activeRecSessions.values()) {
+            if (
+              (s.telegramTokenHash && s.telegramTokenHash === tokenHash) ||
+              s.sessionId === param ||
+              s.sessionId === rawToken
+            ) {
+              targetSession = s;
+              break;
+            }
+          }
+
+          if (targetSession) {
+            if (targetSession.telegramTokenExpiresAt && Date.now() > targetSession.telegramTokenExpiresAt) {
+              return { error: 'EXPIRED' };
+            }
+            if (targetSession.telegramTokenUsed) {
+              return { error: 'TOKEN_ALREADY_USED' };
+            }
+            if (targetSession.isVerified) {
+              return { error: 'ALREADY_VERIFIED' };
+            }
+
+            targetSession.telegramTokenUsed = true;
+            targetSession.telegramChatId = chatId;
+
+            await this.telegramService.linkPhoneToChat(
+              targetSession.identifier,
+              chatId,
+              userMeta?.fromId,
+              userMeta
+            );
+
+            if (!targetSession.plainOtp) {
+              targetSession.plainOtp = this.generateOtp();
+              targetSession.otpHash = this.hashOtp(targetSession.plainOtp, targetSession.sessionSalt);
+              targetSession.otpExpiresAt = Date.now() + 300 * 1000;
+            }
+
+            return {
+              otp: targetSession.plainOtp,
+              purpose: 'PASSWORD_RESET',
+              recipientName: targetSession.fullName,
+            };
           }
         }
-      }
 
-      if (recSession && !recSession.isVerified && Date.now() < recSession.otpExpiresAt) {
-        recSession.telegramChatId = chatId;
-        await this.telegramService.linkPhoneToChat(recSession.identifier, chatId);
-        return {
-          otp: recSession.plainOtp || '',
-          purpose: 'PASSWORD_RESET',
-          recipientName: recSession.fullName,
-        };
-      }
+        // 3. Fallback: Check registration session (by sessionId or by matching phone number)
+        let regSession = activeRegSessions.get(param);
+        if (!regSession) {
+          for (const s of activeRegSessions.values()) {
+            const sNorm = normalizeEthiopianPhone(s.identifier);
+            const pNorm = normalizeEthiopianPhone(param);
+            if (
+              (sNorm.isValid && pNorm.isValid && sNorm.normalized === pNorm.normalized) ||
+              s.identifier === param
+            ) {
+              regSession = s;
+              break;
+            }
+          }
+        }
 
-      return null;
-    });
+        if (regSession && !regSession.isVerified && Date.now() < regSession.otpExpiresAt) {
+          regSession.telegramChatId = chatId;
+          await this.telegramService.linkPhoneToChat(regSession.identifier, chatId, userMeta?.fromId, userMeta);
+          return {
+            otp: regSession.plainOtp || '',
+            purpose: 'REGISTRATION',
+            recipientName: regSession.fullName,
+          };
+        }
+
+        // 4. Fallback: Check password recovery session (by sessionId or by matching phone number)
+        let recSession = activeRecSessions.get(param);
+        if (!recSession) {
+          for (const s of activeRecSessions.values()) {
+            const sNorm = normalizeEthiopianPhone(s.identifier);
+            const pNorm = normalizeEthiopianPhone(param);
+            if (
+              (sNorm.isValid && pNorm.isValid && sNorm.normalized === pNorm.normalized) ||
+              s.identifier === param
+            ) {
+              recSession = s;
+              break;
+            }
+          }
+        }
+
+        if (recSession && !recSession.isVerified && Date.now() < recSession.otpExpiresAt) {
+          recSession.telegramChatId = chatId;
+          await this.telegramService.linkPhoneToChat(recSession.identifier, chatId, userMeta?.fromId, userMeta);
+          return {
+            otp: recSession.plainOtp || '',
+            purpose: 'PASSWORD_RESET',
+            recipientName: recSession.fullName,
+          };
+        }
+
+        return null;
+      }
+    );
   }
 
   // ----------------------------------------------------------------------------
@@ -487,7 +605,14 @@ export class AuthService {
         );
       }
     } else {
-      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=reg_${sessionId}`;
+      const rawToken = crypto.randomBytes(24).toString('base64url');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      session.telegramTokenHash = tokenHash;
+      session.telegramTokenExpiresAt = Date.now() + ttlSeconds * 1000;
+      session.telegramTokenUsed = false;
+      activeRegSessions.set(sessionId, session);
+      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=reg_${rawToken}`;
+
       const tgRes = await this.telegramService.sendOtpMessage(cleanIdentifier, plainOtp, {
         sessionId,
         purpose: 'REGISTRATION',
@@ -593,7 +718,14 @@ export class AuthService {
         );
       }
     } else {
-      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=reg_${sessionId}`;
+      const rawToken = crypto.randomBytes(24).toString('base64url');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      session.telegramTokenHash = tokenHash;
+      session.telegramTokenExpiresAt = Date.now() + 300 * 1000;
+      session.telegramTokenUsed = false;
+      activeRegSessions.set(sessionId, session);
+      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=reg_${rawToken}`;
+
       const tgRes = await this.telegramService.sendOtpMessage(session.identifier, newOtp, {
         sessionId,
         purpose: 'REGISTRATION',
@@ -780,14 +912,35 @@ export class AuthService {
   // ----------------------------------------------------------------------------
 
   public async login(identifier: string, passwordAttempt: string, _deviceId?: string, platform = 'UNKNOWN') {
-    const clean = identifier.trim().toLowerCase();
-    const phoneRes = normalizeEthiopianPhone(clean);
-    const searchConditions: any[] = [{ email: clean }, { phoneNumber: clean }];
+    const raw = identifier.trim();
+    const cleanLower = raw.toLowerCase();
+
+    const searchConditions: any[] = [{ email: cleanLower }, { phoneNumber: raw }, { phoneNumber: cleanLower }];
+    const phoneRes = normalizeEthiopianPhone(raw);
+    const possiblePhones = new Set<string>([raw, cleanLower]);
     if (phoneRes.isValid) {
-      searchConditions.push({ phoneNumber: phoneRes.normalized });
-      if (phoneRes.nationalNumber) searchConditions.push({ phoneNumber: phoneRes.nationalNumber });
-      searchConditions.push({ phoneNumber: phoneRes.normalized.replace('+', '') });
+      possiblePhones.add(phoneRes.normalized);
+      if (phoneRes.nationalNumber) possiblePhones.add(phoneRes.nationalNumber);
+      possiblePhones.add(phoneRes.normalized.replace('+', ''));
+      for (const p of possiblePhones) {
+        searchConditions.push({ phoneNumber: p });
+      }
     }
+
+    const phoneToLookup = phoneRes.isValid ? phoneRes.normalized : raw;
+    const linked = TelegramIdentityStore.getInstance().getLinkByPhone(phoneToLookup);
+    const identityIds = Array.from(possiblePhones);
+    if (linked?.telegramUserId) {
+      identityIds.push(linked.telegramUserId);
+    }
+
+    searchConditions.push({
+      authIdentities: {
+        some: {
+          providerId: { in: identityIds },
+        },
+      },
+    });
 
     let passenger: any = null;
 
@@ -993,7 +1146,14 @@ export class AuthService {
         );
       }
     } else {
-      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=rec_${sessionId}`;
+      const rawToken = crypto.randomBytes(24).toString('base64url');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      session.telegramTokenHash = tokenHash;
+      session.telegramTokenExpiresAt = Date.now() + ttlSeconds * 1000;
+      session.telegramTokenUsed = false;
+      activeRecSessions.set(sessionId, session);
+      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=rec_${rawToken}`;
+
       const tgRes = await this.telegramService.sendOtpMessage(clean, plainOtp, {
         sessionId,
         purpose: 'PASSWORD_RESET',
@@ -1097,7 +1257,14 @@ export class AuthService {
         );
       }
     } else {
-      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=rec_${sessionId}`;
+      const rawToken = crypto.randomBytes(24).toString('base64url');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      session.telegramTokenHash = tokenHash;
+      session.telegramTokenExpiresAt = Date.now() + 300 * 1000;
+      session.telegramTokenUsed = false;
+      activeRecSessions.set(sessionId, session);
+      telegramBotUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME || 'KingstaxiBot'}?start=rec_${rawToken}`;
+
       const tgRes = await this.telegramService.sendOtpMessage(session.identifier, newOtp, {
         sessionId,
         purpose: 'PASSWORD_RESET',

@@ -21,7 +21,6 @@ import {
   FormInput,
   PasswordInput,
   RememberEmailCheckbox,
-  TelegramAuthButton,
   PrimaryButton,
   LanguageSelectorModal,
 } from '../../src/components';
@@ -34,7 +33,6 @@ export default function LoginScreen() {
   const { t } = useTranslation(['auth', 'validation', 'common']);
   const {
     loginWithEmail,
-    loginWithTelegram,
     isLoading,
     rememberedEmail,
     isEmailRemembered,
@@ -42,22 +40,22 @@ export default function LoginScreen() {
   } = useAuthStore();
   const { language } = useSettingsStore();
 
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberEmail, setRememberEmail] = useState(false);
+  const [rememberAccount, setRememberAccount] = useState(false);
   const [error, setError] = useState('');
   const [langModalVisible, setLangModalVisible] = useState(false);
   const passwordInputRef = useRef<TextInput>(null);
 
-  // Initialize and pre-fill remembered email
+  // Initialize and pre-fill remembered email or phone
   useEffect(() => {
     loadInitialAuth();
-  }, []);
+  }, [loadInitialAuth]);
 
   useEffect(() => {
     if (rememberedEmail) {
-      setEmail(rememberedEmail);
-      setRememberEmail(true);
+      setIdentifier(rememberedEmail);
+      setRememberAccount(true);
     }
   }, [rememberedEmail, isEmailRemembered]);
 
@@ -86,8 +84,10 @@ export default function LoginScreen() {
   const validateIdentifier = (val: string) => {
     const trimmed = val.trim();
     if (!trimmed) return false;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (emailRegex.test(trimmed)) return true;
+    if (trimmed.includes('@')) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(trimmed);
+    }
     const digits = trimmed.replace(/[^0-9]/g, '');
     return digits.length >= 8;
   };
@@ -95,12 +95,12 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (isLoading) return;
 
-    if (!email.trim()) {
-      setError(t('validation:emailRequired'));
+    if (!identifier.trim()) {
+      setError(t('auth:emailOrPhoneLabel', 'Email address or phone number') + ' is required');
       return;
     }
-    if (!validateIdentifier(email)) {
-      setError(t('validation:emailInvalid'));
+    if (!validateIdentifier(identifier)) {
+      setError(t('validation:invalidIdentifier', 'Please enter a valid email address or phone number'));
       return;
     }
     if (!password || password.length < 6) {
@@ -109,22 +109,11 @@ export default function LoginScreen() {
     }
 
     setError('');
-    const result = await loginWithEmail(email.trim(), password, rememberEmail);
+    const result = await loginWithEmail(identifier.trim(), password, rememberAccount);
     if (result.success) {
       router.replace('/(tabs)');
     } else {
       setError(result.error || t('validation:passwordRequired'));
-    }
-  };
-
-  const handleTelegramLogin = async () => {
-    if (isLoading) return;
-    setError('');
-    const success = await loginWithTelegram();
-    if (success) {
-      router.replace('/(tabs)');
-    } else {
-      setError(t('auth:telegramNotice'));
     }
   };
 
@@ -195,17 +184,17 @@ export default function LoginScreen() {
           {/* Form Inputs */}
           <View style={styles.form}>
             <FormInput
-              label={t('emailAddressLabel')}
-              placeholder={t('emailAddressPlaceholder')}
-              value={email}
+              label={t('emailOrPhoneLabel', 'Email address or phone number')}
+              placeholder={t('emailOrPhonePlaceholder', 'abebe@example.com or 0911 234 567')}
+              value={identifier}
               onChangeText={(text) => {
-                setEmail(text);
+                setIdentifier(text);
                 setError('');
               }}
               keyboardType="email-address"
               autoCapitalize="none"
-              autoComplete="email"
-              textContentType="emailAddress"
+              autoComplete="username"
+              textContentType="username"
               returnKeyType="next"
               onSubmitEditing={() => passwordInputRef.current?.focus()}
               blurOnSubmit={false}
@@ -225,11 +214,12 @@ export default function LoginScreen() {
               onSubmitEditing={handleLogin}
             />
 
-            {/* Remember Email & Forgot Password Row */}
+            {/* Remember Account & Forgot Password Row */}
             <View style={styles.optionsRow}>
               <RememberEmailCheckbox
-                checked={rememberEmail}
-                onToggle={(checked) => setRememberEmail(checked)}
+                checked={rememberAccount}
+                onToggle={(checked) => setRememberAccount(checked)}
+                label={t('rememberAccount', 'Remember my account')}
               />
 
               <TouchableOpacity
@@ -249,19 +239,6 @@ export default function LoginScreen() {
               onPress={handleLogin}
               loading={isLoading}
               style={styles.signInBtn}
-            />
-
-            {/* Or Continue With Divider */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>{t('orContinueWith')}</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Telegram Social Auth CTA */}
-            <TelegramAuthButton
-              onPress={handleTelegramLogin}
-              isLoading={isLoading}
             />
 
             {/* Register Footer Link */}

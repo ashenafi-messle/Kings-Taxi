@@ -7,13 +7,16 @@ import { useTranslation } from '../../i18n';
 interface RememberEmailCheckboxProps {
   checked: boolean;
   onToggle: (nextState: boolean) => void;
+  label?: string;
 }
 
 export const RememberEmailCheckbox: React.FC<RememberEmailCheckboxProps> = ({
   checked,
   onToggle,
+  label,
 }) => {
   const { t } = useTranslation(['auth']);
+  const displayLabel = label || t('auth:rememberAccount', t('auth:rememberEmail'));
 
   return (
     <TouchableOpacity
@@ -22,12 +25,12 @@ export const RememberEmailCheckbox: React.FC<RememberEmailCheckboxProps> = ({
       activeOpacity={0.8}
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
-      accessibilityLabel={t('auth:rememberEmail')}
+      accessibilityLabel={displayLabel}
     >
       <View style={[styles.box, checked && styles.boxChecked]}>
         {checked && <Check size={13} color={colors.white} strokeWidth={3} />}
       </View>
-      <Text style={styles.label}>{t('auth:rememberEmail')}</Text>
+      <Text style={styles.label}>{displayLabel}</Text>
     </TouchableOpacity>
   );
 };

@@ -51,6 +51,8 @@ interface AuthState {
   token: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
+  isSessionReady: boolean;
+  authStatus: 'INITIALIZING' | 'AUTHENTICATED' | 'UNAUTHENTICATED';
   isLoading: boolean;
   error: string | null;
   rememberedEmail: string;
@@ -132,6 +134,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: API_CONFIG.isMockAuth ? 'mock_jwt_token_kings_78912' : null,
   refreshToken: API_CONFIG.isMockAuth ? 'mock_rt_token_kings_78912' : null,
   isAuthenticated: API_CONFIG.isMockAuth,
+  isSessionReady: false,
+  authStatus: 'INITIALIZING',
   isLoading: false,
   error: null,
   rememberedEmail: '',
@@ -150,10 +154,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ rememberedEmail: savedEmail, isEmailRemembered: true });
       }
 
-      // 2. Load secure session tokens from Expo SecureStore
+      // 2. Load secure session tokens
       const storedToken = await SecureStorageUtil.getItem(AUTH_TOKEN_KEY);
       const storedRefreshToken = await SecureStorageUtil.getItem(REFRESH_TOKEN_KEY);
-      const storedUserJson = await SecureStorageUtil.getItem(AUTH_USER_KEY);
+
+      // Load user profile from AsyncStorage first, with SecureStore fallback
+      let storedUserJson = await AsyncStorage.getItem(AUTH_USER_KEY);
+      if (!storedUserJson) {
+        storedUserJson = await SecureStorageUtil.getItem(AUTH_USER_KEY);
+      }
 
       if (storedToken && storedUserJson) {
         try {
@@ -163,6 +172,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             refreshToken: storedRefreshToken,
             user,
             isAuthenticated: true,
+            authStatus: 'AUTHENTICATED',
+            isSessionReady: true,
           });
 
           // Verify token freshness in background if real backend is active
@@ -171,6 +182,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               .then((res) => {
                 if (res.success && res.data) {
                   set({ user: res.data });
+                  AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(res.data)).catch(() => null);
                   SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(res.data)).catch(() => null);
                 } else if (res.error?.includes('expired') || res.error?.includes('UNAUTHORIZED')) {
                   // Attempt silent session refresh
@@ -179,12 +191,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               })
               .catch(() => null);
           }
+          return;
         } catch {
           // Bad JSON in user cache
         }
       }
+
+      // If token exists but user profile is missing from storage, fetch directly from backend
+      if (storedToken && !API_CONFIG.isMockAuth) {
+        try {
+          const meRes = await AuthService.getCurrentPassenger(storedToken);
+          if (meRes.success && meRes.data) {
+            await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(meRes.data)).catch(() => null);
+            set({
+              token: storedToken,
+              refreshToken: storedRefreshToken,
+              user: meRes.data,
+              isAuthenticated: true,
+              authStatus: 'AUTHENTICATED',
+              isSessionReady: true,
+            });
+            return;
+          }
+        } catch {
+          // Network or invalid token
+        }
+      }
+
+      set({
+        isAuthenticated: false,
+        authStatus: 'UNAUTHENTICATED',
+        isSessionReady: true,
+      });
     } catch (e) {
       console.warn('Failed to restore auth session:', e);
+      set({
+        isAuthenticated: false,
+        authStatus: 'UNAUTHENTICATED',
+        isSessionReady: true,
+      });
     }
   },
 
@@ -211,7 +256,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const { token, refreshToken, user } = res.data;
         await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
         await SecureStorageUtil.setItem(REFRESH_TOKEN_KEY, refreshToken);
-        await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user));
+        await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(user)).catch(() => null);
+        await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user)).catch(() => null);
 
         // Prevent cross-account biometric reuse if a different passenger logs in
         try {
@@ -242,6 +288,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           token,
           refreshToken,
           isAuthenticated: true,
+          authStatus: 'AUTHENTICATED',
+          isSessionReady: true,
           isLoading: false,
           error: null,
         });
@@ -287,13 +335,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const refreshToken = (verifyRes.data as any).refreshToken || `rt_tg_${Date.now()}`;
         await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
         await SecureStorageUtil.setItem(REFRESH_TOKEN_KEY, refreshToken);
-        await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user));
+        await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(user)).catch(() => null);
+        await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user)).catch(() => null);
 
         set({
           user,
           token,
           refreshToken,
           isAuthenticated: true,
+          authStatus: 'AUTHENTICATED',
+          isSessionReady: true,
           isLoading: false,
           error: null,
         });
@@ -356,12 +407,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const { token, refreshToken, user } = res.data;
         await SecureStorageUtil.setItem(AUTH_TOKEN_KEY, token);
         await SecureStorageUtil.setItem(REFRESH_TOKEN_KEY, refreshToken);
-        await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user));
+        await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(user)).catch(() => null);
+        await SecureStorageUtil.setItem(AUTH_USER_KEY, JSON.stringify(user)).catch(() => null);
         set({
           user,
           token,
           refreshToken,
           isAuthenticated: true,
+          authStatus: 'AUTHENTICATED',
+          isSessionReady: true,
           isLoading: false,
           error: null,
         });
@@ -565,6 +619,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await SecureStorageUtil.removeItem(AUTH_TOKEN_KEY);
     await SecureStorageUtil.removeItem(REFRESH_TOKEN_KEY);
     await SecureStorageUtil.removeItem(AUTH_USER_KEY);
+    await AsyncStorage.removeItem(AUTH_USER_KEY).catch(() => null);
 
     // Clear ride history cache to prevent cross-account history leakage
     await AsyncStorage.removeItem('@kings_taxi_ride_history').catch(() => null);
@@ -597,6 +652,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       token: null,
       refreshToken: null,
       isAuthenticated: false,
+      authStatus: 'UNAUTHENTICATED',
+      isSessionReady: true,
       isLoading: false,
       error: null,
     });
