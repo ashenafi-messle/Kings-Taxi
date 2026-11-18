@@ -32,23 +32,25 @@ export default function TabsLayout() {
   const iconSize = isSmallScreen ? 19 : 21;
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.colors.antiqueGold,
-        tabBarInactiveTintColor: theme.colors.deepChocolate,
-        tabBarHideOnKeyboard: true,
-        tabBarStyle: {
-          backgroundColor: '#FFFDF7',
-          borderTopColor: '#D4A63C',
-          borderTopWidth: 1.5,
-          height: totalBarHeight,
-          paddingTop: 4,
-          paddingBottom: bottomInset,
-          paddingHorizontal: 0,
-          width: '100%',
-          ...theme.shadows.cardGold,
-        },
+    <View style={styles.tabLayoutWrapper}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          sceneStyle: { flex: 1, backgroundColor: theme.colors.background },
+          tabBarActiveTintColor: theme.colors.antiqueGold,
+          tabBarInactiveTintColor: theme.colors.deepChocolate,
+          tabBarHideOnKeyboard: true,
+          tabBarStyle: {
+            backgroundColor: '#FFFDF7',
+            borderTopColor: '#D4A63C',
+            borderTopWidth: 1.5,
+            height: totalBarHeight,
+            paddingTop: 4,
+            paddingBottom: bottomInset,
+            paddingHorizontal: 0,
+            width: '100%',
+            ...theme.shadows.cardGold,
+          },
         tabBarItemStyle: {
           flex: 1,
           minWidth: 0,
@@ -162,10 +164,15 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  tabLayoutWrapper: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
   activeIconPill: {
     backgroundColor: '#FAF2D3',
     paddingHorizontal: 12,

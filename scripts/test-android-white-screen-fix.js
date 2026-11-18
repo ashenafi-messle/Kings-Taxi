@@ -109,15 +109,33 @@ check('Network service guards navigator.onLine for Hermes on Android', () => {
 });
 
 // ----------------------------------------------------------------------------
-// Test 5: set-password.tsx navigation and session sync
+// Test 5: set-password.tsx navigation and session sync (NO arbitrary timeouts)
 // ----------------------------------------------------------------------------
-check('set-password.tsx gives transition time and synchronizes session cleanly', () => {
+check('set-password.tsx synchronizes session cleanly without arbitrary setTimeout delays', () => {
   const spPath = path.resolve('apps/passenger-mobile/app/(auth)/set-password.tsx');
   const content = fs.readFileSync(spPath, 'utf8');
 
   assert(content.includes('completeRegistrationWithPassword('), 'Must call completeRegistrationWithPassword');
-  assert(content.includes('setTimeout('), 'Must allow React state flush before router.replace');
+  assert(!content.includes("setTimeout(() => {\n        router.replace('/(tabs)');"), 'Must not have arbitrary setTimeout wrapping router.replace');
   assert(content.includes("router.replace('/(tabs)')"), 'Must replace to /(tabs)');
+});
+
+// ----------------------------------------------------------------------------
+// Test 5b: TabsLayout and RootLayout layout wrapper validation
+// ----------------------------------------------------------------------------
+check('TabsLayout and RootLayout enforce flex: 1 and sceneStyle on Android Fabric', () => {
+  const tabsLayoutPath = path.resolve('apps/passenger-mobile/app/(tabs)/_layout.tsx');
+  const tabsContent = fs.readFileSync(tabsLayoutPath, 'utf8');
+  assert(tabsContent.includes('sceneStyle: { flex: 1'), 'TabsLayout must specify sceneStyle flex: 1');
+  assert(tabsContent.includes('tabLayoutWrapper'), 'TabsLayout must wrap tree in tabLayoutWrapper');
+
+  const rootLayoutPath = path.resolve('apps/passenger-mobile/app/_layout.tsx');
+  const rootContent = fs.readFileSync(rootLayoutPath, 'utf8');
+  assert(rootContent.includes('contentStyle: { flex: 1'), 'RootLayout Stack must enforce flex: 1 in contentStyle');
+
+  const indexPath = path.resolve('apps/passenger-mobile/app/index.tsx');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(indexContent.includes('isAuthenticated && token && user'), 'Root index.tsx must check authentication state before deciding route');
 });
 
 // ----------------------------------------------------------------------------

@@ -14,7 +14,7 @@ import { colors } from '../src/theme/colors';
  */
 export default function IndexScreen() {
   const router = useRouter();
-  const { loadInitialAuth, isSessionReady } = useAuthStore();
+  const { loadInitialAuth, isSessionReady, isAuthenticated, token, user } = useAuthStore();
 
   useEffect(() => {
     loadInitialAuth();
@@ -22,9 +22,13 @@ export default function IndexScreen() {
 
   useEffect(() => {
     if (isSessionReady) {
-      router.replace('/(auth)/welcome');
+      if (isAuthenticated && token && user) {
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/(auth)/welcome');
+      }
     }
-  }, [isSessionReady, router]);
+  }, [isSessionReady, isAuthenticated, token, user, router]);
 
   return (
     <View style={styles.container}>

@@ -94,10 +94,7 @@ export default function SetPasswordScreen() {
 
       if (response.success) {
         setSuccessToast(true);
-        // Brief celebration pause before navigating to login
-        setTimeout(() => {
-          router.replace('/(auth)/login');
-        }, 1200);
+        router.replace('/(auth)/login');
       } else {
         setError(response.error || 'Failed to reset password. Please try again.');
       }
@@ -112,9 +109,7 @@ export default function SetPasswordScreen() {
 
     if (response.success && response.data) {
       setSuccessToast(true);
-      setTimeout(() => {
-        router.replace('/(tabs)');
-      }, 600);
+      router.replace('/(tabs)');
     } else {
       setError(response.error || 'Failed to complete registration');
     }
