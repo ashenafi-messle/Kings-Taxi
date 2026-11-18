@@ -93,9 +93,11 @@ class NetworkService {
       netType = 'wifi';
     }
 
+    const isWebOnline = typeof navigator !== 'undefined' && 'onLine' in navigator ? (navigator as any).onLine !== false : true;
+
     this.updateState({
-      isConnected: navigator.onLine !== false,
-      isInternetReachable: navigator.onLine !== false,
+      isConnected: isWebOnline,
+      isInternetReachable: isWebOnline,
       networkType: netType,
       displayName: this.formatDisplayName(netType, true),
       lastChangedAt: Date.now(),

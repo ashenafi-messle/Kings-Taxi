@@ -20,6 +20,7 @@ export * from './InteractiveMap';
 export * from './branding/KingsTaxiLogo';
 export * from './branding/BrandHeader';
 export * from './common/LanguageSelectorModal';
+export * from './common/ErrorBoundary';
 export * from './advertising/LandingHeroCarousel';
 export * from './advertising/HomeAdCarousel';
 export * from './authentication/PasswordInput';

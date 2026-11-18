@@ -4,11 +4,11 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   Image,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   Crown,
@@ -104,7 +104,8 @@ export default function HomeScreen() {
     loadRecentActivities();
   }, [loadRecentActivities]);
 
-  const firstName = user?.fullName?.split(' ')[0] || 'Passenger';
+  const firstName = (user?.fullName ? user.fullName.trim().split(' ')[0] : '') || 'Passenger';
+  const avatarInitial = (firstName && firstName.length > 0 ? firstName[0] : 'P').toUpperCase();
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -123,7 +124,7 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    useRideStore.getState().fetchRideHistory();
+    useRideStore.getState().fetchRideHistory().catch(() => null);
   }, []);
 
   if (!isSessionReady) {
@@ -135,7 +136,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -155,7 +156,7 @@ export default function HomeScreen() {
             {user?.profileImage || user?.avatarUrl ? (
               <Image source={{ uri: (user.profileImage || user.avatarUrl)! }} style={styles.avatarImage} />
             ) : (
-              <Text style={styles.avatarInitial}>{firstName[0]}</Text>
+              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -216,7 +217,7 @@ export default function HomeScreen() {
             <View style={styles.requestPhonePill}>
               <Phone size={13} color={theme.colors.antiqueGold} />
               <Text style={styles.requestPhoneText}>
-                {user?.phone || '0911234567'}
+                {user?.phone || user?.phoneNumber || '0911234567'}
               </Text>
               <ShieldCheck size={14} color={theme.colors.success} />
             </View>

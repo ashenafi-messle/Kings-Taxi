@@ -112,7 +112,9 @@ export default function SetPasswordScreen() {
 
     if (response.success && response.data) {
       setSuccessToast(true);
-      router.replace('/(tabs)');
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 600);
     } else {
       setError(response.error || 'Failed to complete registration');
     }

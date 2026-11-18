@@ -43,71 +43,75 @@ export const KingsTaxiBrandShowcase: React.FC<KingsTaxiBrandShowcaseProps> = ({
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const startAnimations = () => {
-    // 1. Continuous modern brand color transition loop
-    // Transitions smoothly across royal gold, warm metallic gold, champagne gold, and bright gold
-    colorLoopRef.current = Animated.loop(
-      Animated.timing(colorAnim, {
-        toValue: 4,
-        duration: 9000,
-        easing: Easing.linear,
-        useNativeDriver: false,
-      })
-    );
-    colorLoopRef.current.start();
+    try {
+      // 1. Continuous modern brand color transition loop
+      // Transitions smoothly across royal gold, warm metallic gold, champagne gold, and bright gold
+      colorLoopRef.current = Animated.loop(
+        Animated.timing(colorAnim, {
+          toValue: 4,
+          duration: 9000,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        })
+      );
+      colorLoopRef.current.start();
 
-    // 2. Light sweep highlight running diagonally across the card
-    sweepLoopRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(sweepAnim, {
-          toValue: 260,
-          duration: 2200,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.delay(2600),
-        Animated.timing(sweepAnim, {
-          toValue: -160,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    sweepLoopRef.current.start();
+      // 2. Light sweep highlight running diagonally across the card
+      sweepLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(sweepAnim, {
+            toValue: 260,
+            duration: 2200,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.delay(2600),
+          Animated.timing(sweepAnim, {
+            toValue: -160,
+            duration: 1,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      sweepLoopRef.current.start();
 
-    // 3. Gentle breathing pulse and glow of the central aura
-    pulseLoopRef.current = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 2400,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1.0,
-            duration: 2400,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 0.85,
-            duration: 2400,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0.4,
-            duration: 2400,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-    pulseLoopRef.current.start();
+      // 3. Gentle breathing pulse and glow of the central aura
+      pulseLoopRef.current = Animated.loop(
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1.05,
+              duration: 2400,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1.0,
+              duration: 2400,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.sequence([
+            Animated.timing(glowAnim, {
+              toValue: 0.85,
+              duration: 2400,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowAnim, {
+              toValue: 0.4,
+              duration: 2400,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]),
+        ])
+      );
+      pulseLoopRef.current.start();
+    } catch (animErr) {
+      console.warn('[KingsTaxiBrandShowcase] Animation initialization fallback:', animErr);
+    }
   };
 
   const stopAnimations = () => {
@@ -232,10 +236,10 @@ export const KingsTaxiBrandShowcase: React.FC<KingsTaxiBrandShowcaseProps> = ({
       {/* Diagonal Light Sweep Highlight */}
       {!isReduceMotion && (
         <Animated.View
+          pointerEvents="none"
           style={[
             styles.lightSweepBar,
             {
-              pointerEvents: 'none',
               transform: [{ rotate: '25deg' }, { translateX: sweepAnim }],
             },
           ]}

@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   Image,
   ActivityIndicator,
@@ -19,7 +18,7 @@ import {
   Users,
   Sparkles,
 } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../src/theme';
 import { SearchInput, HotelCard, EmptyState } from '../../src/components';
 import { HotelService } from '../../src/services/hotel.service';
