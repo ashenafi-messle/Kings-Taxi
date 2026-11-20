@@ -16,15 +16,21 @@ export default function DashboardLayout({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
-  // Restore sidebar collapsed preference on client mount and verify mandatory security status
+  // Authenticate session and restore sidebar collapsed state
   useEffect(() => {
     setMounted(true);
     const session = AuthService.getStoredSession();
-    if (session.user?.mustChangePassword) {
-      router.push('/change-password');
+
+    // Enforce authentication: redirect unauthenticated sessions to /login
+    if (!session.token || !session.user) {
+      setIsAuthenticated(false);
+      router.replace('/login');
       return;
     }
+
+    setIsAuthenticated(true);
 
     const saved = localStorage.getItem('kt_sidebar_collapsed');
     if (saved === 'true') {
@@ -39,6 +45,26 @@ export default function DashboardLayout({
       return next;
     });
   };
+
+  // Prevent dashboard content flashing before authentication verification
+  if (isAuthenticated !== true) {
+    return (
+      <div
+        className="min-vh-100 d-flex flex-column align-items-center justify-content-center p-4"
+        style={{ backgroundColor: '#F8F5EB' }}
+      >
+        <div
+          className="spinner-border text-gold mb-3"
+          style={{ width: '2.5rem', height: '2.5rem', color: '#E9B83F' }}
+          role="status"
+        />
+        <div className="fw-bold text-obsidian text-sm" style={{ letterSpacing: '0.04em' }}>
+          VERIFYING ADMINISTRATOR SESSION
+        </div>
+        <div className="text-secondary text-xs mt-1">Connecting to Kings Taxi central operations...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-vh-100" style={{ backgroundColor: '#F8F5EB' }}>
@@ -67,7 +93,7 @@ export default function DashboardLayout({
           onToggleCollapse={handleToggleCollapse}
         />
 
-        {/* Demonstration Mode Banner (Warm Palette) */}
+        {/* Live Operations Telemetry Banner (Warm Palette) */}
         <div
           className="py-1.5 px-3 d-flex align-items-center justify-content-between"
           style={{
@@ -80,12 +106,14 @@ export default function DashboardLayout({
           <div className="d-flex align-items-center gap-2 overflow-hidden text-truncate">
             <Sparkles size={15} className="text-gold flex-shrink-0" />
             <span className="text-truncate">
-              <strong>Kings Taxi Super Admin:</strong> Real-Time Operations Telemetry Simulation Active (Gondar, Ethiopia • Currency: ETB).
+              <strong>Kings Taxi Operations:</strong> Central Backend Live (Render • PostgreSQL on VPS • Gondar, Ethiopia).
             </span>
           </div>
           <div className="d-none d-md-flex align-items-center gap-3 text-secondary flex-shrink-0">
-            <span className="demo-data-badge">DEMO MODE</span>
-            <span>Version 1.1</span>
+            <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 text-xs fw-semibold">
+              ● PRODUCTION CONNECTED
+            </span>
+            <span>Version 2.0</span>
           </div>
         </div>
 
@@ -98,38 +126,20 @@ export default function DashboardLayout({
 
         {/* Footer */}
         <footer
-          className="border-top py-3 px-3 px-md-4 text-center text-md-start"
+          className="py-2.5 px-3 border-top mt-auto"
           style={{
             backgroundColor: '#FFFDF7',
             borderColor: '#E8E3D8',
+            fontSize: '0.75rem',
+            color: '#77736A',
           }}
         >
-          <div className="d-flex flex-column flex-md-row align-items-center justify-content-between text-muted text-xs">
-            <div>
-              © {new Date().getFullYear()} Kings Taxi Mobility & Tourism Platform. All rights reserved.
-            </div>
-            <div className="d-flex align-items-center gap-2 gap-md-3 mt-2 mt-md-0">
-              <span>Central Operations: Piassa, Gondar, Ethiopia</span>
-              <span>•</span>
-              <span>Currency: Ethiopian Birr (ETB)</span>
-            </div>
+          <div className="d-flex flex-column flex-sm-row align-items-center justify-content-between gap-2">
+            <span>&copy; {new Date().getFullYear()} Kings Taxi Transportation & Tourism Logistics.</span>
+            <span className="text-muted">Enterprise Super Admin Operations Terminal</span>
           </div>
         </footer>
       </div>
-
-      <style jsx global>{`
-        .dashboard-main-wrapper {
-          margin-left: 0;
-        }
-        @media (min-width: 992px) {
-          .dashboard-main-wrapper {
-            margin-left: 260px;
-          }
-          .dashboard-main-wrapper.sidebar-collapsed {
-            margin-left: 76px;
-          }
-        }
-      `}</style>
     </div>
   );
 }

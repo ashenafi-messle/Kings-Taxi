@@ -33,9 +33,28 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [currentAdmin, setCurrentAdmin] = useState<{ name: string; email: string; role: string } | null>(null);
+
+  React.useEffect(() => {
+    const session = AuthService.getStoredSession();
+    if (session.user) {
+      setCurrentAdmin({
+        name: session.user.name,
+        email: session.user.email,
+        role: session.user.role || 'SUPER_ADMIN',
+      });
+    }
+  }, []);
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'SA';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
 
   const handleLogout = async () => {
-    await AuthService.logout();
+    AuthService.logout();
     window.location.href = '/login';
   };
 
@@ -256,14 +275,14 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
                   fontSize: '0.78rem',
                 }}
               >
-                AM
+                {getInitials(currentAdmin?.name)}
               </div>
               <div className="d-none d-lg-block text-start" style={{ lineHeight: 1.15 }}>
                 <div className="fw-bold text-obsidian" style={{ fontSize: '0.78rem' }}>
-                  Ashenafi M.
+                  {currentAdmin?.name || 'Super Admin'}
                 </div>
                 <div className="text-muted" style={{ fontSize: '0.65rem' }}>
-                  Super Admin
+                  {currentAdmin?.role || 'Super Admin'}
                 </div>
               </div>
             </button>
@@ -279,9 +298,9 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
                 }}
               >
                 <div className="px-2 py-1.5 border-bottom mb-1" style={{ borderColor: '#E8E3D8' }}>
-                  <div className="fw-bold text-obsidian small">Ashenafi Messle</div>
-                  <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                    admin@kingstaxi.et
+                  <div className="fw-bold text-obsidian small">{currentAdmin?.name || 'Administrator'}</div>
+                  <div className="text-muted text-truncate" style={{ fontSize: '0.75rem' }}>
+                    {currentAdmin?.email || 'admin@kingstaxi.et'}
                   </div>
                 </div>
 

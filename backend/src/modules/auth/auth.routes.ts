@@ -65,8 +65,13 @@ authRouter.get('/me', authenticateToken, AuthController.getCurrentUser);
 authRouter.post('/telegram/verify', authRateLimiter, AuthController.telegramVerify);
 authRouter.post('/telegram/webhook', AuthController.handleTelegramWebhook);
 
-// Super Admin Authentication Endpoints
+// Super Admin Authentication & Password Recovery Endpoints
 authRouter.post('/admin/login', authRateLimiter, AdminAuthController.login);
+authRouter.post('/admin/logout', AdminAuthController.logout);
+authRouter.post('/admin/forgot-password', authRateLimiter, AdminAuthController.forgotPassword);
+authRouter.post('/admin/resend-reset-otp', authRateLimiter, AdminAuthController.resendResetOtp);
+authRouter.post('/admin/verify-reset-otp', authRateLimiter, AdminAuthController.verifyResetOtp);
+authRouter.post('/admin/reset-password', authRateLimiter, AdminAuthController.resetPassword);
 authRouter.post(
   '/admin/change-password',
   authenticateToken,

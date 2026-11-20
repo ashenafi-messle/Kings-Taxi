@@ -5,7 +5,7 @@ import { heritageTourBookingService } from '../../src/modules/heritage/booking.s
 import { notificationService } from '../../src/modules/notifications/notification.service';
 
 describe('Admin Authentication & Real Account Provisioning', () => {
-  it('authenticates Account 1 (ashurack664@gmail.com) with initial temporary password and flags mustChangePassword', async () => {
+  it('authenticates Account 1 (ashurack664@gmail.com) with real credentials and unlocks full access directly', async () => {
     const res = await adminAuthService.login({
       email: 'ashurack664@gmail.com',
       password: '12345678',
@@ -14,11 +14,11 @@ describe('Admin Authentication & Real Account Provisioning', () => {
     expect(res.token).toBeDefined();
     expect(res.user.email).toBe('ashurack664@gmail.com');
     expect(res.user.role).toBe('SUPER_ADMIN');
-    expect(res.user.mustChangePassword).toBe(true);
+    expect(res.user.mustChangePassword).toBe(false);
     expect(res.user.permissions).toEqual(SUPER_ADMIN_PERMISSIONS);
   });
 
-  it('authenticates Account 2 (ambelugesese@gmail.com) with initial temporary password and flags mustChangePassword', async () => {
+  it('authenticates Account 2 (ambelugesese@gmail.com) with real credentials and unlocks full access directly', async () => {
     const res = await adminAuthService.login({
       email: 'ambelugesese@gmail.com',
       password: '12345678',
@@ -27,7 +27,7 @@ describe('Admin Authentication & Real Account Provisioning', () => {
     expect(res.token).toBeDefined();
     expect(res.user.email).toBe('ambelugesese@gmail.com');
     expect(res.user.role).toBe('SUPER_ADMIN');
-    expect(res.user.mustChangePassword).toBe(true);
+    expect(res.user.mustChangePassword).toBe(false);
   });
 
   it('rejects invalid password for provisioned administrator', async () => {
@@ -39,7 +39,7 @@ describe('Admin Authentication & Real Account Provisioning', () => {
     ).rejects.toThrow('Invalid administrator credentials.');
   });
 
-  it('successfully enforces mandatory password change on first login and unlocks full access', async () => {
+  it('successfully executes administrative password change in security settings', async () => {
     const loginRes = await adminAuthService.login({
       email: 'ambelugesese@gmail.com',
       password: '12345678',
@@ -54,14 +54,14 @@ describe('Admin Authentication & Real Account Provisioning', () => {
       })
     ).rejects.toThrow('New password must be at least 8 characters long.');
 
-    // Enforce different from temporary password
+    // Enforce different from current password
     await expect(
       adminAuthService.changePassword({
         adminId: loginRes.user.id,
         currentPassword: '12345678',
         newPassword: '12345678',
       })
-    ).rejects.toThrow('New password must be different from your current temporary password.');
+    ).rejects.toThrow('New password must be different from current password.');
 
     // Execute valid change
     const changeRes = await adminAuthService.changePassword({
@@ -72,13 +72,86 @@ describe('Admin Authentication & Real Account Provisioning', () => {
 
     expect(changeRes.success).toBe(true);
 
-    // Verify subsequent login with new password has mustChangePassword === false
+    // Verify subsequent login with new password
     const reLogin = await adminAuthService.login({
       email: 'ambelugesese@gmail.com',
       password: 'SecureAdmin#2026',
     });
 
-    expect(reLogin.user.mustChangePassword).toBe(false);
+    expect(reLogin.user.email).toBe('ambelugesese@gmail.com');
+  });
+
+  it('handles email OTP password recovery lifecycle securely', async () => {
+    // 1. Initiate password reset for real admin
+    const initRes = await adminAuthService.initiatePasswordReset({
+      email: 'ashurack664@gmail.com',
+    });
+
+    expect(initRes.success).toBe(true);
+    expect(initRes.email).toContain('@gmail.com');
+    expect(initRes.email).toContain('***');
+    expect(initRes.expiresInSeconds).toBe(300);
+    const testOtp = (initRes as any).devOtp;
+    expect(testOtp).toBeDefined();
+    expect(testOtp.length).toBe(6);
+
+    // 2. Generic response for non-existent admin (prevents enumeration)
+    const unknownRes = await adminAuthService.initiatePasswordReset({
+      email: 'nonexistent_admin@kingstaxi.et',
+    });
+    expect(unknownRes.success).toBe(true);
+    expect(unknownRes.message).toContain('If an administrator account is registered');
+
+    // 3. Reject invalid OTP with remaining attempts counter
+    await expect(
+      adminAuthService.verifyPasswordResetOtp({
+        email: 'ashurack664@gmail.com',
+        otp: '000000',
+      })
+    ).rejects.toThrow('Invalid verification code. 4 attempt(s) remaining.');
+
+    // 4. Verify valid OTP and receive single-use reset authorization token
+    const verifyRes = await adminAuthService.verifyPasswordResetOtp({
+      email: 'ashurack664@gmail.com',
+      otp: testOtp,
+    });
+    expect(verifyRes.success).toBe(true);
+    expect(verifyRes.resetToken).toBeDefined();
+    expect(verifyRes.resetToken.startsWith('adm_rst_')).toBe(true);
+
+    // 5. Attempt reset with weak password
+    await expect(
+      adminAuthService.resetPasswordWithToken({
+        email: 'ashurack664@gmail.com',
+        resetToken: verifyRes.resetToken,
+        newPassword: 'weak',
+      })
+    ).rejects.toThrow('Password must be at least 8 characters long.');
+
+    // 6. Execute successful password reset
+    const resetRes = await adminAuthService.resetPasswordWithToken({
+      email: 'ashurack664@gmail.com',
+      resetToken: verifyRes.resetToken,
+      newPassword: 'NewSecurePassword#2026',
+    });
+    expect(resetRes.success).toBe(true);
+
+    // 7. Verify login succeeds with the newly set password
+    const newLogin = await adminAuthService.login({
+      email: 'ashurack664@gmail.com',
+      password: 'NewSecurePassword#2026',
+    });
+    expect(newLogin.token).toBeDefined();
+    expect(newLogin.user.email).toBe('ashurack664@gmail.com');
+
+    // 8. Replay of consumed reset token is rejected
+    await expect(
+      adminAuthService.resetPasswordWithToken({
+        email: 'ashurack664@gmail.com',
+        resetToken: verifyRes.resetToken,
+        newPassword: 'AnotherPassword#9999',
+      })
+    ).rejects.toThrow('Invalid or unverified password reset session');
   });
 });
 

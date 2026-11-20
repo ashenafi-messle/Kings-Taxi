@@ -1,33 +1,30 @@
 /**
  * Kings Taxi Super Admin - Authentication Service
  *
- * Integrated with the central backend JWT authentication system, with resilient
- * offline fallback for development and isolated testing.
+ * Fully integrated with the central backend (https://kings-taxi.onrender.com/api/v1)
+ * authenticating real administrator accounts stored in the production PostgreSQL database.
  */
 
 import { AdminUser, LoginCredentials, PasswordResetPayload } from '../types';
-import { mockAdmins } from './mockData';
 import { apiRequest } from './apiClient';
 
 const AUTH_STORAGE_KEY = 'kt_super_admin_session';
 const TOKEN_STORAGE_KEY = 'kt_admin_token';
-const CUSTOM_PASS_PREFIX = 'kt_admin_pwd_';
 
 export class AuthService {
   /**
-   * Performs administrator login against the central backend, with graceful
-   * local fallback for provisioned Super Admin accounts.
+   * Real Super Admin Login against the central Render backend
    */
   static async login(
     credentials: LoginCredentials
   ): Promise<{ success: boolean; user?: AdminUser; error?: string }> {
     const emailClean = credentials.email.trim().toLowerCase();
 
-    // 1. Attempt central backend authentication
+    // 1. Authenticate against central backend
     try {
       const apiRes = await apiRequest<{
         token: string;
-        refreshToken: string;
+        refreshToken?: string;
         user: any;
       }>('/auth/admin/login', {
         method: 'POST',
@@ -46,10 +43,10 @@ export class AuthService {
           role: apiRes.data.user.role,
           avatarUrl: apiRes.data.user.avatarUrl || '/branding/kings-taxi-monogram.png',
           phone: apiRes.data.user.phone || apiRes.data.user.phoneNumber,
-          department: apiRes.data.user.department,
+          department: apiRes.data.user.department || 'Executive Operations',
           status: apiRes.data.user.status || 'ACTIVE',
           permissions: apiRes.data.user.permissions || [],
-          mustChangePassword: apiRes.data.user.mustChangePassword,
+          mustChangePassword: false,
           lastLoginAt: apiRes.data.user.lastLoginAt,
           createdAt: apiRes.data.user.createdAt || new Date().toISOString(),
         };
@@ -57,126 +54,239 @@ export class AuthService {
         this.saveSession(backendUser, apiRes.data.token);
         return { success: true, user: backendUser };
       }
-    } catch {
-      // Backend offline, fallback to verified local provisioning store below
-    }
 
-    // 2. Resilient local fallback
-    await new Promise((resolve) => setTimeout(resolve, 400));
-
-    const admin = mockAdmins.find((a) => a.email.toLowerCase() === emailClean);
-
-    if (!admin) {
-      // Generic admin match for testing convenience
-      if (emailClean.includes('admin') || emailClean.includes('kingstaxi')) {
-        const demoUser: AdminUser = {
-          ...mockAdmins[0],
-          email: credentials.email,
-          mustChangePassword: false,
-        };
-        this.saveSession(demoUser, 'demo_jwt_token_kt_super_admin');
-        return { success: true, user: demoUser };
+      if (apiRes.error) {
+        return { success: false, error: apiRes.error };
       }
-      return { success: false, error: 'Invalid administrator credentials. Please check your email and password.' };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err.message || 'Unable to connect to central authentication service.',
+      };
     }
 
-    if (admin.status !== 'ACTIVE') {
-      return { success: false, error: 'This administrator account has been deactivated or suspended.' };
-    }
-
-    // Check password against bootstrap temporary password or changed password
-    let expectedPassword = '12345678';
-    if (typeof window !== 'undefined') {
-      const customPass = localStorage.getItem(`${CUSTOM_PASS_PREFIX}${emailClean}`);
-      if (customPass) {
-        expectedPassword = customPass;
-      } else if (emailClean === 'admin@kingstaxi.et') {
-        expectedPassword = 'Admin@123';
-      }
-    }
-
-    if (credentials.password !== expectedPassword && credentials.password !== '12345678' && credentials.password !== 'Admin@123') {
-      return { success: false, error: 'Invalid administrator credentials. Please check your email and password.' };
-    }
-
-    // Determine mustChangePassword status
-    let mustChange = admin.mustChangePassword ?? false;
-    if (typeof window !== 'undefined') {
-      const hasChanged = localStorage.getItem(`${CUSTOM_PASS_PREFIX}${emailClean}`);
-      if (hasChanged) {
-        mustChange = false;
-      }
-    }
-
-    const authenticatedUser: AdminUser = {
-      ...admin,
-      mustChangePassword: mustChange,
-      lastLoginAt: new Date().toISOString(),
+    return {
+      success: false,
+      error: 'Invalid administrator credentials. Please check your email and password.',
     };
-
-    const token = `jwt_token_${admin.id}_${Date.now()}`;
-    this.saveSession(authenticatedUser, token);
-
-    return { success: true, user: authenticatedUser };
   }
 
   /**
-   * Mandatory password change workflow on first login
+   * Dispatches 6-digit email OTP for administrator password recovery
+   */
+  static async requestPasswordReset(email: string): Promise<{
+    success: boolean;
+    message: string;
+    email?: string;
+    expiresInSeconds?: number;
+    resendCooldownSeconds?: number;
+    error?: string;
+  }> {
+    const cleanEmail = email.trim().toLowerCase();
+
+    try {
+      const res = await apiRequest<{
+        message: string;
+        email: string;
+        expiresInSeconds: number;
+        resendCooldownSeconds: number;
+      }>('/auth/admin/forgot-password', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+
+      if (res.success && res.data) {
+        return {
+          success: true,
+          message: res.data.message || 'Verification code dispatched to your email.',
+          email: res.data.email,
+          expiresInSeconds: res.data.expiresInSeconds || 300,
+          resendCooldownSeconds: res.data.resendCooldownSeconds || 60,
+        };
+      }
+
+      return {
+        success: false,
+        message: res.error || 'Failed to dispatch verification code.',
+        error: res.error,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Error communicating with recovery service.',
+        error: err.message,
+      };
+    }
+  }
+
+  /**
+   * Resends 6-digit email OTP for administrator password recovery
+   */
+  static async resendResetOtp(email: string): Promise<{
+    success: boolean;
+    message: string;
+    expiresInSeconds?: number;
+    resendCooldownSeconds?: number;
+    error?: string;
+  }> {
+    const cleanEmail = email.trim().toLowerCase();
+
+    try {
+      const res = await apiRequest<{
+        message: string;
+        expiresInSeconds: number;
+        resendCooldownSeconds: number;
+      }>('/auth/admin/resend-reset-otp', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+
+      if (res.success && res.data) {
+        return {
+          success: true,
+          message: res.data.message || 'New verification code dispatched.',
+          expiresInSeconds: res.data.expiresInSeconds || 300,
+          resendCooldownSeconds: res.data.resendCooldownSeconds || 60,
+        };
+      }
+
+      return {
+        success: false,
+        message: res.error || 'Failed to resend code.',
+        error: res.error,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Error requesting new code.',
+        error: err.message,
+      };
+    }
+  }
+
+  /**
+   * Verifies 6-digit email OTP and receives short-lived reset authorization token
+   */
+  static async verifyResetOtp(
+    email: string,
+    otp: string
+  ): Promise<{
+    success: boolean;
+    resetToken?: string;
+    message?: string;
+    error?: string;
+  }> {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
+    try {
+      const res = await apiRequest<{
+        resetToken: string;
+        message: string;
+      }>('/auth/admin/verify-reset-otp', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({ email: cleanEmail, otp: cleanOtp }),
+      });
+
+      if (res.success && res.data?.resetToken) {
+        return {
+          success: true,
+          resetToken: res.data.resetToken,
+          message: res.data.message || 'Code verified successfully.',
+        };
+      }
+
+      return {
+        success: false,
+        error: res.error || 'Invalid or expired verification code.',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err.message || 'Error verifying code.',
+      };
+    }
+  }
+
+  /**
+   * Sets new password using reset authorization token
+   */
+  static async resetPassword(payload: {
+    email: string;
+    resetToken: string;
+    newPassword: string;
+  }): Promise<{ success: boolean; message: string; error?: string }> {
+    try {
+      const res = await apiRequest<{ message: string }>('/auth/admin/reset-password', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({
+          email: payload.email.trim().toLowerCase(),
+          resetToken: payload.resetToken,
+          newPassword: payload.newPassword,
+        }),
+      });
+
+      if (res.success) {
+        return {
+          success: true,
+          message: res.data?.message || 'Your password has been reset successfully.',
+        };
+      }
+
+      return {
+        success: false,
+        message: res.error || 'Failed to reset password.',
+        error: res.error,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Error communicating with reset service.',
+        error: err.message,
+      };
+    }
+  }
+
+  /**
+   * Normal administrative password update (from Settings page)
    */
   static async changePassword(params: {
     currentPassword: string;
     newPassword: string;
   }): Promise<{ success: boolean; message: string }> {
-    const session = this.getStoredSession();
-    if (!session.user) {
-      return { success: false, message: 'No active administrator session found.' };
-    }
-
-    if (params.newPassword.length < 8) {
-      return { success: false, message: 'New password must be at least 8 characters long.' };
-    }
-
-    if (params.newPassword === params.currentPassword) {
-      return { success: false, message: 'New password must be different from current temporary password.' };
-    }
-
-    // 1. Attempt central backend password change
     try {
-      const apiRes = await apiRequest<{ success: boolean; message: string }>(
-        '/auth/admin/change-password',
-        {
-          method: 'POST',
-          body: JSON.stringify(params),
-        }
-      );
+      const apiRes = await apiRequest<{ message: string }>('/auth/admin/change-password', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      });
+
       if (apiRes.success) {
-        const updatedUser: AdminUser = {
-          ...session.user,
-          mustChangePassword: false,
+        return {
+          success: true,
+          message: apiRes.data?.message || 'Password updated successfully.',
         };
-        this.saveSession(updatedUser, session.token || 'jwt_token_updated');
-        return { success: true, message: apiRes.data?.message || 'Password updated successfully.' };
       }
-    } catch {
-      // Backend offline fallback
-    }
 
-    // 2. Resilient local update
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`${CUSTOM_PASS_PREFIX}${session.user.email.toLowerCase()}`, params.newPassword);
-      const updatedUser: AdminUser = {
-        ...session.user,
-        mustChangePassword: false,
+      return {
+        success: false,
+        message: apiRes.error || 'Failed to update password.',
       };
-      this.saveSession(updatedUser, session.token || 'jwt_token_updated');
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Error updating password.',
+      };
     }
-
-    return {
-      success: true,
-      message: 'Password successfully changed. Your Super Admin console is now fully activated.',
-    };
   }
 
+  /**
+   * Retrieves active session from browser storage.
+   * Never defaults to simulated admin accounts.
+   */
   static getStoredSession(): { user: AdminUser | null; token: string | null } {
     if (typeof window === 'undefined') {
       return { user: null, token: null };
@@ -186,54 +296,43 @@ export class AuthService {
       const userRaw = localStorage.getItem(AUTH_STORAGE_KEY);
       const token = localStorage.getItem(TOKEN_STORAGE_KEY);
       if (userRaw && token) {
-        return { user: JSON.parse(userRaw), token };
+        const user = JSON.parse(userRaw);
+        return { user, token };
       }
     } catch {
-      // Fallback
+      // Storage parsing failure
     }
 
-    // Auto-login default demo Super Admin in development mode if no prior session exists
-    const defaultSuperAdmin = mockAdmins[0];
-    const defaultToken = 'demo_jwt_token_kt_super_admin';
-    this.saveSession(defaultSuperAdmin, defaultToken);
-    return { user: defaultSuperAdmin, token: defaultToken };
+    return { user: null, token: null };
   }
 
+  /**
+   * Persists authenticated administrator session
+   */
   static saveSession(user: AdminUser, token: string): void {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      document.cookie = `kt_admin_logged_in=true; path=/; max-age=86400; SameSite=Lax`;
+      document.cookie = `kt_admin_logged_in=true; path=/; max-age=86400; SameSite=Lax; Secure`;
     } catch {
       // Non-blocking
     }
   }
 
+  /**
+   * Terminates active administrator session
+   */
   static logout(): void {
     if (typeof window === 'undefined') return;
     try {
+      // Non-blocking notification to backend
+      apiRequest('/auth/admin/logout', { method: 'POST' }).catch(() => {});
       localStorage.removeItem(AUTH_STORAGE_KEY);
       localStorage.removeItem(TOKEN_STORAGE_KEY);
       document.cookie = 'kt_admin_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     } catch {
       // Non-blocking
     }
-  }
-
-  static async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return {
-      success: true,
-      message: `If an account exists for ${email}, a secure password reset link has been dispatched.`,
-    };
-  }
-
-  static async resetPassword(payload: PasswordResetPayload): Promise<{ success: boolean; message: string }> {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return {
-      success: true,
-      message: 'Your administrator password has been successfully updated. You can now log in.',
-    };
   }
 }

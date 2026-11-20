@@ -614,6 +614,331 @@ Kings Taxi Transport Service, Gondar, Ethiopia.
     return false;
   }
 
+  /**
+   * Dispatches Kings Taxi branded Super Admin password reset OTP verification email
+   */
+  async sendAdminPasswordResetOtpEmail(to: string, otp: string, recipientName: string): Promise<boolean> {
+    const startTime = Date.now();
+    const maskedTo = this.maskEmail(to);
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to.trim())) {
+      logger.warn({ recipient: maskedTo }, '[EmailService] Invalid recipient email address for admin password reset');
+      this.recordAudit({
+        id: `aud_${Date.now()}`,
+        recipient: maskedTo,
+        purpose: 'ADMIN_PASSWORD_RESET_OTP',
+        status: 'FAILED',
+        timestamp: new Date().toISOString(),
+        durationMs: Date.now() - startTime,
+        errorMessage: 'Invalid recipient email format',
+      });
+      return false;
+    }
+
+    if (env.NODE_ENV === 'test' || process.env.NODE_ENV === 'test') {
+      logger.info({ recipient: maskedTo }, '[EmailService] [TEST MODE] Simulating admin password reset email delivery');
+      this.recordAudit({
+        id: `aud_${Date.now()}`,
+        recipient: maskedTo,
+        purpose: 'ADMIN_PASSWORD_RESET_OTP',
+        status: 'SIMULATED',
+        timestamp: new Date().toISOString(),
+        durationMs: 5,
+        provider: 'Test Simulator',
+      });
+      return true;
+    }
+
+    const sender = this.getSenderDetails();
+    const subject = 'Kings Taxi — Password Reset Verification Code';
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kings Taxi — Password Reset Verification Code</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0d0f12;
+      margin: 0;
+      padding: 0;
+      color: #e0e6ed;
+    }
+    .wrapper {
+      max-width: 580px;
+      margin: 30px auto;
+      background-color: #161a22;
+      border: 1px solid #2d333b;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    }
+    .header {
+      background: linear-gradient(135deg, #1c2128 0%, #111418 100%);
+      padding: 30px 32px 24px;
+      border-bottom: 2px solid #D99A28;
+      text-align: center;
+    }
+    .brand-title {
+      color: #D99A28;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      margin: 0;
+      text-transform: uppercase;
+    }
+    .brand-sub {
+      color: #F5D69E;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-top: 6px;
+      text-transform: uppercase;
+    }
+    .content {
+      padding: 32px 32px 28px;
+    }
+    .greeting {
+      font-size: 16px;
+      color: #f0f6fc;
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    .message {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #c9d1d9;
+      margin-bottom: 28px;
+    }
+    .otp-card {
+      background: #0d1117;
+      border: 2px dashed #D99A28;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .otp-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #8b949e;
+      margin-bottom: 10px;
+    }
+    .otp-code {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 40px;
+      font-weight: 800;
+      color: #FFC04A;
+      letter-spacing: 10px;
+      margin: 0;
+    }
+    .expiry-note {
+      font-size: 13px;
+      color: #F5D69E;
+      margin-top: 14px;
+      font-weight: 600;
+    }
+    .security-notice {
+      background: #1c2128;
+      border-left: 4px solid #D99A28;
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #e0e6ed;
+    }
+    .footer {
+      padding: 20px 32px;
+      background-color: #0d1117;
+      border-top: 1px solid #21262d;
+      text-align: center;
+      font-size: 12px;
+      color: #8b949e;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <div class="brand-title">👑 KINGS TAXI</div>
+      <div class="brand-sub">SUPER ADMIN PORTAL &bull; SECURITY</div>
+    </div>
+    <div class="content">
+      <p class="greeting">Hello <strong>${recipientName || 'Administrator'}</strong>,</p>
+      <p class="message">
+        We received a request to reset the password for your Kings Taxi Super Admin account. Use the six-digit verification code below to authorize your password reset:
+      </p>
+
+      <div class="otp-card">
+        <div class="otp-label">Password Reset Code</div>
+        <div class="otp-code">${otp}</div>
+        <div class="expiry-note">⏱ This verification code expires in 5 minutes</div>
+      </div>
+
+      <div class="security-notice">
+        <strong>Security Warning:</strong> Never share this verification code with anyone. Kings Taxi operations, dispatch, or technical support will never ask for your code.
+      </div>
+
+      <p class="message" style="margin-bottom: 0; font-size: 13px; color: #8b949e;">
+        If you did not initiate this password reset request, please ignore this email. Your existing credentials remain secure and no changes have been applied to your administrator account.
+      </p>
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} Kings Taxi Transportation & Tourism Platform.<br>
+      Confidential Administrative Notification &bull; Please do not reply directly to this message.
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    const plainText = `
+KINGS TAXI — SUPER ADMIN SECURITY
+==================================================
+
+Hello ${recipientName || 'Administrator'},
+
+We received a request to reset the password for your Kings Taxi Super Admin account.
+Your six-digit password reset verification code is:
+
+    ${otp}
+
+* This code expires in 5 minutes.
+* SECURITY WARNING: Never share this verification code with anyone. Kings Taxi staff will never ask for your code.
+* If you did not initiate this request, you can safely ignore this email. Your account remains secure.
+
+Kings Taxi Transportation & Tourism Platform.
+    `.trim();
+
+    // 1. Try Brevo HTTPS REST API
+    const sentViaBrevoApi = await this.sendViaBrevoApi(to, recipientName, subject, htmlContent, plainText);
+    if (sentViaBrevoApi) {
+      const durationMs = Date.now() - startTime;
+      logger.info({ recipient: maskedTo, durationMs }, '[EmailService] Admin reset OTP email delivered via Brevo HTTPS API');
+      this.recordAudit({
+        id: `aud_${Date.now()}`,
+        recipient: maskedTo,
+        purpose: 'ADMIN_PASSWORD_RESET_OTP',
+        status: 'SUCCESS',
+        timestamp: new Date().toISOString(),
+        durationMs,
+        provider: 'Brevo HTTPS API',
+      });
+      return true;
+    }
+
+    // 2. Try Resend HTTPS REST API
+    const sentViaResendApi = await this.sendViaResendApi(to, subject, htmlContent, plainText);
+    if (sentViaResendApi) {
+      const durationMs = Date.now() - startTime;
+      logger.info({ recipient: maskedTo, durationMs }, '[EmailService] Admin reset OTP email delivered via Resend HTTPS API');
+      this.recordAudit({
+        id: `aud_${Date.now()}`,
+        recipient: maskedTo,
+        purpose: 'ADMIN_PASSWORD_RESET_OTP',
+        status: 'SUCCESS',
+        timestamp: new Date().toISOString(),
+        durationMs,
+        provider: 'Resend HTTPS API',
+      });
+      return true;
+    }
+
+    // 3. Try Primary / Fallback SMTP
+    if (!this.primaryTransporter) {
+      this.initTransporters();
+    }
+
+    if (this.primaryTransporter) {
+      try {
+        const info = await this.primaryTransporter.sendMail({
+          from: sender.full,
+          to,
+          subject,
+          text: plainText,
+          html: htmlContent,
+        });
+
+        const durationMs = Date.now() - startTime;
+        logger.info(
+          { recipient: maskedTo, messageId: info.messageId, durationMs },
+          '[EmailService] Admin reset OTP email delivered successfully via primary SMTP'
+        );
+
+        this.recordAudit({
+          id: info.messageId || `aud_${Date.now()}`,
+          recipient: maskedTo,
+          purpose: 'ADMIN_PASSWORD_RESET_OTP',
+          status: 'SUCCESS',
+          timestamp: new Date().toISOString(),
+          durationMs,
+          provider: `SMTP (${env.SMTP_HOST}:${env.SMTP_PORT})`,
+        });
+
+        return true;
+      } catch (primaryErr: any) {
+        logger.warn(
+          { recipient: maskedTo, error: primaryErr.message },
+          '[EmailService] Primary SMTP delivery failed for admin reset; trying fallback'
+        );
+
+        if (this.fallbackTransporter) {
+          try {
+            const info = await this.fallbackTransporter.sendMail({
+              from: sender.full,
+              to,
+              subject,
+              text: plainText,
+              html: htmlContent,
+            });
+
+            const durationMs = Date.now() - startTime;
+            logger.info(
+              { recipient: maskedTo, messageId: info.messageId, durationMs },
+              '[EmailService] Admin reset OTP email delivered successfully via fallback SMTP (port 2525)'
+            );
+
+            this.recordAudit({
+              id: info.messageId || `aud_${Date.now()}`,
+              recipient: maskedTo,
+              purpose: 'ADMIN_PASSWORD_RESET_OTP',
+              status: 'SUCCESS',
+              timestamp: new Date().toISOString(),
+              durationMs,
+              provider: `SMTP Fallback (${env.SMTP_HOST}:2525)`,
+            });
+
+            return true;
+          } catch (fallbackErr: any) {
+            logger.error({ recipient: maskedTo, error: fallbackErr.message }, '[EmailService] Fallback SMTP failed');
+          }
+        }
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    logger.error({ recipient: maskedTo, durationMs }, '[EmailService] All email transports failed for admin reset');
+
+    this.recordAudit({
+      id: `aud_${Date.now()}`,
+      recipient: maskedTo,
+      purpose: 'ADMIN_PASSWORD_RESET_OTP',
+      status: 'FAILED',
+      timestamp: new Date().toISOString(),
+      durationMs,
+      errorMessage: 'All email delivery transports failed (SMTP and HTTPS API)',
+    });
+
+    return false;
+  }
+
   async sendSecurityAlert(to: string, title: string, details: string): Promise<boolean> {
     const maskedTo = this.maskEmail(to);
     const sender = this.getSenderDetails();

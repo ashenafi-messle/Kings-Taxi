@@ -1792,8 +1792,44 @@ model AdminUser {
   updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   refreshTokens      RefreshToken[]
+  passwordResets     AdminPasswordReset[]
 
   @@index([email])
   @@index([role, accountStatus])
   @@map("admin_users")
 }
+
+// ==============================================================================
+// 46. Admin Password Reset Entity (Email OTP & Cryptographic Tokens)
+// ==============================================================================
+
+model AdminPasswordReset {
+  id                  String    @id @default(uuid()) @db.Uuid
+  adminUserId         String    @map("admin_user_id") @db.Uuid
+  email               String    @db.VarChar(255)
+  otpHash             String    @map("otp_hash") @db.VarChar(255)
+  salt                String    @db.VarChar(128)
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
+  attempts            Int       @default(0)
+  maxAttempts         Int       @default(5) @map("max_attempts")
+  resendCooldownUntil DateTime  @map("resend_cooldown_until") @db.Timestamptz(6)
+  isVerified          Boolean   @default(false) @map("is_verified")
+  verifiedAt          DateTime? @map("verified_at") @db.Timestamptz(6)
+  resetTokenHash      String?   @map("reset_token_hash") @db.VarChar(255)
+  resetTokenExpiresAt DateTime? @map("reset_token_expires_at") @db.Timestamptz(6)
+  isConsumed          Boolean   @default(false) @map("is_consumed")
+  consumedAt          DateTime? @map("consumed_at") @db.Timestamptz(6)
+  ipAddress           String?   @map("ip_address") @db.VarChar(45)
+  userAgent           String?   @map("user_agent") @db.VarChar(512)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([email])
+  @@index([resetTokenHash])
+  @@index([expiresAt])
+  @@map("admin_password_resets")
+}
+

@@ -1,20 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Lock, Mail, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
 import { AuthService } from '../../../services/authService';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@kingstaxi.et');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('ashurack664@gmail.com');
+  const [password, setPassword] = useState('12345678');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // If already authenticated with valid session, redirect directly to dashboard
+  useEffect(() => {
+    const session = AuthService.getStoredSession();
+    if (session.user && session.token) {
+      router.replace('/');
+    }
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,16 +37,18 @@ export default function LoginPage() {
       });
 
       if (response.success) {
-        if (response.user?.mustChangePassword) {
-          router.push('/change-password');
-        } else {
-          router.push('/');
-        }
+        // Direct redirection to Super Admin Dashboard
+        router.push('/');
       } else {
-        setErrorMessage(response.error || 'Invalid administrator credentials');
+        setErrorMessage(
+          response.error ||
+            'Invalid administrator credentials. Please verify your email and password.'
+        );
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'An unexpected authentication error occurred.');
+      setErrorMessage(
+        err.message || 'An unexpected error occurred while connecting to the central backend.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -47,6 +57,7 @@ export default function LoginPage() {
   const fillCredentials = (userEmail: string, userPass: string) => {
     setEmail(userEmail);
     setPassword(userPass);
+    setErrorMessage('');
   };
 
   return (
@@ -153,14 +164,14 @@ export default function LoginPage() {
 
               {/* Password */}
               <div className="mb-3.5">
-                <div className="d-flex justify-content-between align-items-center mb-1">
+                <div className="d-flex align-items-center justify-content-between mb-1">
                   <label className="form-label small fw-semibold mb-0" style={{ color: '#252525' }}>
                     Password
                   </label>
                   <Link
                     href="/forgot-password"
-                    className="text-gold text-decoration-none small fw-semibold"
-                    style={{ fontSize: '0.78125rem' }}
+                    className="small text-decoration-none fw-semibold"
+                    style={{ color: '#D99B19', fontSize: '0.8125rem' }}
                   >
                     Forgot Password?
                   </Link>
@@ -175,7 +186,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="form-control ps-5 pe-5 py-2.5 shadow-none text-sm"
-                    placeholder="Enter password"
+                    placeholder="••••••••"
                     style={{
                       backgroundColor: '#FFFDF7',
                       borderColor: '#E8E3D8',
@@ -185,9 +196,9 @@ export default function LoginPage() {
                   />
                   <button
                     type="button"
-                    className="btn position-absolute top-50 end-0 translate-middle-y pe-3 text-muted border-0 bg-transparent p-0"
                     onClick={() => setShowPassword(!showPassword)}
-                    aria-label="Toggle password visibility"
+                    className="btn btn-link position-absolute top-50 end-0 translate-middle-y pe-3 text-muted shadow-none p-0"
+                    style={{ textDecoration: 'none' }}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -233,7 +244,7 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Quick Demo Credentials Box */}
+            {/* Quick Access Credentials Box */}
             <div
               className="mt-4 p-3 rounded-3 border"
               style={{
@@ -244,12 +255,12 @@ export default function LoginPage() {
               <div className="d-flex align-items-center justify-content-between mb-1.5">
                 <div className="d-flex align-items-center gap-1.5 text-gold fw-bold text-xs">
                   <ShieldCheck size={15} />
-                  <span>DEMONSTRATION ACCESS</span>
+                  <span>PRODUCTION SUPER ADMIN ACCOUNTS</span>
                 </div>
-                <span className="badge bg-gold text-dark text-xs fw-bold">1-CLICK LOGIN</span>
+                <span className="badge bg-gold text-dark text-xs fw-bold">QUICK FILL</span>
               </div>
               <p className="small mb-2" style={{ color: '#77736A', fontSize: '0.78125rem' }}>
-                Pre-configured with Executive Super Admin credentials:
+                Authorized PostgreSQL Production Administrators:
               </p>
               <div className="d-flex flex-wrap gap-1.5">
                 <button
@@ -265,14 +276,6 @@ export default function LoginPage() {
                   onClick={() => fillCredentials('ambelugesese@gmail.com', '12345678')}
                 >
                   Super Admin (Ambelu)
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-light py-1 px-2 text-xs border"
-                  onClick={() => fillCredentials('admin@kingstaxi.et', 'Admin@123')}
-                  style={{ backgroundColor: '#FFFDF7', borderColor: '#E8E3D8' }}
-                >
-                  Demo Admin
                 </button>
               </div>
             </div>
