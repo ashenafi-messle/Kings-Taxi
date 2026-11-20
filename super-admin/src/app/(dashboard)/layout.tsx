@@ -83,7 +83,7 @@ export default function DashboardLayout({
         }`}
         style={{
           minWidth: 0,
-          transition: 'margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         {/* Header */}

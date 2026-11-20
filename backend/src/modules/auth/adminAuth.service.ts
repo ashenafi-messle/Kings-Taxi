@@ -450,7 +450,7 @@ export class AdminAuthService {
 
     // Check resend cooldown on existing active reset in DB
     try {
-      const activeDbReset = await prisma.adminPasswordReset.findFirst({
+      const activeDbReset = await (prisma as any).adminPasswordReset.findFirst({
         where: {
           email: cleanEmail,
           isConsumed: false,
@@ -478,7 +478,7 @@ export class AdminAuthService {
 
     // Invalidate any previous unconsumed reset sessions in database for this admin
     try {
-      await prisma.adminPasswordReset.updateMany({
+      await (prisma as any).adminPasswordReset.updateMany({
         where: {
           email: cleanEmail,
           isConsumed: false,
@@ -509,7 +509,7 @@ export class AdminAuthService {
 
     let dbRecordCreated: any = null;
     try {
-      dbRecordCreated = await prisma.adminPasswordReset.create({
+      dbRecordCreated = await (prisma as any).adminPasswordReset.create({
         data: {
           id: resetId,
           adminUserId: adminUserIdToStore,
@@ -620,7 +620,7 @@ export class AdminAuthService {
 
     // Invalidate any expired sessions in DB for hygiene
     try {
-      await prisma.adminPasswordReset.updateMany({
+      await (prisma as any).adminPasswordReset.updateMany({
         where: {
           email: cleanEmail,
           isConsumed: false,
@@ -637,7 +637,7 @@ export class AdminAuthService {
 
     // 1. Try DB lookup for the latest active, unconsumed, unverified session
     try {
-      const dbReset = await prisma.adminPasswordReset.findFirst({
+      const dbReset = await (prisma as any).adminPasswordReset.findFirst({
         where: {
           email: cleanEmail,
           isConsumed: false,
@@ -712,7 +712,7 @@ export class AdminAuthService {
     if (!isMatch) {
       // Update attempts in DB
       try {
-        await prisma.adminPasswordReset.update({
+        await (prisma as any).adminPasswordReset.update({
           where: { id: resetSession.id },
           data: { attempts: resetSession.attempts },
         });
@@ -757,7 +757,7 @@ export class AdminAuthService {
     resetSession.otpHash = ''; // Invalidate OTP immediately to prevent replay
 
     try {
-      await prisma.adminPasswordReset.update({
+      await (prisma as any).adminPasswordReset.update({
         where: { id: resetSession.id },
         data: {
           isVerified: true,
@@ -829,7 +829,7 @@ export class AdminAuthService {
     let resetSession: AdminResetSessionData | null = null;
 
     try {
-      const dbReset = await prisma.adminPasswordReset.findFirst({
+      const dbReset = await (prisma as any).adminPasswordReset.findFirst({
         where: {
           email: cleanEmail,
           isVerified: true,
@@ -909,7 +909,7 @@ export class AdminAuthService {
             mustChangePassword: false,
           },
         }),
-        prisma.adminPasswordReset.update({
+        (prisma as any).adminPasswordReset.update({
           where: { id: resetSession.id },
           data: {
             isConsumed: true,
