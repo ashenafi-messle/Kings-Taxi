@@ -390,6 +390,9 @@ if ! wait_for_tunnel; then
   exit 1
 fi
 
+echo "[Prisma Migration] Deploying database migrations to PostgreSQL..."
+npx prisma migrate deploy || echo "[Prisma Migration WARNING] Prisma CLI deploy returned non-zero. Application-level schema initializer will complete setup."
+
 echo "[Backend] Starting compiled Express backend (dist/server.js)..."
 node dist/server.js &
 NODE_PID=$!

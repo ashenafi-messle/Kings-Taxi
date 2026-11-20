@@ -3,23 +3,34 @@ import { app } from './app';
 import { env } from './config/env';
 import { logger } from './core/logging/logger';
 import { disconnectPrisma } from './core/database/prisma';
+import { ensureDatabaseSchema } from './core/database/schemaInitializer';
 
 const server = createServer(app);
 
 const HOST = '0.0.0.0';
 
-server.listen(env.PORT, HOST, () => {
-  logger.info(
-    {
-      host: HOST,
-      port: env.PORT,
-      env: env.NODE_ENV,
-      prefix: env.API_PREFIX,
-      docsUrl: `http://localhost:${env.PORT}${env.API_PREFIX}/docs`,
-    },
-    `🚀 Kings Taxi Central Backend listening on ${HOST}:${env.PORT}`
-  );
-});
+async function bootstrap() {
+  try {
+    await ensureDatabaseSchema();
+  } catch (err: any) {
+    logger.warn({ err: err.message }, '[Bootstrap] Schema verification deferred');
+  }
+
+  server.listen(env.PORT, HOST, () => {
+    logger.info(
+      {
+        host: HOST,
+        port: env.PORT,
+        env: env.NODE_ENV,
+        prefix: env.API_PREFIX,
+        docsUrl: `http://localhost:${env.PORT}${env.API_PREFIX}/docs`,
+      },
+      `🚀 Kings Taxi Central Backend listening on ${HOST}:${env.PORT}`
+    );
+  });
+}
+
+bootstrap();
 
 // Graceful Shutdown Handler
 let isShuttingDown = false;

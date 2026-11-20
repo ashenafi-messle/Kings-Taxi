@@ -1,5 +1,9 @@
 -- CreateEnum
-CREATE TYPE "VehicleOperationalStatus" AS ENUM ('ACTIVE', 'AVAILABLE', 'ASSIGNED', 'ON_TRIP', 'UNDER_MAINTENANCE', 'INACTIVE', 'SUSPENDED', 'RETIRED');
+DO $$ BEGIN
+    CREATE TYPE "VehicleOperationalStatus" AS ENUM ('ACTIVE', 'AVAILABLE', 'ASSIGNED', 'ON_TRIP', 'UNDER_MAINTENANCE', 'INACTIVE', 'SUSPENDED', 'RETIRED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- AlterTable Driver
 ALTER TABLE "drivers" 
