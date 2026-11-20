@@ -153,6 +153,79 @@ describe('Admin Authentication & Real Account Provisioning', () => {
       })
     ).rejects.toThrow('Invalid or unverified password reset session');
   });
+
+  it('validates comprehensive OTP verification scenarios (Task 9 requirements)', async () => {
+    // 1. A newly requested OTP invalidates the old OTP
+    const firstReq = await adminAuthService.initiatePasswordReset({
+      email: 'ambelugesese@gmail.com',
+    });
+    const firstOtp = (firstReq as any).devOtp;
+    expect(firstOtp).toBeDefined();
+
+    // Fast-forward cooldown to simulate second request
+    adminAuthService.clearResetCooldownForTesting('ambelugesese@gmail.com');
+    const secondReq = await adminAuthService.initiatePasswordReset({
+      email: 'ambelugesese@gmail.com',
+    });
+    const secondOtp = (secondReq as any).devOtp;
+    expect(secondOtp).toBeDefined();
+
+    // Old OTP should be rejected
+    await expect(
+      adminAuthService.verifyPasswordResetOtp({
+        email: 'ambelugesese@gmail.com',
+        otp: firstOtp,
+      })
+    ).rejects.toThrow();
+
+    // 2. Email capitalization differences do not cause verification failure
+    // 3. OTP with leading/trailing whitespace is handled safely
+    const verifyWhitespaceAndCaps = await adminAuthService.verifyPasswordResetOtp({
+      email: '  AMBELUGESESE@GMAIL.COM  ',
+      otp: `  ${secondOtp}  `,
+    });
+    expect(verifyWhitespaceAndCaps.success).toBe(true);
+    expect(verifyWhitespaceAndCaps.resetToken).toBeDefined();
+
+    // 4. Previously used OTP cannot be reused
+    await expect(
+      adminAuthService.verifyPasswordResetOtp({
+        email: 'ambelugesese@gmail.com',
+        otp: secondOtp,
+      })
+    ).rejects.toThrow();
+
+    // 5. OTP for another admin cannot be verified for a different admin
+    adminAuthService.clearResetCooldownForTesting('ashurack664@gmail.com');
+    const adminAReq = await adminAuthService.initiatePasswordReset({ email: 'ashurack664@gmail.com' });
+    const adminAOtp = (adminAReq as any).devOtp;
+
+    await expect(
+      adminAuthService.verifyPasswordResetOtp({
+        email: 'ambelugesese@gmail.com',
+        otp: adminAOtp,
+      })
+    ).rejects.toThrow();
+
+    // 6. Max attempts (5 attempts) triggers lockout
+    let attemptsRemaining = 5;
+    for (let i = 0; i < 4; i++) {
+      await expect(
+        adminAuthService.verifyPasswordResetOtp({
+          email: 'ashurack664@gmail.com',
+          otp: '999999',
+        })
+      ).rejects.toThrow('Invalid verification code');
+    }
+
+    // 5th incorrect attempt exceeds limit
+    await expect(
+      adminAuthService.verifyPasswordResetOtp({
+        email: 'ashurack664@gmail.com',
+        otp: '999999',
+      })
+    ).rejects.toThrow('Maximum verification attempts exceeded');
+  });
 });
 
 describe('Hotel & Heritage Booking Approval Workflow', () => {

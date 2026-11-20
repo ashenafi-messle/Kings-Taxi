@@ -89,7 +89,7 @@ const inMemoryResets = new Map<string, AdminResetSessionData>();
 function initInMemoryAdmins() {
   const seedAccounts = [
     {
-      id: 'adm_ashura_001',
+      id: '00000000-0000-4000-8000-000000000001',
       fullName: 'Ashura CK',
       email: 'ashurack664@gmail.com',
       password: '12345678',
@@ -98,7 +98,7 @@ function initInMemoryAdmins() {
       mustChangePassword: false,
     },
     {
-      id: 'adm_ambelu_002',
+      id: '00000000-0000-4000-8000-000000000002',
       fullName: 'Ambelu Gesese',
       email: 'ambelugesese@gmail.com',
       password: '12345678',
@@ -107,7 +107,7 @@ function initInMemoryAdmins() {
       mustChangePassword: false,
     },
     {
-      id: 'adm_default_000',
+      id: '00000000-0000-4000-8000-000000000003',
       fullName: 'Ashenafi Messle',
       email: 'admin@kingstaxi.et',
       password: 'Admin@123',
@@ -446,29 +446,92 @@ export class AdminAuthService {
       return genericResponse;
     }
 
-    // Check resend cooldown on existing active reset
+    const now = new Date();
+
+    // Check resend cooldown on existing active reset in DB
+    try {
+      const activeDbReset = await prisma.adminPasswordReset.findFirst({
+        where: {
+          email: cleanEmail,
+          isConsumed: false,
+          resendCooldownUntil: { gt: now },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (activeDbReset) {
+        const remainingSeconds = Math.ceil((new Date(activeDbReset.resendCooldownUntil).getTime() - now.getTime()) / 1000);
+        if (remainingSeconds > 0) {
+          throw new AppError(`Please wait ${remainingSeconds}s before requesting a new verification code.`, 429, 'COOLDOWN_ACTIVE');
+        }
+      }
+    } catch (err: any) {
+      if (err instanceof AppError) throw err;
+      // DB error or offline fallback
+    }
+
+    // Check resend cooldown in in-memory store
     const existingReset = inMemoryResets.get(cleanEmail);
-    if (existingReset && !existingReset.isConsumed && Date.now() < existingReset.resendCooldownUntil.getTime()) {
-      const remainingSeconds = Math.ceil((existingReset.resendCooldownUntil.getTime() - Date.now()) / 1000);
+    if (existingReset && !existingReset.isConsumed && now.getTime() < existingReset.resendCooldownUntil.getTime()) {
+      const remainingSeconds = Math.ceil((existingReset.resendCooldownUntil.getTime() - now.getTime()) / 1000);
       throw new AppError(`Please wait ${remainingSeconds}s before requesting a new verification code.`, 429, 'COOLDOWN_ACTIVE');
     }
 
-    // Generate cryptographically secure 6-digit OTP
-    const rawOtp = crypto.randomInt(100000, 999999).toString();
+    // Invalidate any previous unconsumed reset sessions in database for this admin
+    try {
+      await prisma.adminPasswordReset.updateMany({
+        where: {
+          email: cleanEmail,
+          isConsumed: false,
+        },
+        data: {
+          isConsumed: true,
+          consumedAt: now,
+        },
+      });
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[AdminAuthService] Non-critical warning: error marking prior reset sessions consumed in DB');
+    }
+
+    // Generate cryptographically secure 6-digit OTP preserving leading zero string representation
+    const rawOtp = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
     const salt = crypto.randomBytes(16).toString('hex');
     const otpHash = await hashPasswordAsync(rawOtp, salt);
 
     const ttlSeconds = 300; // 5 minutes
     const cooldownSeconds = 60; // 60s cooldown
-    const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
     const resendCooldownUntil = new Date(now.getTime() + cooldownSeconds * 1000);
+    const resetId = crypto.randomUUID();
+
+    // Ensure adminUserId is a valid UUID for PostgreSQL
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const adminUserIdToStore = uuidRegex.test(admin.id) ? admin.id : '00000000-0000-4000-8000-000000000001';
+
+    let dbRecordCreated: any = null;
+    try {
+      dbRecordCreated = await prisma.adminPasswordReset.create({
+        data: {
+          id: resetId,
+          adminUserId: adminUserIdToStore,
+          email: cleanEmail,
+          otpHash,
+          salt,
+          expiresAt,
+          maxAttempts: 5,
+          resendCooldownUntil,
+          ipAddress: params.ipAddress,
+          userAgent: params.userAgent,
+        },
+      });
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[AdminAuthService] Could not persist AdminPasswordReset to DB, using resilient in-memory session');
+    }
 
     const resetData: AdminResetSessionData = {
-      id: `rst_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`,
+      id: dbRecordCreated ? dbRecordCreated.id : resetId,
       adminUserId: admin.id,
       email: cleanEmail,
-      otpHash: `${otpHash}:${salt}`,
+      otpHash,
       salt,
       expiresAt,
       attempts: 0,
@@ -481,25 +544,6 @@ export class AdminAuthService {
       createdAt: now,
       updatedAt: now,
     };
-
-    // Store in DB if available
-    try {
-      await prisma.adminPasswordReset.create({
-        data: {
-          adminUserId: admin.id,
-          email: cleanEmail,
-          otpHash: `${otpHash}:${salt}`,
-          salt,
-          expiresAt,
-          maxAttempts: 5,
-          resendCooldownUntil,
-          ipAddress: params.ipAddress,
-          userAgent: params.userAgent,
-        },
-      });
-    } catch (err: any) {
-      logger.warn({ err: err.message }, '[AdminAuthService] Could not persist AdminPasswordReset to DB, using resilient in-memory session');
-    }
 
     inMemoryResets.set(cleanEmail, resetData);
 
@@ -544,6 +588,18 @@ export class AdminAuthService {
   }
 
   /**
+   * Test-only helper to fast-forward cooldowns in unit tests
+   */
+  public clearResetCooldownForTesting(email: string) {
+    if (env.NODE_ENV === 'test') {
+      const reset = inMemoryResets.get(email.toLowerCase());
+      if (reset) {
+        reset.resendCooldownUntil = new Date(Date.now() - 1000);
+      }
+    }
+  }
+
+  /**
    * 3. Verify Reset OTP: Verifies the 6-digit OTP, issues short-lived single-use reset authorization token
    */
   public async verifyPasswordResetOtp(params: {
@@ -553,55 +609,104 @@ export class AdminAuthService {
     userAgent?: string;
   }) {
     const cleanEmail = params.email.trim().toLowerCase();
-    const cleanOtp = params.otp.trim();
+    const cleanOtp = String(params.otp || '').trim();
 
-    if (!cleanOtp || cleanOtp.length !== 6) {
+    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
       throw new AppError('Please enter a valid 6-digit verification code.', 400, 'INVALID_OTP');
     }
 
+    const now = new Date();
     let resetSession: AdminResetSessionData | null = null;
 
-    // 1. Try DB lookup
+    // Invalidate any expired sessions in DB for hygiene
+    try {
+      await prisma.adminPasswordReset.updateMany({
+        where: {
+          email: cleanEmail,
+          isConsumed: false,
+          expiresAt: { lt: now },
+        },
+        data: {
+          isConsumed: true,
+          consumedAt: now,
+        },
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    // 1. Try DB lookup for the latest active, unconsumed, unverified session
     try {
       const dbReset = await prisma.adminPasswordReset.findFirst({
         where: {
           email: cleanEmail,
           isConsumed: false,
           isVerified: false,
+          expiresAt: { gte: now },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       if (dbReset) {
         resetSession = dbReset as unknown as AdminResetSessionData;
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[AdminAuthService] DB lookup failed in verifyPasswordResetOtp');
     }
 
-    if (!resetSession && inMemoryResets.has(cleanEmail)) {
-      resetSession = inMemoryResets.get(cleanEmail)!;
+    // Check in-memory store and reconcile with database (use newest session)
+    const memReset = inMemoryResets.get(cleanEmail);
+    if (memReset && !memReset.isConsumed && !memReset.isVerified && now <= new Date(memReset.expiresAt)) {
+      if (!resetSession || new Date(memReset.createdAt) > new Date(resetSession.createdAt)) {
+        resetSession = memReset;
+      }
     }
+
+    // Safe diagnostic logging (No secret data or plaintext OTPs logged)
+    logger.info(
+      {
+        action: 'VERIFY_RESET_OTP_RECEIVED',
+        email: maskEmail(cleanEmail),
+        otpLength: cleanOtp.length,
+        hasMatchingRecord: !!resetSession,
+        sessionSource: resetSession ? (resetSession === memReset ? 'in-memory' : 'database') : 'none',
+      },
+      '[AdminAuthService] OTP verification request received'
+    );
 
     if (!resetSession || resetSession.isConsumed) {
+      logger.warn(
+        { action: 'VERIFY_RESET_OTP_NO_SESSION', email: maskEmail(cleanEmail) },
+        '[AdminAuthService] Password recovery session not found or already consumed'
+      );
       throw new AppError('Password recovery session expired or not found. Please request a new code.', 404, 'SESSION_NOT_FOUND');
     }
 
-    if (new Date() > new Date(resetSession.expiresAt)) {
+    if (now > new Date(resetSession.expiresAt)) {
+      logger.warn(
+        { action: 'VERIFY_RESET_OTP_EXPIRED', email: maskEmail(cleanEmail) },
+        '[AdminAuthService] Password recovery session expired'
+      );
       throw new AppError('Verification code has expired. Please request a new code.', 400, 'OTP_EXPIRED');
     }
 
     if (resetSession.attempts >= resetSession.maxAttempts) {
       inMemoryResets.delete(cleanEmail);
+      logger.warn(
+        { action: 'VERIFY_RESET_OTP_MAX_ATTEMPTS', email: maskEmail(cleanEmail) },
+        '[AdminAuthService] Maximum OTP verification attempts exceeded'
+      );
       throw new AppError('Maximum verification attempts exceeded. Please restart password recovery.', 429, 'MAX_ATTEMPTS_EXCEEDED');
     }
 
     resetSession.attempts++;
 
-    // Verify OTP hash
+    // Decompose hash and salt (supports both pure hash with separate salt column, and composite hash:salt)
+    const saltToUse = resetSession.salt || (resetSession.otpHash.includes(':') ? resetSession.otpHash.split(':')[1] : '');
+    const hashToUse = resetSession.otpHash.includes(':') ? resetSession.otpHash.split(':')[0] : resetSession.otpHash;
+
     let isMatch = false;
-    if (resetSession.otpHash.includes(':')) {
-      const [storedHash, salt] = resetSession.otpHash.split(':');
-      isMatch = await verifyPasswordAsync(cleanOtp, storedHash, salt);
+    if (hashToUse && saltToUse) {
+      isMatch = await verifyPasswordAsync(cleanOtp, hashToUse, saltToUse);
     }
 
     if (!isMatch) {
@@ -615,7 +720,26 @@ export class AdminAuthService {
         // Fallback
       }
 
+      if (resetSession.attempts >= resetSession.maxAttempts) {
+        inMemoryResets.delete(cleanEmail);
+        logger.warn(
+          { action: 'VERIFY_RESET_OTP_MAX_ATTEMPTS', email: maskEmail(cleanEmail) },
+          '[AdminAuthService] Maximum OTP verification attempts reached'
+        );
+        throw new AppError('Maximum verification attempts exceeded. Please restart password recovery.', 429, 'MAX_ATTEMPTS_EXCEEDED');
+      }
+
       const remaining = resetSession.maxAttempts - resetSession.attempts;
+      logger.warn(
+        {
+          action: 'VERIFY_RESET_OTP_MISMATCH',
+          email: maskEmail(cleanEmail),
+          attemptsUsed: resetSession.attempts,
+          remainingAttempts: remaining,
+        },
+        '[AdminAuthService] OTP verification failed: code mismatch'
+      );
+
       throw new AppError(`Invalid verification code. ${remaining} attempt(s) remaining.`, 400, 'INVALID_OTP');
     }
 
@@ -648,6 +772,15 @@ export class AdminAuthService {
     }
 
     inMemoryResets.set(cleanEmail, resetSession);
+
+    logger.info(
+      {
+        action: 'VERIFY_RESET_OTP_SUCCESS',
+        email: maskEmail(cleanEmail),
+        attemptsUsed: resetSession.attempts,
+      },
+      '[AdminAuthService] OTP verified successfully; issued reset authorization token'
+    );
 
     await auditService.record({
       actorId: resetSession.adminUserId,
@@ -702,7 +835,7 @@ export class AdminAuthService {
           isVerified: true,
           isConsumed: false,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       if (dbReset) {
         resetSession = dbReset as unknown as AdminResetSessionData;
@@ -711,8 +844,11 @@ export class AdminAuthService {
       // Fallback
     }
 
-    if (!resetSession && inMemoryResets.has(cleanEmail)) {
-      resetSession = inMemoryResets.get(cleanEmail)!;
+    const memReset = inMemoryResets.get(cleanEmail);
+    if (memReset && memReset.isVerified && !memReset.isConsumed) {
+      if (!resetSession || new Date(memReset.createdAt) > new Date(resetSession.createdAt)) {
+        resetSession = memReset;
+      }
     }
 
     if (!resetSession || !resetSession.isVerified || resetSession.isConsumed) {

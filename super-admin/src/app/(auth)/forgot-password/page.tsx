@@ -77,12 +77,13 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setEmailError('');
 
-    const cleanEmail = email.trim();
+    const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setEmailError('Please enter a valid administrator email address.');
       return;
     }
 
+    setEmail(cleanEmail);
     setIsSendingOtp(true);
     try {
       const res = await AuthService.requestPasswordReset(cleanEmail);
@@ -110,8 +111,9 @@ export default function ForgotPasswordPage() {
     setOtpError('');
     setIsSendingOtp(true);
 
+    const cleanEmail = email.trim().toLowerCase();
     try {
-      const res = await AuthService.resendResetOtp(email);
+      const res = await AuthService.resendResetOtp(cleanEmail);
       if (res.success) {
         setCooldownSeconds(res.resendCooldownSeconds || 60);
         setCanResend(false);
@@ -129,9 +131,22 @@ export default function ForgotPasswordPage() {
 
   // Handle Digit Keying & Auto-focus
   const handleDigitChange = (index: number, val: string) => {
-    const char = val.slice(-1); // Take the latest typed character
-    if (char && !/^\d$/.test(char)) return; // Only allow numbers
+    // Handle multi-character inputs (e.g. paste on mobile or autofill)
+    const cleanVal = val.replace(/\D/g, '');
+    if (cleanVal.length > 1) {
+      const chars = cleanVal.slice(0, 6).split('');
+      const newDigits = [...otpDigits];
+      chars.forEach((c, i) => {
+        if (index + i < 6) newDigits[index + i] = c;
+      });
+      setOtpDigits(newDigits);
+      setOtpError('');
+      const nextIndex = Math.min(index + chars.length, 5);
+      otpInputRefs.current[nextIndex]?.focus();
+      return;
+    }
 
+    const char = cleanVal.slice(-1);
     const newDigits = [...otpDigits];
     newDigits[index] = char;
     setOtpDigits(newDigits);
@@ -171,15 +186,16 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setOtpError('');
 
-    const fullCode = otpDigits.join('');
-    if (fullCode.length !== 6) {
+    const fullCode = otpDigits.join('').trim();
+    if (fullCode.length !== 6 || !/^\d{6}$/.test(fullCode)) {
       setOtpError('Please enter the complete 6-digit verification code.');
       return;
     }
 
+    const cleanEmail = email.trim().toLowerCase();
     setIsVerifyingOtp(true);
     try {
-      const res = await AuthService.verifyResetOtp(email, fullCode);
+      const res = await AuthService.verifyResetOtp(cleanEmail, fullCode);
       if (res.success && res.resetToken) {
         setResetToken(res.resetToken);
         setStep('SET_PASSWORD');
@@ -214,7 +230,7 @@ export default function ForgotPasswordPage() {
     setIsResetting(true);
     try {
       const res = await AuthService.resetPassword({
-        email,
+        email: email.trim().toLowerCase(),
         resetToken,
         newPassword,
       });
