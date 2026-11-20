@@ -48,6 +48,13 @@ enum VehicleVerificationStatus {
   REJECTED
 }
 
+enum DocumentReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  REQUIRES_RESUBMISSION
+}
+
 enum VehicleType {
   STANDARD_SEDAN
   COMFORT_VAN
@@ -248,6 +255,9 @@ enum RateStatus {
 enum HotelBookingStatus {
   PENDING
   CONFIRMED
+  DECLINED
+  CHECKED_IN
+  CHECKED_OUT
   REJECTED
   CANCELLED
   COMPLETED
@@ -288,13 +298,16 @@ enum HeritageDestinationType {
 enum HeritageTourBookingStatus {
   DRAFT
   REQUESTED
+  PENDING
   UNDER_REVIEW
   CONFIRMED
+  UPCOMING
   GUIDE_ASSIGNED
   VEHICLE_ASSIGNED
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  DECLINED
   REJECTED
 }
 
@@ -423,6 +436,7 @@ model Driver {
   heritageTourBookings HeritageTourBooking[]
   subcities        DriverSubcity[]
   trackingSessions TripTrackingSession[]
+  documents        DriverDocument[]
 
   @@index([verificationStatus])
   @@index([availabilityStatus])
@@ -453,6 +467,7 @@ model Vehicle {
   bookings Booking[]
   trips    Trip[]
   heritageTourBookings HeritageTourBooking[]
+  documents VehicleDocument[]
 
   @@index([driverId])
   @@index([plateNumber])
@@ -718,11 +733,13 @@ model RefreshToken {
 
   passengerId String? @map("passenger_id") @db.Uuid
   driverId    String? @map("driver_id") @db.Uuid
+  adminId     String? @map("admin_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   passenger Passenger? @relation(fields: [passengerId], references: [id], onDelete: Cascade)
   driver    Driver?    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  admin     AdminUser? @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRevoked])
   @@index([familyId])
@@ -1109,6 +1126,7 @@ model HotelRoomType {
   hotel        Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   rates        HotelRate[]
   bookingRooms HotelBookingRoom[]
+  images       RoomImage[]
 
   @@index([hotelId, status])
   @@map("hotel_room_types")
@@ -1192,6 +1210,10 @@ model HotelBooking {
   updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
   confirmedAt      DateTime?          @map("confirmed_at") @db.Timestamptz(6)
   cancelledAt      DateTime?          @map("cancelled_at") @db.Timestamptz(6)
+  reviewedByAdminId String?           @map("reviewed_by_admin_id") @db.Uuid
+  reviewedAt       DateTime?          @map("reviewed_at") @db.Timestamptz(6)
+  declineReason    String?            @map("decline_reason") @db.Text
+  adminReviewNote  String?            @map("admin_review_note") @db.Text
 
   passenger       Passenger             @relation(fields: [passengerId], references: [id], onDelete: Restrict)
   hotel           Hotel                 @relation(fields: [hotelId], references: [id], onDelete: Restrict)
@@ -1370,6 +1392,7 @@ model HeritageSite {
 
   packageSites HeritageTourPackageSite[]
   bookingSites HeritageTourBookingSite[]
+  destinationImages HeritageDestinationImage[]
 
   @@index([city, status])
   @@index([region, status])
@@ -1540,6 +1563,11 @@ model HeritageTourBooking {
   specialRequests     String?                   @map("special_requests") @db.Text
   cancellationReason  String?                   @map("cancellation_reason") @db.Text
   cancelledAt         DateTime?                 @map("cancelled_at") @db.Timestamptz(6)
+  confirmedAt         DateTime?                 @map("confirmed_at") @db.Timestamptz(6)
+  reviewedByAdminId   String?                   @map("reviewed_by_admin_id") @db.Uuid
+  reviewedAt          DateTime?                 @map("reviewed_at") @db.Timestamptz(6)
+  declineReason       String?                   @map("decline_reason") @db.Text
+  adminReviewNote     String?                   @map("admin_review_note") @db.Text
   baseAmount          Decimal                   @map("base_amount") @db.Decimal(10, 2)
   vehicleAmount       Decimal                   @default(0.00) @map("vehicle_amount") @db.Decimal(10, 2)
   guideAmount         Decimal                   @default(0.00) @map("guide_amount") @db.Decimal(10, 2)
@@ -1635,4 +1663,137 @@ model HeritageTourGuideRequest {
 
   @@index([bookingId])
   @@map("heritage_tour_guide_requests")
+}
+
+// ==============================================================================
+// 41. Driver Verification Document Entity
+// ==============================================================================
+
+model DriverDocument {
+  id              String                @id @default(uuid()) @db.Uuid
+  driverId        String                @map("driver_id") @db.Uuid
+  documentType    String                @map("document_type") @db.VarChar(64)
+  documentNumber  String?               @map("document_number") @db.VarChar(128)
+  fileUrl         String                @map("file_url") @db.VarChar(512)
+  publicId        String?               @map("public_id") @db.VarChar(255)
+  fileName        String?               @map("file_name") @db.VarChar(255)
+  fileFormat      String?               @map("file_format") @db.VarChar(32)
+  fileSize        Int?                  @map("file_size")
+  status          DocumentReviewStatus  @default(PENDING_REVIEW)
+  rejectionReason String?               @map("rejection_reason") @db.Text
+  reviewNotes     String?               @map("review_notes") @db.Text
+  reviewedBy      String?               @map("reviewed_by") @db.VarChar(128)
+  reviewedAt      DateTime?             @map("reviewed_at") @db.Timestamptz(6)
+  expiryDate      DateTime?             @map("expiry_date") @db.Timestamptz(6)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId, documentType])
+  @@index([status])
+  @@map("driver_documents")
+}
+
+// ==============================================================================
+// 42. Vehicle Verification Document Entity
+// ==============================================================================
+
+model VehicleDocument {
+  id              String                @id @default(uuid()) @db.Uuid
+  vehicleId       String                @map("vehicle_id") @db.Uuid
+  documentType    String                @map("document_type") @db.VarChar(64)
+  documentNumber  String?               @map("document_number") @db.VarChar(128)
+  fileUrl         String                @map("file_url") @db.VarChar(512)
+  publicId        String?               @map("public_id") @db.VarChar(255)
+  fileName        String?               @map("file_name") @db.VarChar(255)
+  fileFormat      String?               @map("file_format") @db.VarChar(32)
+  fileSize        Int?                  @map("file_size")
+  status          DocumentReviewStatus  @default(PENDING_REVIEW)
+  rejectionReason String?               @map("rejection_reason") @db.Text
+  reviewNotes     String?               @map("review_notes") @db.Text
+  reviewedBy      String?               @map("reviewed_by") @db.VarChar(128)
+  reviewedAt      DateTime?             @map("reviewed_at") @db.Timestamptz(6)
+  expiryDate      DateTime?             @map("expiry_date") @db.Timestamptz(6)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, documentType])
+  @@index([status])
+  @@map("vehicle_documents")
+}
+
+// ==============================================================================
+// 43. Hotel Room Image Entity (2 to 4 Images per Room Type)
+// ==============================================================================
+
+model RoomImage {
+  id           String        @id @default(uuid()) @db.Uuid
+  roomTypeId   String        @map("room_type_id") @db.Uuid
+  imageUrl     String        @map("image_url") @db.VarChar(512)
+  publicId     String?       @map("public_id") @db.VarChar(255)
+  caption      String?       @db.VarChar(255)
+  displayOrder Int           @default(0) @map("display_order")
+  isPrimary    Boolean       @default(false) @map("is_primary")
+  fileFormat   String?       @map("file_format") @db.VarChar(32)
+  fileSize     Int?          @map("file_size")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  roomType HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@index([roomTypeId, displayOrder])
+  @@map("room_images")
+}
+
+// ==============================================================================
+// 44. Heritage Destination Image Entity (2 to 4 Images per Site)
+// ==============================================================================
+
+model HeritageDestinationImage {
+  id           String       @id @default(uuid()) @db.Uuid
+  siteId       String       @map("site_id") @db.Uuid
+  imageUrl     String       @map("image_url") @db.VarChar(512)
+  publicId     String?      @map("public_id") @db.VarChar(255)
+  caption      String?      @db.VarChar(255)
+  displayOrder Int          @default(0) @map("display_order")
+  isPrimary    Boolean      @default(false) @map("is_primary")
+  fileFormat   String?      @map("file_format") @db.VarChar(32)
+  fileSize     Int?         @map("file_size")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  site HeritageSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, displayOrder])
+  @@map("heritage_destination_images")
+}
+
+// ==============================================================================
+// 45. Admin User Entity (Authoritative Super Admin & Management Accounts)
+// ==============================================================================
+
+model AdminUser {
+  id                 String        @id @default(uuid()) @db.Uuid
+  fullName           String        @map("full_name") @db.VarChar(128)
+  email              String        @unique @db.VarChar(255)
+  phoneNumber        String?       @map("phone_number") @db.VarChar(32)
+  passwordHash       String        @map("password_hash") @db.VarChar(255)
+  passwordSalt       String?       @map("password_salt") @db.VarChar(64)
+  role               UserRoleType  @default(SUPER_ADMIN)
+  avatarUrl          String?       @map("avatar_url") @db.VarChar(512)
+  department         String?       @db.VarChar(128)
+  accountStatus      AccountStatus @default(ACTIVE) @map("account_status")
+  mustChangePassword Boolean       @default(false) @map("must_change_password")
+  lastLoginAt        DateTime?     @map("last_login_at") @db.Timestamptz(6)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  refreshTokens      RefreshToken[]
+
+  @@index([email])
+  @@index([role, accountStatus])
+  @@map("admin_users")
 }

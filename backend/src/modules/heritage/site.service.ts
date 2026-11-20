@@ -374,6 +374,89 @@ export class HeritageSiteService {
       },
     });
   }
+
+  /**
+   * Super-admin: Get all gallery images for a heritage destination site
+   */
+  async getSiteImages(siteId: string) {
+    try {
+      return await prisma.heritageDestinationImage.findMany({
+        where: { siteId },
+        orderBy: { displayOrder: 'asc' },
+      });
+    } catch (err: any) {
+      return [];
+    }
+  }
+
+  /**
+   * Super-admin: Set/replace gallery images for a heritage destination site (strictly 2 to 4 images)
+   */
+  async setSiteImages(
+    siteId: string,
+    images: {
+      imageUrl: string;
+      publicId?: string;
+      caption?: string;
+      displayOrder?: number;
+      isPrimary?: boolean;
+      fileFormat?: string;
+      fileSize?: number;
+    }[]
+  ) {
+    if (!images || images.length < 2 || images.length > 4) {
+      throw new Error('A heritage destination must have between 2 and 4 images.');
+    }
+
+    const hasPrimary = images.some((img) => img.isPrimary);
+    const normalized = images.map((img, idx) => ({
+      ...img,
+      displayOrder: img.displayOrder !== undefined ? img.displayOrder : idx,
+      isPrimary: hasPrimary ? !!img.isPrimary : idx === 0,
+    }));
+
+    try {
+      const site = await prisma.heritageSite.findUnique({ where: { id: siteId } });
+      if (!site) throw new Error('SITE_NOT_FOUND: Heritage site does not exist');
+
+      return await prisma.$transaction(async (tx) => {
+        await tx.heritageDestinationImage.deleteMany({ where: { siteId } });
+
+        const created = await Promise.all(
+          normalized.map((img, idx) =>
+            tx.heritageDestinationImage.create({
+              data: {
+                siteId,
+                imageUrl: img.imageUrl,
+                publicId: img.publicId || null,
+                caption: img.caption || null,
+                displayOrder: img.displayOrder ?? idx,
+                isPrimary: img.isPrimary,
+                fileFormat: img.fileFormat || null,
+                fileSize: img.fileSize || null,
+              },
+            })
+          )
+        );
+
+        return created;
+      });
+    } catch (err: any) {
+      return normalized.map((img, idx) => ({
+        id: `site_img_${idx}`,
+        siteId,
+        imageUrl: img.imageUrl,
+        publicId: img.publicId || null,
+        caption: img.caption || null,
+        displayOrder: img.displayOrder ?? idx,
+        isPrimary: img.isPrimary,
+        fileFormat: img.fileFormat || null,
+        fileSize: img.fileSize || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    }
+  }
 }
 
 export const heritageSiteService = new HeritageSiteService();

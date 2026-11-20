@@ -6,7 +6,8 @@
   "workspaces": [
     "apps/passenger-mobile",
     "backend",
-    "shared"
+    "shared",
+    "super-admin"
   ],
   "scripts": {
     "start": "npm run start --prefix apps/passenger-mobile",
@@ -14,6 +15,10 @@
     "ios": "npm run ios --prefix apps/passenger-mobile",
     "web": "npm run web --prefix apps/passenger-mobile",
     "typecheck": "npm run typecheck --prefix apps/passenger-mobile",
+    "super-admin:dev": "npm run dev --prefix super-admin",
+    "super-admin:build": "npm run build --prefix super-admin",
+    "super-admin:start": "npm run start --prefix super-admin",
+    "super-admin:typecheck": "npm run typecheck --prefix super-admin",
     "backend:dev": "npm run dev --prefix backend",
     "backend:build": "npm run build --prefix backend",
     "backend:test": "npm run test --prefix backend",

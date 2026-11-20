@@ -327,6 +327,95 @@ export class RoomService {
       roomTypes: defaultRooms,
     };
   }
+
+  /**
+   * Super Admin: Get all gallery images for a room type
+   */
+  async getRoomImages(roomTypeId: string) {
+    try {
+      return await prisma.roomImage.findMany({
+        where: { roomTypeId },
+        orderBy: { displayOrder: 'asc' },
+      });
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        return [];
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Super Admin: Set/replace gallery images for a room type (strictly 2 to 4 images)
+   */
+  async setRoomImages(
+    roomTypeId: string,
+    images: {
+      imageUrl: string;
+      publicId?: string;
+      caption?: string;
+      displayOrder?: number;
+      isPrimary?: boolean;
+      fileFormat?: string;
+      fileSize?: number;
+    }[]
+  ) {
+    if (!images || images.length < 2 || images.length > 4) {
+      throw new Error('A room type must have between 2 and 4 images.');
+    }
+
+    const hasPrimary = images.some((img) => img.isPrimary);
+    const normalized = images.map((img, idx) => ({
+      ...img,
+      displayOrder: img.displayOrder !== undefined ? img.displayOrder : idx,
+      isPrimary: hasPrimary ? !!img.isPrimary : idx === 0,
+    }));
+
+    try {
+      const room = await prisma.hotelRoomType.findUnique({ where: { id: roomTypeId } });
+      if (!room) throw new Error('ROOM_TYPE_NOT_FOUND: Room type does not exist');
+
+      return await prisma.$transaction(async (tx) => {
+        await tx.roomImage.deleteMany({ where: { roomTypeId } });
+
+        const created = await Promise.all(
+          normalized.map((img, idx) =>
+            tx.roomImage.create({
+              data: {
+                roomTypeId,
+                imageUrl: img.imageUrl,
+                publicId: img.publicId || null,
+                caption: img.caption || null,
+                displayOrder: img.displayOrder ?? idx,
+                isPrimary: img.isPrimary,
+                fileFormat: img.fileFormat || null,
+                fileSize: img.fileSize || null,
+              },
+            })
+          )
+        );
+
+        return created;
+      });
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        return normalized.map((img, idx) => ({
+          id: `room_img_${idx}`,
+          roomTypeId,
+          imageUrl: img.imageUrl,
+          publicId: img.publicId || null,
+          caption: img.caption || null,
+          displayOrder: img.displayOrder ?? idx,
+          isPrimary: img.isPrimary,
+          fileFormat: img.fileFormat || null,
+          fileSize: img.fileSize || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
+      throw err;
+    }
+  }
 }
 
 export const roomService = new RoomService();

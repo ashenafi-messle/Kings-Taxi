@@ -72,6 +72,15 @@ hospitalityRouter.patch('/admin/hotels/:id/room-types/:roomTypeId', adminAuth, (
 hospitalityRouter.post('/admin/hotels/:id/room-types/:roomTypeId/rates', adminAuth, (req: Request, res: Response) =>
   hospitalityController.adminCreateRate(req, res)
 );
+hospitalityRouter.get('/admin/hotels/:id/room-types/:roomTypeId/images', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminGetRoomImages(req, res)
+);
+hospitalityRouter.put('/admin/hotels/:id/room-types/:roomTypeId/images', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminSetRoomImages(req, res)
+);
+hospitalityRouter.get('/admin/hotels/:id/room-types/:roomTypeId/images/upload-signature', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminGetRoomImageUploadSignature(req, res)
+);
 
 // Airport Transfer Rates Admin
 hospitalityRouter.get('/admin/hotels/:id/transfer-rates', adminAuth, (req: Request, res: Response) =>
@@ -88,7 +97,18 @@ hospitalityRouter.delete('/admin/transfer-rates/:rateId', adminAuth, (req: Reque
 );
 
 // Bookings Admin
-hospitalityRouter.get('/admin/hotel-bookings', adminAuth, (req: Request, res: Response) => hospitalityController.adminListBookings(req, res));
+hospitalityRouter.get('/admin/hotel-bookings', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminListBookings(req, res)
+);
+hospitalityRouter.get('/admin/hotel-bookings/:id', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminGetBooking(req, res)
+);
+hospitalityRouter.post('/admin/hotel-bookings/:id/accept', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminAcceptBooking(req, res)
+);
+hospitalityRouter.post('/admin/hotel-bookings/:id/decline', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminDeclineBooking(req, res)
+);
 hospitalityRouter.patch('/admin/hotel-bookings/:id/status', adminAuth, (req: Request, res: Response) =>
   hospitalityController.adminUpdateBookingStatus(req, res)
 );

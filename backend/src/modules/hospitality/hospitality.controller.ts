@@ -6,7 +6,7 @@ import { hospitalityBookingService } from './booking.service';
 import { loungeService } from './lounge.service';
 import { ApiResponse } from '../../core/response/apiResponse';
 import { logger } from '../../core/logging/logger';
-import { HotelBookingStatus } from '@prisma/client';
+import { CloudinaryService } from '../../integrations/cloudinary/cloudinary.service';
 
 function handleHospitalityError(res: Response, err: any, fallbackMessage: string) {
   const name = String(err?.name || '');
@@ -512,6 +512,36 @@ export class HospitalityController {
     }
   }
 
+  async adminGetRoomImages(req: Request, res: Response) {
+    try {
+      const images = await roomService.getRoomImages(req.params.roomTypeId);
+      ApiResponse.success(res, images, 'Room images retrieved successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to retrieve room images');
+    }
+  }
+
+  async adminSetRoomImages(req: Request, res: Response) {
+    try {
+      const { images } = req.body;
+      const updated = await roomService.setRoomImages(req.params.roomTypeId, images);
+      ApiResponse.success(res, updated, 'Room gallery images updated successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to update room images');
+    }
+  }
+
+  async adminGetRoomImageUploadSignature(req: Request, res: Response) {
+    try {
+      const { id, roomTypeId } = req.params;
+      const folder = `kings-taxi/hotels/${id}/rooms/${roomTypeId}`;
+      const sig = CloudinaryService.generateUploadSignature(folder, 'room');
+      ApiResponse.success(res, sig, 'Upload signature generated successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to generate signature');
+    }
+  }
+
   async adminListTransferRates(req: Request, res: Response) {
     try {
       const rates = await transferRateService.getTransferRatesForHotel(req.params.id);
@@ -551,16 +581,61 @@ export class HospitalityController {
 
   async adminListBookings(req: Request, res: Response) {
     try {
-      const { hotelId, status, page, limit } = req.query;
+      const { hotelId, status, search, page, limit } = req.query;
       const result = await hospitalityBookingService.adminListBookings({
         hotelId: hotelId as string,
-        status: status as HotelBookingStatus,
+        status: status as string,
+        search: search as string,
         page: page ? Number(page) : 1,
         limit: limit ? Number(limit) : 20,
       });
       ApiResponse.success(res, result, 'Admin hotel bookings retrieved successfully');
     } catch (err: any) {
       ApiResponse.serverError(res, 'Unable to retrieve bookings');
+    }
+  }
+
+  async adminGetBooking(req: Request, res: Response) {
+    try {
+      const booking = await hospitalityBookingService.adminGetBooking(req.params.id);
+      if (!booking) {
+        ApiResponse.notFound(res, 'Hotel booking not found');
+        return;
+      }
+      ApiResponse.success(res, booking, 'Hotel booking details retrieved successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to retrieve booking');
+    }
+  }
+
+  async adminAcceptBooking(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub || 'adm_system';
+      const { adminNote } = req.body;
+      const accepted = await hospitalityBookingService.adminAcceptBooking(req.params.id, adminId, adminNote);
+      ApiResponse.success(res, accepted, 'Hotel booking successfully accepted and room inventory reserved');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to accept booking');
+    }
+  }
+
+  async adminDeclineBooking(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub || 'adm_system';
+      const { declineReason, adminNote } = req.body;
+      if (!declineReason || !declineReason.trim()) {
+        ApiResponse.badRequest(res, 'A decline reason is required to decline a hotel booking request.');
+        return;
+      }
+      const declined = await hospitalityBookingService.adminDeclineBooking(
+        req.params.id,
+        adminId,
+        declineReason,
+        adminNote
+      );
+      ApiResponse.success(res, declined, 'Hotel booking declined successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to decline booking');
     }
   }
 

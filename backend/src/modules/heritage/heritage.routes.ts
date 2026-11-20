@@ -82,6 +82,15 @@ heritageRouter.post('/admin/heritage/sites/:id/publish', adminAuth, (req: Reques
 heritageRouter.post('/admin/heritage/sites/:id/unpublish', adminAuth, (req: Request, res: Response) =>
   heritageController.adminUnpublishSite(req, res)
 );
+heritageRouter.get('/admin/heritage/sites/:id/images', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminGetSiteImages(req, res)
+);
+heritageRouter.put('/admin/heritage/sites/:id/images', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminSetSiteImages(req, res)
+);
+heritageRouter.get('/admin/heritage/sites/:id/images/upload-signature', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminGetSiteImageUploadSignature(req, res)
+);
 
 // Admin Packages
 heritageRouter.get('/admin/heritage/packages', adminAuth, (req: Request, res: Response) =>
@@ -133,6 +142,12 @@ heritageRouter.get('/admin/heritage/bookings', adminAuth, (req: Request, res: Re
 );
 heritageRouter.get('/admin/heritage/bookings/:idOrRef', adminAuth, (req: Request, res: Response) =>
   heritageController.adminGetBooking(req, res)
+);
+heritageRouter.post('/admin/heritage/bookings/:idOrRef/accept', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminAcceptBooking(req, res)
+);
+heritageRouter.post('/admin/heritage/bookings/:idOrRef/decline', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminDeclineBooking(req, res)
 );
 heritageRouter.patch('/admin/heritage/bookings/:idOrRef/status', adminAuth, (req: Request, res: Response) =>
   heritageController.adminUpdateBookingStatus(req, res)

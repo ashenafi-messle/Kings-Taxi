@@ -15,6 +15,7 @@ import { heritageTourPackageService } from './package.service';
 import { heritageTourGuideService } from './guide.service';
 import { heritageTourVehicleOptionService } from './vehicleOption.service';
 import { heritageTourBookingService } from './booking.service';
+import { CloudinaryService } from '../../integrations/cloudinary/cloudinary.service';
 
 export class HeritageController {
   // ============================================================================
@@ -364,6 +365,35 @@ export class HeritageController {
     }
   }
 
+  async adminGetSiteImages(req: Request, res: Response) {
+    try {
+      const images = await heritageSiteService.getSiteImages(req.params.id);
+      return res.status(200).json({ success: true, data: images });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  async adminSetSiteImages(req: Request, res: Response) {
+    try {
+      const { images } = req.body;
+      const updated = await heritageSiteService.setSiteImages(req.params.id, images);
+      return res.status(200).json({ success: true, data: updated });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  async adminGetSiteImageUploadSignature(req: Request, res: Response) {
+    try {
+      const folder = `kings-taxi/heritage/${req.params.id}`;
+      const sig = CloudinaryService.generateUploadSignature(folder, 'dest');
+      return res.status(200).json({ success: true, data: sig });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
   async adminListPackages(req: Request, res: Response) {
     try {
       const packages = await heritageTourPackageService.listPackages({ isAdmin: true, ...req.query });
@@ -496,11 +526,56 @@ export class HeritageController {
 
   async adminGetBooking(req: Request, res: Response) {
     try {
-      const booking = await heritageTourBookingService.getBookingByReference('', req.params.idOrRef, true);
+      const booking = await heritageTourBookingService.adminGetBooking(req.params.idOrRef);
       if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
       return res.status(200).json({ success: true, data: booking });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  async adminAcceptBooking(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub || 'adm_system';
+      const { adminNote } = req.body;
+      const accepted = await heritageTourBookingService.adminAcceptBooking(
+        req.params.idOrRef,
+        adminId,
+        adminNote
+      );
+      return res.status(200).json({
+        success: true,
+        data: accepted,
+        message: 'Heritage tour booking accepted and visitor capacity confirmed.',
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  async adminDeclineBooking(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub || 'adm_system';
+      const { declineReason, adminNote } = req.body;
+      if (!declineReason || !declineReason.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'A decline reason is mandatory when declining a tour booking request.',
+        });
+      }
+      const declined = await heritageTourBookingService.adminDeclineBooking(
+        req.params.idOrRef,
+        adminId,
+        declineReason,
+        adminNote
+      );
+      return res.status(200).json({
+        success: true,
+        data: declined,
+        message: 'Heritage tour booking declined successfully.',
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
     }
   }
 

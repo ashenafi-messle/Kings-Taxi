@@ -4,6 +4,8 @@ import { Prisma, HotelBookingStatus, PaymentStatus, TransferStatus, PaymentType,
 import crypto from 'crypto';
 import { HotelQuoteRequestDto, HotelQuoteResponseDto, CreateHotelBookingDto } from './hospitality.types';
 import { BUILTIN_GONDAR_HOTELS } from './hotel.service';
+import { notificationService } from '../notifications/notification.service';
+import { auditService } from '../../core/audit/audit.service';
 import {
   validateBookingDates,
   parseCalendarDate,
@@ -863,11 +865,12 @@ export class HospitalityBookingService {
   }
 
   /**
-   * Super Admin: List all hotel bookings with filtering
+   * Super Admin: List all hotel bookings with filtering, search and pagination
    */
   async adminListBookings(params: {
     hotelId?: string;
-    status?: HotelBookingStatus;
+    status?: string;
+    search?: string;
     page?: number;
     limit?: number;
   }) {
@@ -875,45 +878,371 @@ export class HospitalityBookingService {
     const limit = Math.min(100, Math.max(1, params.limit || 20));
     const skip = (page - 1) * limit;
 
-    const where: any = {};
-    if (params.hotelId) where.hotelId = params.hotelId;
-    if (params.status) where.bookingStatus = params.status;
+    try {
+      const where: any = {};
+      if (params.hotelId) where.hotelId = params.hotelId;
+      if (params.status && params.status !== 'ALL') {
+        where.bookingStatus = params.status as HotelBookingStatus;
+      }
+      if (params.search) {
+        const q = params.search.trim();
+        where.OR = [
+          { bookingReference: { contains: q, mode: 'insensitive' } },
+          { hotel: { name: { contains: q, mode: 'insensitive' } } },
+          { passenger: { fullName: { contains: q, mode: 'insensitive' } } },
+          { passenger: { phoneNumber: { contains: q } } },
+        ];
+      }
 
-    const [bookings, total] = await Promise.all([
-      prisma.hotelBooking.findMany({
-        where,
-        include: {
-          hotel: { select: { name: true, city: true } },
-          passenger: { select: { fullName: true, phoneNumber: true, email: true } },
-          transferBooking: true,
-          payment: true,
+      const [bookings, total] = await Promise.all([
+        prisma.hotelBooking.findMany({
+          where,
+          include: {
+            hotel: { select: { id: true, name: true, city: true, contactPhone: true, address: true } },
+            passenger: { select: { id: true, fullName: true, phoneNumber: true, email: true } },
+            bookingRooms: {
+              include: {
+                roomType: { select: { id: true, name: true, basePricePerNight: true, totalInventory: true } },
+              },
+            },
+            transferBooking: true,
+            payment: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.hotelBooking.count({ where }),
+      ]);
+
+      return {
+        bookings,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
         },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.hotelBooking.count({ where }),
-    ]);
-
-    return {
-      bookings,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+      };
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        logger.warn({ err: err.message }, '[HospitalityBookingService] DB offline, serving from fallback cache');
+        let all = Array.from(fallbackHotelBookingsCache.values());
+        if (params.status && params.status !== 'ALL') {
+          all = all.filter((b) => b.bookingStatus === params.status);
+        }
+        if (params.search) {
+          const q = params.search.toLowerCase().trim();
+          all = all.filter(
+            (b) =>
+              (b.bookingReference || '').toLowerCase().includes(q) ||
+              (b.hotel?.name || '').toLowerCase().includes(q) ||
+              (b.passenger?.fullName || '').toLowerCase().includes(q)
+          );
+        }
+        const total = all.length;
+        const bookings = all.slice(skip, skip + limit);
+        return {
+          bookings,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1,
+          },
+        };
+      }
+      throw err;
+    }
   }
 
   /**
-   * Super Admin: Update booking status
+   * Super Admin: Retrieve booking details by ID or reference
+   */
+  async adminGetBooking(idOrRef: string) {
+    try {
+      const booking = await prisma.hotelBooking.findFirst({
+        where: {
+          OR: [{ id: idOrRef }, { bookingReference: idOrRef }],
+        },
+        include: {
+          hotel: {
+            include: {
+              images: true,
+            },
+          },
+          passenger: true,
+          bookingRooms: {
+            include: {
+              roomType: {
+                include: {
+                  images: true,
+                },
+              },
+            },
+          },
+          transferBooking: true,
+          payment: true,
+        },
+      });
+
+      if (booking) return booking;
+    } catch (err: any) {
+      if (!isDbConnectionError(err)) throw err;
+    }
+
+    const fallback =
+      fallbackHotelBookingsCache.get(idOrRef) ||
+      Array.from(fallbackHotelBookingsCache.values()).find((b) => b.bookingReference === idOrRef);
+    return fallback || null;
+  }
+
+  /**
+   * Super Admin: Accept hotel booking with atomic inventory reservation and passenger notification
+   */
+  async adminAcceptBooking(id: string, adminId: string, adminNote?: string) {
+    try {
+      // Execute atomically in a database transaction
+      const updated = await prisma.$transaction(async (tx) => {
+        const booking = await tx.hotelBooking.findUnique({
+          where: { id },
+          include: {
+            hotel: true,
+            passenger: true,
+            bookingRooms: {
+              include: {
+                roomType: true,
+              },
+            },
+          },
+        });
+
+        if (!booking) {
+          throw new Error('Hotel booking not found.');
+        }
+
+        if (booking.bookingStatus === 'CONFIRMED') {
+          throw new Error('This booking has already been accepted and confirmed.');
+        }
+
+        if (booking.bookingStatus === 'CANCELLED' || booking.bookingStatus === 'DECLINED') {
+          throw new Error(`Cannot accept booking in ${booking.bookingStatus} state without reinstatement.`);
+        }
+
+        // Verify room availability atomically across stay dates
+        for (const lineItem of booking.bookingRooms) {
+          const roomType = lineItem.roomType;
+          if (roomType) {
+            const overlapping = await tx.hotelBookingRoom.findMany({
+              where: {
+                roomTypeId: roomType.id,
+                booking: {
+                  bookingStatus: HotelBookingStatus.CONFIRMED,
+                  checkInDate: { lt: booking.checkOutDate },
+                  checkOutDate: { gt: booking.checkInDate },
+                },
+              },
+              select: { quantity: true },
+            });
+            const currentlyBooked = overlapping.reduce((sum, item) => sum + item.quantity, 0);
+            const available = roomType.totalInventory - currentlyBooked;
+            if (available < lineItem.quantity) {
+              throw new Error(
+                `Requested room inventory for '${roomType.name}' is no longer available. (Available: ${available}, Requested: ${lineItem.quantity})`
+              );
+            }
+          }
+        }
+
+        // Update booking to CONFIRMED
+        const now = new Date();
+        const confirmedBooking = await tx.hotelBooking.update({
+          where: { id },
+          data: {
+            bookingStatus: HotelBookingStatus.CONFIRMED,
+            confirmedAt: now,
+            reviewedByAdminId: adminId,
+            reviewedAt: now,
+            adminReviewNote: adminNote || null,
+          },
+          include: {
+            hotel: true,
+            passenger: true,
+            bookingRooms: { include: { roomType: true } },
+            payment: true,
+          },
+        });
+
+        return confirmedBooking;
+      });
+
+      // Audit log and notification
+      await auditService.record({
+        actorId: adminId,
+        actorType: 'ADMIN',
+        action: 'ADMIN_ACCEPT_HOTEL_BOOKING',
+        entityType: 'HotelBooking',
+        entityId: id,
+        metadata: {
+          bookingReference: updated.bookingReference,
+          hotelName: updated.hotel?.name,
+          adminNote,
+        },
+      });
+
+      await notificationService.sendHotelBookingAcceptedNotification({
+        passengerId: updated.passengerId,
+        bookingReference: updated.bookingReference,
+        hotelName: updated.hotel?.name,
+        roomTypeName: updated.bookingRooms?.[0]?.roomType?.name,
+        checkInDate: updated.checkInDate,
+      });
+
+      return updated;
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        logger.warn({ err: err.message }, '[HospitalityBookingService] DB offline, updating fallback cache');
+        const existing = fallbackHotelBookingsCache.get(id);
+        if (!existing) throw new Error('Hotel booking not found in fallback cache.');
+
+        const now = new Date();
+        existing.bookingStatus = 'CONFIRMED';
+        existing.confirmedAt = now;
+        existing.reviewedByAdminId = adminId;
+        existing.reviewedAt = now;
+        existing.adminReviewNote = adminNote;
+        fallbackHotelBookingsCache.set(id, existing);
+
+        await notificationService.sendHotelBookingAcceptedNotification({
+          passengerId: existing.passengerId || 'pax_demo',
+          bookingReference: existing.bookingReference,
+          hotelName: existing.hotelName || existing.hotel?.name,
+          checkInDate: existing.checkInDate,
+        });
+
+        return existing;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Super Admin: Decline hotel booking with mandatory reason and passenger notification
+   */
+  async adminDeclineBooking(id: string, adminId: string, declineReason: string, adminNote?: string) {
+    if (!declineReason || !declineReason.trim()) {
+      throw new Error('A specific decline reason is required when declining a booking request.');
+    }
+
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const booking = await tx.hotelBooking.findUnique({
+          where: { id },
+          include: {
+            hotel: true,
+            passenger: true,
+            bookingRooms: true,
+          },
+        });
+
+        if (!booking) {
+          throw new Error('Hotel booking not found.');
+        }
+
+        const now = new Date();
+        const declined = await tx.hotelBooking.update({
+          where: { id },
+          data: {
+            bookingStatus: HotelBookingStatus.DECLINED,
+            declineReason: declineReason.trim(),
+            adminReviewNote: adminNote || null,
+            reviewedByAdminId: adminId,
+            reviewedAt: now,
+          },
+          include: {
+            hotel: true,
+            passenger: true,
+            bookingRooms: { include: { roomType: true } },
+            payment: true,
+          },
+        });
+
+        return declined;
+      });
+
+      await auditService.record({
+        actorId: adminId,
+        actorType: 'ADMIN',
+        action: 'ADMIN_DECLINE_HOTEL_BOOKING',
+        entityType: 'HotelBooking',
+        entityId: id,
+        metadata: {
+          bookingReference: updated.bookingReference,
+          hotelName: updated.hotel?.name,
+          declineReason,
+          adminNote,
+        },
+      });
+
+      await notificationService.sendHotelBookingDeclinedNotification(
+        {
+          passengerId: updated.passengerId,
+          bookingReference: updated.bookingReference,
+          hotelName: updated.hotel?.name,
+        },
+        declineReason
+      );
+
+      return updated;
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        logger.warn({ err: err.message }, '[HospitalityBookingService] DB offline, updating fallback cache');
+        const existing = fallbackHotelBookingsCache.get(id);
+        if (!existing) throw new Error('Hotel booking not found in fallback cache.');
+
+        const now = new Date();
+        existing.bookingStatus = 'DECLINED';
+        existing.declineReason = declineReason.trim();
+        existing.adminReviewNote = adminNote;
+        existing.reviewedByAdminId = adminId;
+        existing.reviewedAt = now;
+        fallbackHotelBookingsCache.set(id, existing);
+
+        await notificationService.sendHotelBookingDeclinedNotification(
+          {
+            passengerId: existing.passengerId || 'pax_demo',
+            bookingReference: existing.bookingReference,
+            hotelName: existing.hotelName || existing.hotel?.name,
+          },
+          declineReason
+        );
+
+        return existing;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Super Admin: Update booking status directly
    */
   async adminUpdateBookingStatus(id: string, status: HotelBookingStatus) {
-    return prisma.hotelBooking.update({
-      where: { id },
-      data: { bookingStatus: status },
-    });
+    try {
+      return await prisma.hotelBooking.update({
+        where: { id },
+        data: { bookingStatus: status },
+      });
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        const existing = fallbackHotelBookingsCache.get(id);
+        if (existing) {
+          existing.bookingStatus = status;
+          fallbackHotelBookingsCache.set(id, existing);
+          return existing;
+        }
+      }
+      throw err;
+    }
   }
 }
 

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthController } from './auth.controller';
-import { authenticateToken } from '../../core/middleware/auth.middleware';
+import { AdminAuthController } from './adminAuth.controller';
+import { authenticateToken, requireRole } from '../../core/middleware/auth.middleware';
 import { ApiResponse } from '../../core/response/apiResponse';
 
 export const authRouter = Router();
@@ -63,6 +64,21 @@ authRouter.get('/me', authenticateToken, AuthController.getCurrentUser);
 // Telegram Verification Handshake & Webhook
 authRouter.post('/telegram/verify', authRateLimiter, AuthController.telegramVerify);
 authRouter.post('/telegram/webhook', AuthController.handleTelegramWebhook);
+
+// Super Admin Authentication Endpoints
+authRouter.post('/admin/login', authRateLimiter, AdminAuthController.login);
+authRouter.post(
+  '/admin/change-password',
+  authenticateToken,
+  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  AdminAuthController.changePassword
+);
+authRouter.get(
+  '/admin/me',
+  authenticateToken,
+  requireRole(['ADMIN', 'SUPER_ADMIN']),
+  AdminAuthController.getCurrentAdmin
+);
 
 // Safe Diagnostics Endpoint (Inspect channels & delivery health without leaking secrets)
 authRouter.get('/diagnostics', AuthController.getDiagnostics);

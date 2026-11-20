@@ -4,7 +4,6 @@ import { prisma } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
 import {
   TourQuoteResponseDTO,
-  HeritageTourBookingStatus,
 } from './heritage.types';
 import { validateTourBookingDate, getAddisAbabaTodayDate } from './utils/date.utils';
 import { heritageSiteService } from './site.service';
@@ -12,6 +11,8 @@ import { heritageTourPackageService } from './package.service';
 import { heritageTourGuideService } from './guide.service';
 import { heritageTourVehicleOptionService } from './vehicleOption.service';
 import { heritageTourPricingService } from './pricing.service';
+import { notificationService } from '../notifications/notification.service';
+import { auditService } from '../../core/audit/audit.service';
 
 // In-memory fallback cache for development/offline test resiliency
 const fallbackBookingsCache: Map<string, any> = new Map();
@@ -505,42 +506,353 @@ export class HeritageTourBookingService {
   }
 
   /**
-   * Super-admin: List all bookings
+   * Super-admin: List all bookings with search, status filtering, and pagination
    */
   async adminListBookings(query?: {
-    status?: HeritageTourBookingStatus;
+    status?: string;
+    search?: string;
     scheduledDate?: string;
+    page?: number;
+    limit?: number;
   }) {
+    const page = Math.max(1, query?.page || 1);
+    const limit = Math.min(100, Math.max(1, query?.limit || 20));
+    const skip = (page - 1) * limit;
+
     try {
       const where: any = {};
-      if (query?.status) where.bookingStatus = query.status;
-      if (query?.scheduledDate) where.scheduledDate = new Date(query.scheduledDate);
+      if (query?.status && query.status !== 'ALL') {
+        where.bookingStatus = query.status as any;
+      }
+      if (query?.scheduledDate) {
+        where.scheduledDate = new Date(query.scheduledDate);
+      }
+      if (query?.search) {
+        const q = query.search.trim();
+        where.OR = [
+          { bookingReference: { contains: q, mode: 'insensitive' } },
+          { passenger: { fullName: { contains: q, mode: 'insensitive' } } },
+          { passenger: { phoneNumber: { contains: q } } },
+          { package: { name: { contains: q, mode: 'insensitive' } } },
+        ];
+      }
 
-      const dbList = await prisma.heritageTourBooking.findMany({
-        where,
-        include: {
-          passenger: {
-            select: { id: true, fullName: true, phoneNumber: true, email: true },
+      const [dbList, total] = await Promise.all([
+        prisma.heritageTourBooking.findMany({
+          where,
+          include: {
+            passenger: {
+              select: { id: true, fullName: true, phoneNumber: true, email: true },
+            },
+            package: true,
+            vehicleOption: true,
+            assignedVehicle: true,
+            assignedDriver: true,
+            assignedGuide: true,
+            payment: true,
           },
-          package: true,
-          assignedGuide: true,
-          payment: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.heritageTourBooking.count({ where }),
+      ]);
 
-      if (dbList.length > 0) return dbList;
+      if (dbList.length > 0 || total > 0) {
+        return {
+          bookings: dbList,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1,
+          },
+        };
+      }
     } catch {
       // Fallback
     }
 
-    const list: any[] = [];
+    let list: any[] = [];
     fallbackBookingsCache.forEach((b) => {
-      if (!query?.status || b.bookingStatus === query.status) {
-        list.push(b);
+      let matches = true;
+      if (query?.status && query.status !== 'ALL') {
+        matches = matches && b.bookingStatus === query.status;
       }
+      if (query?.search) {
+        const q = query.search.toLowerCase().trim();
+        matches =
+          matches &&
+          ((b.bookingReference || '').toLowerCase().includes(q) ||
+            (b.passengerName || b.passenger?.fullName || '').toLowerCase().includes(q) ||
+            (b.heritageSiteName || b.packageTitle || '').toLowerCase().includes(q));
+      }
+      if (matches) list.push(b);
     });
-    return list;
+
+    const total = list.length;
+    const bookings = list.slice(skip, skip + limit);
+    return {
+      bookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  /**
+   * Super-admin: Get full booking details by ID or reference
+   */
+  async adminGetBooking(idOrRef: string) {
+    try {
+      const isRef = idOrRef.startsWith('HRT-') || idOrRef.startsWith('HTB-');
+      const booking = await prisma.heritageTourBooking.findFirst({
+        where: isRef ? { bookingReference: idOrRef } : { id: idOrRef },
+        include: {
+          passenger: true,
+          package: true,
+          vehicleOption: true,
+          assignedVehicle: true,
+          assignedDriver: true,
+          assignedGuide: true,
+          bookingSites: {
+            include: { site: true },
+          },
+          priceItems: true,
+          payment: true,
+        },
+      });
+      if (booking) return booking;
+    } catch {
+      // Fallback
+    }
+
+    let b = fallbackBookingsCache.get(idOrRef);
+    if (!b) {
+      for (const item of fallbackBookingsCache.values()) {
+        if (item.id === idOrRef || item.bookingReference === idOrRef) {
+          b = item;
+          break;
+        }
+      }
+    }
+    return b || null;
+  }
+
+  /**
+   * Super-admin: Accept tour booking request with capacity reservation and passenger notification
+   */
+  async adminAcceptBooking(idOrRef: string, adminId: string, adminNote?: string) {
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const isRef = idOrRef.startsWith('HRT-') || idOrRef.startsWith('HTB-');
+        const booking = await tx.heritageTourBooking.findFirst({
+          where: isRef ? { bookingReference: idOrRef } : { id: idOrRef },
+          include: {
+            package: true,
+            passenger: true,
+          },
+        });
+
+        if (!booking) {
+          throw new Error(`Heritage tour booking '${idOrRef}' not found.`);
+        }
+
+        if (booking.bookingStatus === 'CONFIRMED') {
+          throw new Error('This heritage tour booking has already been accepted and confirmed.');
+        }
+
+        if (booking.bookingStatus === 'CANCELLED' || booking.bookingStatus === 'DECLINED') {
+          throw new Error(`Cannot accept booking in ${booking.bookingStatus} state without formal reinstatement.`);
+        }
+
+        // Verify capacity if package defines maximumPassengers
+        if (booking.package?.maximumPassengers) {
+          const totalParty = booking.adults + booking.children;
+          if (totalParty > booking.package.maximumPassengers) {
+            throw new Error(
+              `Party size (${totalParty} visitors) exceeds the maximum tour package capacity (${booking.package.maximumPassengers}).`
+            );
+          }
+        }
+
+        const now = new Date();
+        const confirmed = await tx.heritageTourBooking.update({
+          where: { id: booking.id },
+          data: {
+            bookingStatus: 'CONFIRMED' as any,
+            confirmedAt: now,
+            reviewedByAdminId: adminId,
+            reviewedAt: now,
+            adminReviewNote: adminNote || null,
+          },
+          include: {
+            package: true,
+            passenger: true,
+            payment: true,
+          },
+        });
+
+        return confirmed;
+      });
+
+      // Audit and passenger notification
+      await auditService.record({
+        actorId: adminId,
+        actorType: 'ADMIN',
+        action: 'ADMIN_ACCEPT_HERITAGE_BOOKING',
+        entityType: 'HeritageTourBooking',
+        entityId: updated.id,
+        metadata: {
+          bookingReference: updated.bookingReference,
+          packageTitle: updated.package?.name,
+          adminNote,
+        },
+      });
+
+      await notificationService.sendHeritageBookingAcceptedNotification({
+        passengerId: updated.passengerId,
+        bookingReference: updated.bookingReference,
+        siteName: updated.package?.name || 'Gondar Heritage Destination',
+        tourDate: updated.scheduledDate,
+      });
+
+      return updated;
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[HeritageTourBookingService] DB offline or error, updating fallback cache');
+      let b = fallbackBookingsCache.get(idOrRef);
+      if (!b) {
+        for (const item of fallbackBookingsCache.values()) {
+          if (item.id === idOrRef || item.bookingReference === idOrRef) {
+            b = item;
+            break;
+          }
+        }
+      }
+      if (!b) throw new Error(`Heritage booking '${idOrRef}' not found.`);
+
+      const now = new Date();
+      b.bookingStatus = 'CONFIRMED';
+      b.confirmedAt = now;
+      b.reviewedByAdminId = adminId;
+      b.reviewedAt = now;
+      b.adminReviewNote = adminNote;
+      fallbackBookingsCache.set(b.id, b);
+      if (b.bookingReference) fallbackBookingsCache.set(b.bookingReference, b);
+
+      await notificationService.sendHeritageBookingAcceptedNotification({
+        passengerId: b.passengerId || 'pax_demo',
+        bookingReference: b.bookingReference,
+        siteName: b.heritageSiteName || b.packageTitle || 'Gondar Heritage Tour',
+        tourDate: b.tourDate || b.scheduledDate,
+      });
+
+      return b;
+    }
+  }
+
+  /**
+   * Super-admin: Decline tour booking request with mandatory reason and passenger notification
+   */
+  async adminDeclineBooking(idOrRef: string, adminId: string, declineReason: string, adminNote?: string) {
+    if (!declineReason || !declineReason.trim()) {
+      throw new Error('A specific decline reason is required when declining a tour booking request.');
+    }
+
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const isRef = idOrRef.startsWith('HRT-') || idOrRef.startsWith('HTB-');
+        const booking = await tx.heritageTourBooking.findFirst({
+          where: isRef ? { bookingReference: idOrRef } : { id: idOrRef },
+          include: {
+            package: true,
+            passenger: true,
+          },
+        });
+
+        if (!booking) {
+          throw new Error(`Heritage tour booking '${idOrRef}' not found.`);
+        }
+
+        const now = new Date();
+        const declined = await tx.heritageTourBooking.update({
+          where: { id: booking.id },
+          data: {
+            bookingStatus: 'DECLINED' as any,
+            declineReason: declineReason.trim(),
+            adminReviewNote: adminNote || null,
+            reviewedByAdminId: adminId,
+            reviewedAt: now,
+          },
+          include: {
+            package: true,
+            passenger: true,
+            payment: true,
+          },
+        });
+
+        return declined;
+      });
+
+      await auditService.record({
+        actorId: adminId,
+        actorType: 'ADMIN',
+        action: 'ADMIN_DECLINE_HERITAGE_BOOKING',
+        entityType: 'HeritageTourBooking',
+        entityId: updated.id,
+        metadata: {
+          bookingReference: updated.bookingReference,
+          declineReason,
+          adminNote,
+        },
+      });
+
+      await notificationService.sendHeritageBookingDeclinedNotification(
+        {
+          passengerId: updated.passengerId,
+          bookingReference: updated.bookingReference,
+          siteName: updated.package?.name || 'Gondar Heritage Destination',
+        },
+        declineReason
+      );
+
+      return updated;
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[HeritageTourBookingService] DB offline or error, updating fallback cache');
+      let b = fallbackBookingsCache.get(idOrRef);
+      if (!b) {
+        for (const item of fallbackBookingsCache.values()) {
+          if (item.id === idOrRef || item.bookingReference === idOrRef) {
+            b = item;
+            break;
+          }
+        }
+      }
+      if (!b) throw new Error(`Heritage booking '${idOrRef}' not found.`);
+
+      const now = new Date();
+      b.bookingStatus = 'DECLINED';
+      b.declineReason = declineReason.trim();
+      b.adminReviewNote = adminNote;
+      b.reviewedByAdminId = adminId;
+      b.reviewedAt = now;
+      fallbackBookingsCache.set(b.id, b);
+      if (b.bookingReference) fallbackBookingsCache.set(b.bookingReference, b);
+
+      await notificationService.sendHeritageBookingDeclinedNotification(
+        {
+          passengerId: b.passengerId || 'pax_demo',
+          bookingReference: b.bookingReference,
+          siteName: b.heritageSiteName || b.packageTitle || 'Gondar Heritage Tour',
+        },
+        declineReason
+      );
+
+      return b;
+    }
   }
 
   /**
@@ -549,7 +861,7 @@ export class HeritageTourBookingService {
   async adminUpdateBookingStatus(
     idOrRef: string,
     data: {
-      status: HeritageTourBookingStatus;
+      status: any;
       assignedGuideId?: string;
       assignedVehicleId?: string;
       assignedDriverId?: string;
@@ -558,7 +870,7 @@ export class HeritageTourBookingService {
   ) {
     try {
       return await prisma.heritageTourBooking.update({
-        where: idOrRef.startsWith('HTB-') ? { bookingReference: idOrRef } : { id: idOrRef },
+        where: idOrRef.startsWith('HRT-') || idOrRef.startsWith('HTB-') ? { bookingReference: idOrRef } : { id: idOrRef },
         data: {
           bookingStatus: data.status,
           ...(data.assignedGuideId ? { assignedGuideId: data.assignedGuideId } : {}),
@@ -570,7 +882,7 @@ export class HeritageTourBookingService {
       let b = fallbackBookingsCache.get(idOrRef);
       if (!b) {
         for (const item of fallbackBookingsCache.values()) {
-          if (item.id === idOrRef) {
+          if (item.id === idOrRef || item.bookingReference === idOrRef) {
             b = item;
             break;
           }
