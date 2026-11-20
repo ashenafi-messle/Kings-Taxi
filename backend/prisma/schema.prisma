@@ -48,6 +48,17 @@ enum VehicleVerificationStatus {
   REJECTED
 }
 
+enum VehicleOperationalStatus {
+  ACTIVE
+  AVAILABLE
+  ASSIGNED
+  ON_TRIP
+  UNDER_MAINTENANCE
+  INACTIVE
+  SUSPENDED
+  RETIRED
+}
+
 enum DocumentReviewStatus {
   PENDING_REVIEW
   APPROVED
@@ -414,33 +425,55 @@ model Driver {
   phoneNumber        String                   @unique @map("phone_number") @db.VarChar(32)
   passwordHash       String                   @map("password_hash") @db.VarChar(255)
   profileImage       String?                  @map("profile_image") @db.VarChar(512)
+  accountStatus      AccountStatus            @default(PENDING_VERIFICATION) @map("account_status")
   verificationStatus DriverVerificationStatus @default(PENDING) @map("verification_status")
   availabilityStatus DriverAvailabilityStatus @default(OFFLINE) @map("availability_status")
 
-  currentLatitude    Float?    @map("current_latitude")
-  currentLongitude   Float?    @map("current_longitude")
-  lastLocationUpdate DateTime? @map("last_location_update") @db.Timestamptz(6)
-  rating             Float     @default(5.0)
-  totalTrips         Int       @default(0) @map("total_trips")
+  licenseNumber      String?                  @map("license_number") @db.VarChar(64)
+  licenseExpiry      DateTime?                @map("license_expiry") @db.Date
+  city               String                   @default("Gondar") @db.VarChar(64)
+  address            String?                  @db.VarChar(255)
+  dateOfBirth        DateTime?                @map("date_of_birth") @db.Date
+  gender             String?                  @db.VarChar(16)
+
+  emergencyContactName         String?        @map("emergency_contact_name") @db.VarChar(128)
+  emergencyContactPhone        String?        @map("emergency_contact_phone") @db.VarChar(32)
+  emergencyContactRelationship String?        @map("emergency_contact_relationship") @db.VarChar(64)
+
+  rejectionReason    String?                  @map("rejection_reason") @db.Text
+  suspensionReason   String?                  @map("suspension_reason") @db.Text
+  suspendedAt        DateTime?                @map("suspended_at") @db.Timestamptz(6)
+  verifiedAt         DateTime?                @map("verified_at") @db.Timestamptz(6)
+  verifiedBy         String?                  @map("verified_by") @db.VarChar(128)
+
+  currentLatitude    Float?                   @map("current_latitude")
+  currentLongitude   Float?                   @map("current_longitude")
+  lastLocationUpdate DateTime?                @map("last_location_update") @db.Timestamptz(6)
+  rating             Float                    @default(5.0)
+  totalTrips         Int                      @default(0) @map("total_trips")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relationships
-  vehicles         Vehicle[]
-  assignedBookings Booking[]
-  trips            Trip[]
-  refreshTokens    RefreshToken[]
-  auditLogs        AuditLog[]
+  vehicles             Vehicle[]
+  vehicleAssignments   VehicleAssignment[]
+  statusHistory        DriverStatusHistory[]
+  assignedBookings     Booking[]
+  trips                Trip[]
+  refreshTokens        RefreshToken[]
+  auditLogs            AuditLog[]
   heritageTourBookings HeritageTourBooking[]
-  subcities        DriverSubcity[]
-  trackingSessions TripTrackingSession[]
-  documents        DriverDocument[]
+  subcities            DriverSubcity[]
+  trackingSessions     TripTrackingSession[]
+  documents            DriverDocument[]
 
+  @@index([accountStatus])
   @@index([verificationStatus])
   @@index([availabilityStatus])
   @@index([phoneNumber])
+  @@index([email])
   @@index([createdAt])
   @@map("drivers")
 }
@@ -451,27 +484,49 @@ model Driver {
 
 model Vehicle {
   id                 String                    @id @default(uuid()) @db.Uuid
-  driverId           String                    @map("driver_id") @db.Uuid
+  driverId           String?                   @map("driver_id") @db.Uuid
   plateNumber        String                    @unique @map("plate_number") @db.VarChar(32)
+  vinNumber          String?                   @unique @map("vin_number") @db.VarChar(64)
+  make               String                    @default("Toyota") @db.VarChar(64)
   vehicleModel       String                    @map("vehicle_model") @db.VarChar(64)
+  manufacturingYear  Int                       @default(2022) @map("manufacturing_year") @db.SmallInt
   vehicleColor       String                    @map("vehicle_color") @db.VarChar(32)
   vehicleType        VehicleType               @default(STANDARD_SEDAN) @map("vehicle_type")
+  categoryName       String?                   @map("category_name") @db.VarChar(64)
   seatingCapacity    Int                       @default(4) @map("seating_capacity") @db.SmallInt
+  status             VehicleOperationalStatus  @default(AVAILABLE) @map("status")
   verificationStatus VehicleVerificationStatus @default(PENDING) @map("verification_status")
   isActive           Boolean                   @default(true) @map("is_active")
+  fuelType           String                    @default("PETROL") @map("fuel_type") @db.VarChar(32)
+  transmission       String                    @default("AUTOMATIC") @db.VarChar(32)
+  mileageKm          Float                     @default(0) @map("mileage_km")
+  imageUrl           String?                   @map("image_url") @db.VarChar(512)
+
+  insurancePolicyNumber String?   @map("insurance_policy_number") @db.VarChar(64)
+  insuranceExpiry       DateTime? @map("insurance_expiry") @db.Date
+  inspectionExpiry      DateTime? @map("inspection_expiry") @db.Date
+
+  rejectionReason       String?   @map("rejection_reason") @db.Text
+  suspensionReason      String?   @map("suspension_reason") @db.Text
+  verifiedAt            DateTime? @map("verified_at") @db.Timestamptz(6)
+  verifiedBy            String?   @map("verified_by") @db.VarChar(128)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  driver   Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  bookings Booking[]
-  trips    Trip[]
+  driver       Driver?              @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  bookings     Booking[]
+  trips        Trip[]
   heritageTourBookings HeritageTourBooking[]
-  documents VehicleDocument[]
+  documents    VehicleDocument[]
+  assignments  VehicleAssignment[]
+  maintenances VehicleMaintenance[]
 
   @@index([driverId])
   @@index([plateNumber])
+  @@index([status])
   @@index([verificationStatus, isActive])
+  @@index([createdAt])
   @@map("vehicles")
 }
 
@@ -1831,5 +1886,81 @@ model AdminPasswordReset {
   @@index([resetTokenHash])
   @@index([expiresAt])
   @@map("admin_password_resets")
+}
+
+// ==============================================================================
+// 47. Vehicle Driver Assignment History Entity
+// ==============================================================================
+
+model VehicleAssignment {
+  id           String    @id @default(uuid()) @db.Uuid
+  vehicleId    String    @map("vehicle_id") @db.Uuid
+  driverId     String    @map("driver_id") @db.Uuid
+  assignedBy   String?   @map("assigned_by") @db.VarChar(128)
+  assignedAt   DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  unassignedBy String?   @map("unassigned_by") @db.VarChar(128)
+  unassignedAt DateTime? @map("unassigned_at") @db.Timestamptz(6)
+  isActive     Boolean   @default(true) @map("is_active")
+  notes        String?   @db.Text
+
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver  Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, isActive])
+  @@index([driverId, isActive])
+  @@index([assignedAt])
+  @@map("vehicle_assignments")
+}
+
+// ==============================================================================
+// 48. Vehicle Maintenance Log Entity
+// ==============================================================================
+
+model VehicleMaintenance {
+  id              String    @id @default(uuid()) @db.Uuid
+  vehicleId       String    @map("vehicle_id") @db.Uuid
+  maintenanceType String    @map("maintenance_type") @db.VarChar(64)
+  description     String    @db.Text
+  serviceCenter   String?   @map("service_center") @db.VarChar(128)
+  costETB         Decimal   @default(0) @map("cost_etb") @db.Decimal(10, 2)
+  mileageKm       Float?    @map("mileage_km")
+  serviceDate     DateTime  @map("service_date") @db.Date
+  nextServiceDate DateTime? @map("next_service_date") @db.Date
+  status          String    @default("COMPLETED") @db.VarChar(32)
+  performedBy     String?   @map("performed_by") @db.VarChar(128)
+  notes           String?   @db.Text
+
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@index([serviceDate])
+  @@map("vehicle_maintenances")
+}
+
+// ==============================================================================
+// 49. Driver Status & Verification Audit Log Entity
+// ==============================================================================
+
+model DriverStatusHistory {
+  id         String    @id @default(uuid()) @db.Uuid
+  driverId   String    @map("driver_id") @db.Uuid
+  statusType String    @map("status_type") @db.VarChar(32)
+  fromStatus String?   @map("from_status") @db.VarChar(64)
+  toStatus   String    @map("to_status") @db.VarChar(64)
+  reason     String?   @db.Text
+  changedBy  String?   @map("changed_by") @db.VarChar(128)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId])
+  @@index([createdAt])
+  @@map("driver_status_history")
 }
 

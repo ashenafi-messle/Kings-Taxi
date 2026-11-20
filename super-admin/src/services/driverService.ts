@@ -1,13 +1,41 @@
 import { Driver, DriverFilterParams, PaginatedResult } from '../types';
+import { apiRequest } from './apiClient';
 import { mockDrivers } from './mockData';
 
-let driversData: Driver[] = [...mockDrivers];
+let fallbackDriversData: Driver[] = [...mockDrivers];
 
 export class DriverService {
+  /**
+   * Retrieves paginated drivers from the central backend with filtering and search
+   */
   static async getDrivers(params: DriverFilterParams = {}): Promise<PaginatedResult<Driver>> {
-    await new Promise((r) => setTimeout(r, 200));
+    const query = new URLSearchParams();
+    if (params.search) query.set('search', params.search);
+    if (params.verificationStatus && params.verificationStatus !== 'ALL') {
+      query.set('verificationStatus', params.verificationStatus);
+    }
+    if (params.availabilityStatus && params.availabilityStatus !== 'ALL') {
+      query.set('availabilityStatus', params.availabilityStatus);
+    }
+    if (params.city && params.city !== 'ALL') {
+      query.set('city', params.city);
+    }
+    if (params.page) query.set('page', String(params.page));
+    if (params.limit) query.set('limit', String(params.limit));
 
-    let filtered = [...driversData];
+    const endpoint = `/admin/drivers?${query.toString()}`;
+
+    try {
+      const res = await apiRequest<PaginatedResult<Driver>>(endpoint);
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] API error, falling back to local dataset:', err);
+    }
+
+    // Fallback in-memory implementation for offline/local resilience
+    let filtered = [...fallbackDriversData];
 
     if (params.search) {
       const q = params.search.toLowerCase().trim();
@@ -16,7 +44,7 @@ export class DriverService {
           d.fullName.toLowerCase().includes(q) ||
           d.driverId.toLowerCase().includes(q) ||
           d.phone.includes(q) ||
-          d.licenseNumber.toLowerCase().includes(q)
+          (d.licenseNumber && d.licenseNumber.toLowerCase().includes(q))
       );
     }
 
@@ -42,35 +70,127 @@ export class DriverService {
     return { items, total, page, limit, totalPages };
   }
 
-  static async getDriverById(id: string): Promise<Driver | null> {
-    await new Promise((r) => setTimeout(r, 150));
-    return driversData.find((d) => d.id === id || d.driverId === id) || null;
+  /**
+   * Retrieves statistics summary for driver management operations
+   */
+  static async getStatistics(): Promise<{
+    totalDrivers: number;
+    approvedDrivers: number;
+    pendingVerification: number;
+    rejectedDrivers: number;
+    suspendedDrivers: number;
+    onlineDrivers: number;
+    driversOnTrip: number;
+    offlineDrivers: number;
+  }> {
+    try {
+      const res = await apiRequest<{
+        totalDrivers: number;
+        approvedDrivers: number;
+        pendingVerification: number;
+        rejectedDrivers: number;
+        suspendedDrivers: number;
+        onlineDrivers: number;
+        driversOnTrip: number;
+        offlineDrivers: number;
+      }>('/admin/drivers/statistics');
+
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] Failed to load statistics from API:', err);
+    }
+
+    // Fallback calculation from local data
+    const totalDrivers = fallbackDriversData.length;
+    const approvedDrivers = fallbackDriversData.filter((d) => d.verificationStatus === 'APPROVED' || d.verificationStatus === 'VERIFIED').length;
+    const pendingVerification = fallbackDriversData.filter((d) => d.verificationStatus === 'PENDING').length;
+    const rejectedDrivers = fallbackDriversData.filter((d) => d.verificationStatus === 'REJECTED').length;
+    const suspendedDrivers = fallbackDriversData.filter((d) => d.verificationStatus === 'SUSPENDED').length;
+    const onlineDrivers = fallbackDriversData.filter((d) => d.availabilityStatus === 'ONLINE' || d.availabilityStatus === 'AVAILABLE').length;
+    const driversOnTrip = fallbackDriversData.filter((d) => d.availabilityStatus === 'ON_TRIP').length;
+    const offlineDrivers = fallbackDriversData.filter((d) => d.availabilityStatus === 'OFFLINE').length;
+
+    return {
+      totalDrivers,
+      approvedDrivers,
+      pendingVerification,
+      rejectedDrivers,
+      suspendedDrivers,
+      onlineDrivers,
+      driversOnTrip,
+      offlineDrivers,
+    };
   }
 
-  static async createDriver(payload: Partial<Driver>): Promise<Driver> {
-    await new Promise((r) => setTimeout(r, 300));
-    const newId = `drv_${Date.now()}`;
-    const newDriverId = `DRV-${1050 + driversData.length}`;
+  /**
+   * Retrieves single driver profile with full verification & vehicle details
+   */
+  static async getDriverById(id: string): Promise<Driver | null> {
+    try {
+      const res = await apiRequest<Driver>(`/admin/drivers/${id}`);
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] API error on getDriverById:', err);
+    }
 
+    return fallbackDriversData.find((d) => d.id === id || d.driverId === id) || null;
+  }
+
+  /**
+   * Registers a new driver in PostgreSQL through the central backend
+   */
+  static async createDriver(payload: Partial<Driver>): Promise<Driver> {
+    try {
+      const res = await apiRequest<Driver>('/admin/drivers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: payload.fullName,
+          phone: payload.phone,
+          email: payload.email,
+          city: payload.city,
+          address: payload.address,
+          licenseNumber: payload.licenseNumber,
+          licenseExpiry: payload.licenseExpiry,
+          dateOfBirth: payload.dateOfBirth,
+          gender: payload.gender,
+          emergencyContactName: payload.emergencyContact?.name,
+          emergencyContactPhone: payload.emergencyContact?.phone,
+          emergencyContactRelationship: payload.emergencyContact?.relationship,
+          documents: payload.documents,
+        }),
+      });
+
+      if (res.success && res.data) {
+        fallbackDriversData = [res.data, ...fallbackDriversData];
+        return res.data;
+      }
+      if (res.error) {
+        throw new Error(res.error);
+      }
+    } catch (err) {
+      console.warn('[DriverService] Failed to create driver via API:', err);
+      throw err;
+    }
+
+    // Offline fallback
+    const newId = `drv_${Date.now()}`;
     const newDriver: Driver = {
       id: newId,
-      driverId: newDriverId,
+      driverId: `DRV-${1050 + fallbackDriversData.length}`,
       fullName: payload.fullName || 'New Driver',
       email: payload.email || '',
       phone: payload.phone || '',
-      avatarUrl: payload.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80',
-      gender: payload.gender || 'MALE',
-      dateOfBirth: payload.dateOfBirth || '1990-01-01',
       city: payload.city || 'Gondar',
-      address: payload.address || '',
       licenseNumber: payload.licenseNumber || 'ETH-PENDING',
       licenseExpiry: payload.licenseExpiry || '2027-12-31',
       verificationStatus: payload.verificationStatus || 'PENDING',
       documents: payload.documents || [],
       availabilityStatus: 'OFFLINE',
-      assignedVehicleId: payload.assignedVehicleId,
-      assignedVehiclePlate: payload.assignedVehiclePlate,
-      assignedVehicleModel: payload.assignedVehicleModel,
       rating: 5.0,
       totalRides: 0,
       completedRides: 0,
@@ -81,34 +201,92 @@ export class DriverService {
       updatedAt: new Date().toISOString(),
     };
 
-    driversData = [newDriver, ...driversData];
+    fallbackDriversData = [newDriver, ...fallbackDriversData];
     return newDriver;
   }
 
+  /**
+   * Updates driver profile
+   */
   static async updateDriver(id: string, updates: Partial<Driver>): Promise<Driver | null> {
-    await new Promise((r) => setTimeout(r, 250));
-    const index = driversData.findIndex((d) => d.id === id);
+    try {
+      const res = await apiRequest<Driver>(`/admin/drivers/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+
+      if (res.success && res.data) {
+        const index = fallbackDriversData.findIndex((d) => d.id === id);
+        if (index !== -1) fallbackDriversData[index] = res.data;
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] API error on updateDriver:', err);
+    }
+
+    const index = fallbackDriversData.findIndex((d) => d.id === id);
     if (index === -1) return null;
 
-    driversData[index] = {
-      ...driversData[index],
+    fallbackDriversData[index] = {
+      ...fallbackDriversData[index],
       ...updates,
       updatedAt: new Date().toISOString(),
     };
-    return driversData[index];
+    return fallbackDriversData[index];
   }
 
-  static async toggleDriverStatus(id: string, status: Driver['availabilityStatus']): Promise<Driver | null> {
-    return this.updateDriver(id, { availabilityStatus: status });
+  /**
+   * Updates driver verification status (APPROVED, REJECTED, SUSPENDED)
+   */
+  static async updateVerificationStatus(
+    id: string,
+    verificationStatus: string,
+    rejectionReason?: string
+  ): Promise<Driver | null> {
+    try {
+      const res = await apiRequest<Driver>(`/admin/drivers/${id}/verification`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: verificationStatus, rejectionReason }),
+      });
+
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] API error on updateVerificationStatus:', err);
+    }
+
+    return this.updateDriver(id, { verificationStatus: verificationStatus as any });
   }
 
-  static async deleteDriver(id: string): Promise<boolean> {
-    await new Promise((r) => setTimeout(r, 200));
-    const initialLen = driversData.length;
-    driversData = driversData.filter((d) => d.id !== id);
-    return driversData.length < initialLen;
+  /**
+   * Updates driver account status (ACTIVE, SUSPENDED)
+   */
+  static async updateAccountStatus(id: string, accountStatus: string, reason?: string): Promise<Driver | null> {
+    try {
+      const res = await apiRequest<Driver>(`/admin/drivers/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: accountStatus, reason }),
+      });
+
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] API error on updateAccountStatus:', err);
+    }
+
+    return this.updateDriver(id, {
+      verificationStatus: accountStatus === 'SUSPENDED' ? 'SUSPENDED' : 'APPROVED',
+    });
   }
 
+  /**
+   * Review a specific driver document
+   */
   static async reviewDriverDocument(
     driverId: string,
     documentId: string,
@@ -118,8 +296,23 @@ export class DriverService {
       reviewNotes?: string;
     }
   ): Promise<Driver | null> {
-    await new Promise((r) => setTimeout(r, 200));
-    const driver = driversData.find((d) => d.id === driverId || d.driverId === driverId);
+    try {
+      // Review specific document endpoint
+      const res = await apiRequest<any>(`/drivers/${driverId}/documents/${documentId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(review),
+      });
+
+      if (res.success) {
+        return this.getDriverById(driverId);
+      }
+    } catch (err) {
+      console.warn('[DriverService] API error on reviewDriverDocument:', err);
+    }
+
+    // Local fallback
+    const driver = fallbackDriversData.find((d) => d.id === driverId || d.driverId === driverId);
     if (!driver) return null;
 
     if (!driver.documents) driver.documents = [];
@@ -135,7 +328,6 @@ export class DriverService {
       };
     }
 
-    // Recalculate overall verificationStatus
     const hasRejection = driver.documents.some((d) => d.status === 'REJECTED');
     if (hasRejection) {
       driver.verificationStatus = 'REJECTED';
@@ -145,11 +337,68 @@ export class DriverService {
         driver.documents.filter((d) => d.status === 'APPROVED').map((d) => d.documentType?.toUpperCase())
       );
       const allApproved = requiredTypes.every((t) => approvedTypes.has(t));
-      driver.verificationStatus = allApproved ? 'VERIFIED' : 'PENDING';
+      driver.verificationStatus = allApproved ? 'APPROVED' : 'PENDING';
     }
 
     driver.updatedAt = new Date().toISOString();
     return driver;
   }
-}
 
+  /**
+   * Alias for getEligibleDrivers for vehicle assignment pairing
+   */
+  static async getAssignmentCandidates(vehicleId?: string): Promise<Array<{
+    id: string;
+    driverId: string;
+    fullName: string;
+    phone: string;
+    rating: number;
+    verificationStatus: string;
+    isCurrentlyAssigned: boolean;
+    city?: string;
+  }>> {
+    const list = await this.getEligibleDrivers(vehicleId);
+    return list.map((item) => {
+      const match = fallbackDriversData.find((d) => d.id === item.id);
+      return {
+        ...item,
+        city: match?.city || 'Gondar',
+      };
+    });
+  }
+
+  /**
+   * Gets eligible drivers available for vehicle assignment
+   */
+  static async getEligibleDrivers(vehicleId?: string): Promise<Array<{
+    id: string;
+    driverId: string;
+    fullName: string;
+    phone: string;
+    rating: number;
+    verificationStatus: string;
+    isCurrentlyAssigned: boolean;
+  }>> {
+    try {
+      const endpoint = vehicleId ? `/admin/drivers/eligible?vehicleId=${vehicleId}` : '/admin/drivers/eligible';
+      const res = await apiRequest<any[]>(endpoint);
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] Failed to load eligible drivers from API:', err);
+    }
+
+    return fallbackDriversData
+      .filter((d) => d.verificationStatus === 'APPROVED' || d.verificationStatus === 'VERIFIED')
+      .map((d) => ({
+        id: d.id,
+        driverId: d.driverId,
+        fullName: d.fullName,
+        phone: d.phone,
+        rating: d.rating,
+        verificationStatus: d.verificationStatus,
+        isCurrentlyAssigned: !!d.assignedVehicleId,
+      }));
+  }
+}

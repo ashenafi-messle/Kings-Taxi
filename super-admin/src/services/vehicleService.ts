@@ -1,13 +1,34 @@
 import { Vehicle, VehicleFilterParams, PaginatedResult } from '../types';
+import { apiRequest } from './apiClient';
 import { mockVehicles } from './mockData';
 
-let vehiclesData: Vehicle[] = [...mockVehicles];
+let fallbackVehiclesData: Vehicle[] = [...mockVehicles];
 
 export class VehicleService {
+  /**
+   * Retrieves paginated vehicles from the central backend with filtering and search
+   */
   static async getVehicles(params: VehicleFilterParams = {}): Promise<PaginatedResult<Vehicle>> {
-    await new Promise((r) => setTimeout(r, 200));
+    const query = new URLSearchParams();
+    if (params.search) query.set('search', params.search);
+    if (params.category && params.category !== 'ALL') query.set('category', params.category);
+    if (params.status && params.status !== 'ALL') query.set('status', params.status);
+    if (params.page) query.set('page', String(params.page));
+    if (params.limit) query.set('limit', String(params.limit));
 
-    let filtered = [...vehiclesData];
+    const endpoint = `/admin/vehicles?${query.toString()}`;
+
+    try {
+      const res = await apiRequest<PaginatedResult<Vehicle>>(endpoint);
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[VehicleService] API error on getVehicles, falling back to local dataset:', err);
+    }
+
+    // Local fallback
+    let filtered = [...fallbackVehiclesData];
 
     if (params.search) {
       const q = params.search.toLowerCase().trim();
@@ -38,15 +59,113 @@ export class VehicleService {
     return { items, total, page, limit, totalPages };
   }
 
-  static async getVehicleById(id: string): Promise<Vehicle | null> {
-    await new Promise((r) => setTimeout(r, 150));
-    return vehiclesData.find((v) => v.id === id || v.plateNumber === id) || null;
+  /**
+   * Retrieves aggregate vehicle fleet statistics
+   */
+  static async getStatistics(): Promise<{
+    totalVehicles: number;
+    activeVehicles: number;
+    availableVehicles: number;
+    assignedVehicles: number;
+    underMaintenance: number;
+    pendingVerification: number;
+    suspendedVehicles: number;
+  }> {
+    try {
+      const res = await apiRequest<{
+        totalVehicles: number;
+        activeVehicles: number;
+        availableVehicles: number;
+        assignedVehicles: number;
+        underMaintenance: number;
+        pendingVerification: number;
+        suspendedVehicles: number;
+      }>('/admin/vehicles/statistics');
+
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[VehicleService] API error on getStatistics:', err);
+    }
+
+    // Local fallback
+    const totalVehicles = fallbackVehiclesData.length;
+    const activeVehicles = fallbackVehiclesData.filter((v) => v.status === 'ACTIVE').length;
+    const availableVehicles = fallbackVehiclesData.filter((v) => v.status === 'AVAILABLE').length;
+    const assignedVehicles = fallbackVehiclesData.filter((v) => v.assignedDriverId || v.status === 'ASSIGNED').length;
+    const underMaintenance = fallbackVehiclesData.filter((v) => v.status === 'UNDER_MAINTENANCE' || v.status === 'MAINTENANCE').length;
+    const pendingVerification = fallbackVehiclesData.filter((v) => !v.isVerified).length;
+    const suspendedVehicles = fallbackVehiclesData.filter((v) => v.status === 'INACTIVE').length;
+
+    return {
+      totalVehicles,
+      activeVehicles,
+      availableVehicles,
+      assignedVehicles,
+      underMaintenance,
+      pendingVerification,
+      suspendedVehicles,
+    };
   }
 
-  static async createVehicle(payload: Partial<Vehicle>): Promise<Vehicle> {
-    await new Promise((r) => setTimeout(r, 300));
-    const newId = `veh_${Date.now()}`;
+  /**
+   * Retrieves single vehicle specifications and assignment history
+   */
+  static async getVehicleById(id: string): Promise<Vehicle | null> {
+    try {
+      const res = await apiRequest<Vehicle>(`/admin/vehicles/${id}`);
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[VehicleService] API error on getVehicleById:', err);
+    }
 
+    return fallbackVehiclesData.find((v) => v.id === id || v.plateNumber === id) || null;
+  }
+
+  /**
+   * Registers a new vehicle in fleet
+   */
+  static async createVehicle(payload: Partial<Vehicle>): Promise<Vehicle> {
+    try {
+      const res = await apiRequest<Vehicle>('/admin/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plateNumber: payload.plateNumber,
+          vinNumber: payload.vinNumber,
+          make: payload.make,
+          model: payload.model,
+          year: payload.year,
+          color: payload.color,
+          category: payload.category,
+          capacity: payload.capacity,
+          fuelType: payload.fuelType,
+          imageUrl: payload.imageUrl,
+          insurancePolicyNumber: payload.insurancePolicyNumber,
+          insuranceExpiry: payload.insuranceExpiry,
+          inspectionExpiry: payload.inspectionExpiry,
+          assignedDriverId: payload.assignedDriverId,
+          documents: payload.documents,
+        }),
+      });
+
+      if (res.success && res.data) {
+        fallbackVehiclesData = [res.data, ...fallbackVehiclesData];
+        return res.data;
+      }
+      if (res.error) {
+        throw new Error(res.error);
+      }
+    } catch (err) {
+      console.warn('[VehicleService] Failed to create vehicle via API:', err);
+      throw err;
+    }
+
+    // Local fallback
+    const newId = `veh_${Date.now()}`;
     const newVehicle: Vehicle = {
       id: newId,
       plateNumber: payload.plateNumber || '3-PENDING-ET',
@@ -58,11 +177,10 @@ export class VehicleService {
       category: payload.category || 'SEDAN_STANDARD',
       categoryName: payload.categoryName || 'Standard Sedan',
       capacity: payload.capacity || 4,
-      imageUrl: payload.imageUrl || 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=400&auto=format&fit=crop&q=80',
+      imageUrl: payload.imageUrl,
       status: payload.status || 'AVAILABLE',
       assignedDriverId: payload.assignedDriverId,
       assignedDriverName: payload.assignedDriverName,
-      assignedDriverPhone: payload.assignedDriverPhone,
       insurancePolicyNumber: payload.insurancePolicyNumber,
       insuranceExpiry: payload.insuranceExpiry || '2026-01-01',
       inspectionExpiry: payload.inspectionExpiry || '2026-01-01',
@@ -74,30 +192,140 @@ export class VehicleService {
       updatedAt: new Date().toISOString(),
     };
 
-    vehiclesData = [newVehicle, ...vehiclesData];
+    fallbackVehiclesData = [newVehicle, ...fallbackVehiclesData];
     return newVehicle;
   }
 
+  /**
+   * Updates vehicle specification
+   */
   static async updateVehicle(id: string, updates: Partial<Vehicle>): Promise<Vehicle | null> {
-    await new Promise((r) => setTimeout(r, 250));
-    const index = vehiclesData.findIndex((v) => v.id === id);
+    try {
+      const res = await apiRequest<Vehicle>(`/admin/vehicles/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+
+      if (res.success && res.data) {
+        const index = fallbackVehiclesData.findIndex((v) => v.id === id);
+        if (index !== -1) fallbackVehiclesData[index] = res.data;
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[VehicleService] API error on updateVehicle:', err);
+    }
+
+    const index = fallbackVehiclesData.findIndex((v) => v.id === id);
     if (index === -1) return null;
 
-    vehiclesData[index] = {
-      ...vehiclesData[index],
+    fallbackVehiclesData[index] = {
+      ...fallbackVehiclesData[index],
       ...updates,
       updatedAt: new Date().toISOString(),
     };
-    return vehiclesData[index];
+    return fallbackVehiclesData[index];
   }
 
-  static async deleteVehicle(id: string): Promise<boolean> {
-    await new Promise((r) => setTimeout(r, 200));
-    const initialLen = vehiclesData.length;
-    vehiclesData = vehiclesData.filter((v) => v.id !== id);
-    return vehiclesData.length < initialLen;
+  /**
+   * Assigns an approved driver to a vehicle
+   */
+  static async assignDriver(vehicleId: string, driverId: string, notes?: string): Promise<Vehicle | null> {
+    try {
+      const res = await apiRequest<Vehicle>(`/admin/vehicles/${vehicleId}/assign-driver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverId, notes }),
+      });
+
+      if (res.success && res.data) {
+        return this.getVehicleById(vehicleId);
+      }
+      if (res.error) {
+        throw new Error(res.error);
+      }
+    } catch (err) {
+      console.warn('[VehicleService] API error on assignDriver:', err);
+      throw err;
+    }
+
+    return this.updateVehicle(vehicleId, { assignedDriverId: driverId, status: 'ASSIGNED' });
   }
 
+  /**
+   * Unassigns driver from vehicle
+   */
+  static async unassignDriver(vehicleId: string, notes?: string): Promise<Vehicle | null> {
+    try {
+      const res = await apiRequest<Vehicle>(`/admin/vehicles/${vehicleId}/unassign-driver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      });
+
+      if (res.success && res.data) {
+        return this.getVehicleById(vehicleId);
+      }
+    } catch (err) {
+      console.warn('[VehicleService] API error on unassignDriver:', err);
+    }
+
+    return this.updateVehicle(vehicleId, {
+      assignedDriverId: undefined,
+      assignedDriverName: undefined,
+      status: 'AVAILABLE',
+    });
+  }
+
+  /**
+   * Alias for addMaintenance
+   */
+  static async addMaintenanceRecord(vehicleId: string, maintenance: any) {
+    return this.addMaintenance(vehicleId, maintenance);
+  }
+
+  /**
+   * Records maintenance service
+   */
+  static async addMaintenance(
+    vehicleId: string,
+    maintenance: {
+      maintenanceType: string;
+      description: string;
+      serviceCenter?: string;
+      costETB?: number;
+      mileageKm?: number;
+      serviceDate: string;
+      nextServiceDate?: string;
+      status?: string;
+      notes?: string;
+    }
+  ): Promise<any> {
+    try {
+      const res = await apiRequest<any>(`/admin/vehicles/${vehicleId}/maintenance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(maintenance),
+      });
+
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[VehicleService] API error on addMaintenance:', err);
+    }
+
+    return {
+      id: `maint_${Date.now()}`,
+      ...maintenance,
+      costETB: maintenance.costETB || 0,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Review a specific vehicle document
+   */
   static async reviewVehicleDocument(
     vehicleId: string,
     documentId: string,
@@ -107,8 +335,21 @@ export class VehicleService {
       reviewNotes?: string;
     }
   ): Promise<Vehicle | null> {
-    await new Promise((r) => setTimeout(r, 200));
-    const vehicle = vehiclesData.find((v) => v.id === vehicleId || v.plateNumber === vehicleId);
+    try {
+      const res = await apiRequest<any>(`/vehicles/${vehicleId}/documents/${documentId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(review),
+      });
+
+      if (res.success) {
+        return this.getVehicleById(vehicleId);
+      }
+    } catch (err) {
+      console.warn('[VehicleService] API error on reviewVehicleDocument:', err);
+    }
+
+    const vehicle = fallbackVehiclesData.find((v) => v.id === vehicleId || v.plateNumber === vehicleId);
     if (!vehicle) return null;
 
     if (!vehicle.documents) vehicle.documents = [];
@@ -124,7 +365,6 @@ export class VehicleService {
       };
     }
 
-    // Recalculate overall verificationStatus
     const hasRejection = vehicle.documents.some((d) => d.status === 'REJECTED');
     if (hasRejection) {
       vehicle.verificationStatus = 'REJECTED';
@@ -147,5 +387,10 @@ export class VehicleService {
     vehicle.updatedAt = new Date().toISOString();
     return vehicle;
   }
-}
 
+  static async deleteVehicle(id: string): Promise<boolean> {
+    const initialLen = fallbackVehiclesData.length;
+    fallbackVehiclesData = fallbackVehiclesData.filter((v) => v.id !== id);
+    return fallbackVehiclesData.length < initialLen;
+  }
+}

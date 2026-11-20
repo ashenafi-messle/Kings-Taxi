@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Car, Plus, Eye, Fuel, Users, Shield, Wrench, FileText } from 'lucide-react';
+import { Car, Plus, Eye, Fuel, Users, Shield, Wrench, FileText, CheckCircle, Clock } from 'lucide-react';
 import { PageHeader } from '../../../components/common/PageHeader';
+import { StatCard } from '../../../components/common/StatCard';
 import { DataTable, Column } from '../../../components/common/DataTable';
 import { StatusBadge } from '../../../components/common/StatusBadge';
 import { FilterDropdown } from '../../../components/common/FilterDropdown';
@@ -16,6 +17,15 @@ import { formatDate } from '../../../utils/dateUtils';
 export default function VehiclesPage() {
   const router = useRouter();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [stats, setStats] = useState<{
+    totalVehicles: number;
+    activeVehicles: number;
+    availableVehicles: number;
+    assignedVehicles: number;
+    underMaintenance: number;
+    pendingVerification: number;
+    suspendedVehicles: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -24,12 +34,16 @@ export default function VehiclesPage() {
   const fetchVehicles = async () => {
     setIsLoading(true);
     try {
-      const res = await VehicleService.getVehicles({
-        category: categoryFilter,
-        status: statusFilter,
-        limit: 100,
-      });
+      const [res, statsRes] = await Promise.all([
+        VehicleService.getVehicles({
+          category: categoryFilter,
+          status: statusFilter,
+          limit: 100,
+        }),
+        VehicleService.getStatistics(),
+      ]);
       setVehicles(res.items);
+      setStats(statsRes);
     } catch (err) {
       console.error('Failed to load vehicles:', err);
     } finally {
@@ -165,6 +179,64 @@ export default function VehiclesPage() {
           </Link>
         }
       />
+
+      {/* Fleet KPI Cards */}
+      <div className="row g-3 mb-4">
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Total Fleet"
+            value={stats ? stats.totalVehicles : vehicles.length}
+            icon={Car}
+            accentColor="gold"
+            subtext="Registered vehicles"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Active & Ready"
+            value={stats ? stats.activeVehicles : vehicles.filter((v) => v.status === 'ACTIVE').length}
+            icon={Shield}
+            accentColor="emerald"
+            subtext="Operational fleet"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Available"
+            value={stats ? stats.availableVehicles : vehicles.filter((v) => !v.assignedDriverId && v.status === 'ACTIVE').length}
+            icon={CheckCircle}
+            accentColor="emerald"
+            subtext="Ready for assignment"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Assigned Drivers"
+            value={stats ? stats.assignedVehicles : vehicles.filter((v) => !!v.assignedDriverId).length}
+            icon={Users}
+            accentColor="gold"
+            subtext="Active operators"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="In Maintenance"
+            value={stats ? stats.underMaintenance : vehicles.filter((v) => v.status === 'MAINTENANCE' || v.status === 'UNDER_MAINTENANCE').length}
+            icon={Wrench}
+            accentColor="amber"
+            subtext="Repairs & servicing"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Pending Check"
+            value={stats ? stats.pendingVerification : vehicles.filter((v) => v.verificationStatus === 'PENDING').length}
+            icon={FileText}
+            accentColor="rose"
+            subtext="Awaiting docs / bolo"
+          />
+        </div>
+      </div>
 
       <DataTable
         columns={columns}

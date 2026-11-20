@@ -88,7 +88,7 @@ export default function DriverDetailPage() {
       message: `Are you sure you want to approve ${driver?.fullName}? This driver will be authorized to accept rides immediately across Kings Taxi.`,
       action: async () => {
         setIsUpdating(true);
-        await DriverService.updateDriver(driver!.id, { verificationStatus: 'APPROVED' });
+        await DriverService.updateVerificationStatus(driver!.id, 'APPROVED');
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         setIsUpdating(false);
         loadDriver();
@@ -103,7 +103,7 @@ export default function DriverDetailPage() {
       message: `Are you sure you want to suspend ${driver?.fullName}? The driver will immediately lose dispatch access.`,
       action: async () => {
         setIsUpdating(true);
-        await DriverService.updateDriver(driver!.id, { verificationStatus: 'SUSPENDED' });
+        await DriverService.updateAccountStatus(driver!.id, 'SUSPENDED', 'Administrative suspension by Super Admin');
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         setIsUpdating(false);
         loadDriver();
@@ -219,9 +219,25 @@ export default function DriverDetailPage() {
                 </div>
                 <div>
                   <span className="text-muted small d-block">Assigned Vehicle</span>
-                  <span className="text-obsidian fw-medium small">
-                    {driver.assignedVehiclePlate || 'No vehicle currently assigned'}
-                  </span>
+                  {driver.assignedVehiclePlate ? (
+                    <div className="d-flex align-items-center gap-1.5 mt-0.5">
+                      <span className="text-obsidian fw-medium small font-monospace">
+                        {driver.assignedVehiclePlate}
+                      </span>
+                      {driver.assignedVehicleId && (
+                        <Link
+                          href={`/vehicles/${driver.assignedVehicleId}`}
+                          className="btn btn-outline-gold btn-sm py-0 px-1.5 text-xs ms-1"
+                        >
+                          View Fleet Unit
+                        </Link>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted small fst-italic">
+                      No vehicle currently assigned
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

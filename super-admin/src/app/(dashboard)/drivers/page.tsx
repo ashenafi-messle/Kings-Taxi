@@ -15,8 +15,11 @@ import {
   Car,
   Filter,
   FileText,
+  Clock,
+  Radio,
 } from 'lucide-react';
 import { PageHeader } from '../../../components/common/PageHeader';
+import { StatCard } from '../../../components/common/StatCard';
 import { DataTable, Column } from '../../../components/common/DataTable';
 import { StatusBadge } from '../../../components/common/StatusBadge';
 import { FilterDropdown } from '../../../components/common/FilterDropdown';
@@ -29,6 +32,16 @@ import { formatETB } from '../../../utils/formatters';
 export default function DriversPage() {
   const router = useRouter();
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [stats, setStats] = useState<{
+    totalDrivers: number;
+    approvedDrivers: number;
+    pendingVerification: number;
+    rejectedDrivers: number;
+    suspendedDrivers: number;
+    onlineDrivers: number;
+    driversOnTrip: number;
+    offlineDrivers: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [verificationFilter, setVerificationFilter] = useState('ALL');
   const [availabilityFilter, setAvailabilityFilter] = useState('ALL');
@@ -39,13 +52,17 @@ export default function DriversPage() {
   const fetchDrivers = async () => {
     setIsLoading(true);
     try {
-      const res = await DriverService.getDrivers({
-        verificationStatus: verificationFilter,
-        availabilityStatus: availabilityFilter,
-        city: cityFilter,
-        limit: 100,
-      });
+      const [res, statsRes] = await Promise.all([
+        DriverService.getDrivers({
+          verificationStatus: verificationFilter,
+          availabilityStatus: availabilityFilter,
+          city: cityFilter,
+          limit: 100,
+        }),
+        DriverService.getStatistics(),
+      ]);
       setDrivers(res.items);
+      setStats(statsRes);
     } catch (err) {
       console.error('Failed to load drivers:', err);
     } finally {
@@ -235,6 +252,64 @@ export default function DriversPage() {
           </Link>
         }
       />
+
+      {/* Driver KPI Cards */}
+      <div className="row g-3 mb-4">
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Total Drivers"
+            value={stats ? stats.totalDrivers : drivers.length}
+            icon={Users}
+            accentColor="gold"
+            subtext="Registered across fleet"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Approved"
+            value={stats ? stats.approvedDrivers : drivers.filter((d) => d.verificationStatus === 'APPROVED').length}
+            icon={CheckCircle}
+            accentColor="emerald"
+            subtext="Verified & licensed"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Pending Review"
+            value={stats ? stats.pendingVerification : drivers.filter((d) => d.verificationStatus === 'PENDING').length}
+            icon={Clock}
+            accentColor="amber"
+            subtext="Awaiting verification"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Online Available"
+            value={stats ? stats.onlineDrivers : drivers.filter((d) => d.availabilityStatus === 'ONLINE').length}
+            icon={Radio}
+            accentColor="emerald"
+            subtext="Ready for dispatch"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="On Active Trip"
+            value={stats ? stats.driversOnTrip : drivers.filter((d) => d.availabilityStatus === 'ON_TRIP').length}
+            icon={Car}
+            accentColor="gold"
+            subtext="Currently transporting"
+          />
+        </div>
+        <div className="col-6 col-lg-2">
+          <StatCard
+            title="Suspended"
+            value={stats ? stats.suspendedDrivers : drivers.filter((d) => d.verificationStatus === 'SUSPENDED').length}
+            icon={XCircle}
+            accentColor="rose"
+            subtext="Blocked from service"
+          />
+        </div>
+      </div>
 
       <DataTable
         columns={columns}

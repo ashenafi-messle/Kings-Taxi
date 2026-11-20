@@ -33,3 +33,9 @@ vehicleRouter.get('/:id/documents/upload-signature', (req, res) => vehicleDocume
 vehicleRouter.post('/:id/documents', (req, res) => vehicleDocumentController.createDocument(req, res));
 vehicleRouter.patch('/:id/documents/:docId/status', (req, res) => vehicleDocumentController.reviewDocument(req, res));
 vehicleRouter.delete('/:id/documents/:docId', (req, res) => vehicleDocumentController.deleteDocument(req, res));
+
+export * from './vehicleDocument.service';
+export * from './vehicleDocument.controller';
+export * from './adminVehicle.service';
+export * from './adminVehicle.controller';
+export * from './adminVehicle.routes';
