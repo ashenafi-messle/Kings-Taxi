@@ -357,7 +357,7 @@ model Passenger {
   email        String?       @unique @db.VarChar(255)
   phoneNumber  String?       @unique @map("phone_number") @db.VarChar(32)
   passwordHash String        @map("password_hash") @db.VarChar(255)
-  profileImage String?       @map("profile_image") @db.VarChar(512)
+  profileImage String?       @map("profile_image") @db.Text
   profileImagePublicId String? @map("profile_image_public_id") @db.VarChar(255)
   isVerified   Boolean       @default(false) @map("is_verified")
   accountStatus AccountStatus @default(PENDING_VERIFICATION) @map("account_status")
@@ -424,7 +424,7 @@ model Driver {
   email              String?                  @unique @db.VarChar(255)
   phoneNumber        String                   @unique @map("phone_number") @db.VarChar(32)
   passwordHash       String                   @map("password_hash") @db.VarChar(255)
-  profileImage       String?                  @map("profile_image") @db.VarChar(512)
+  profileImage       String?                  @map("profile_image") @db.Text
   accountStatus      AccountStatus            @default(PENDING_VERIFICATION) @map("account_status")
   verificationStatus DriverVerificationStatus @default(PENDING) @map("verification_status")
   availabilityStatus DriverAvailabilityStatus @default(OFFLINE) @map("availability_status")
@@ -500,7 +500,7 @@ model Vehicle {
   fuelType           String                    @default("PETROL") @map("fuel_type") @db.VarChar(32)
   transmission       String                    @default("AUTOMATIC") @db.VarChar(32)
   mileageKm          Float                     @default(0) @map("mileage_km")
-  imageUrl           String?                   @map("image_url") @db.VarChar(512)
+  imageUrl           String?                   @map("image_url") @db.Text
 
   insurancePolicyNumber String?   @map("insurance_policy_number") @db.VarChar(64)
   insuranceExpiry       DateTime? @map("insurance_expiry") @db.Date
@@ -1729,7 +1729,7 @@ model DriverDocument {
   driverId        String                @map("driver_id") @db.Uuid
   documentType    String                @map("document_type") @db.VarChar(64)
   documentNumber  String?               @map("document_number") @db.VarChar(128)
-  fileUrl         String                @map("file_url") @db.VarChar(512)
+  fileUrl         String                @map("file_url") @db.Text
   publicId        String?               @map("public_id") @db.VarChar(255)
   fileName        String?               @map("file_name") @db.VarChar(255)
   fileFormat      String?               @map("file_format") @db.VarChar(32)
@@ -1759,7 +1759,7 @@ model VehicleDocument {
   vehicleId       String                @map("vehicle_id") @db.Uuid
   documentType    String                @map("document_type") @db.VarChar(64)
   documentNumber  String?               @map("document_number") @db.VarChar(128)
-  fileUrl         String                @map("file_url") @db.VarChar(512)
+  fileUrl         String                @map("file_url") @db.Text
   publicId        String?               @map("public_id") @db.VarChar(255)
   fileName        String?               @map("file_name") @db.VarChar(255)
   fileFormat      String?               @map("file_format") @db.VarChar(32)
@@ -1838,7 +1838,7 @@ model AdminUser {
   passwordHash       String        @map("password_hash") @db.VarChar(255)
   passwordSalt       String?       @map("password_salt") @db.VarChar(64)
   role               UserRoleType  @default(SUPER_ADMIN)
-  avatarUrl          String?       @map("avatar_url") @db.VarChar(512)
+  avatarUrl          String?       @map("avatar_url") @db.Text
   department         String?       @db.VarChar(128)
   accountStatus      AccountStatus @default(ACTIVE) @map("account_status")
   mustChangePassword Boolean       @default(false) @map("must_change_password")

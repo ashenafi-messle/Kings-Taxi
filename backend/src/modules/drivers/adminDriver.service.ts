@@ -469,13 +469,13 @@ export class AdminDriverService {
           await tx.driverDocument.create({
             data: {
               driverId: driver.id,
-              documentType: doc.documentType,
-              documentNumber: doc.documentNumber || null,
+              documentType: String(doc.documentType || 'DOCUMENT').slice(0, 64),
+              documentNumber: doc.documentNumber ? String(doc.documentNumber).slice(0, 128) : null,
               fileUrl: doc.fileUrl,
-              publicId: doc.publicId || null,
-              fileName: doc.fileName || null,
-              fileFormat: doc.fileFormat || null,
-              fileSize: doc.fileSize || null,
+              publicId: doc.publicId ? String(doc.publicId).slice(0, 255) : null,
+              fileName: doc.fileName ? String(doc.fileName).slice(0, 255) : null,
+              fileFormat: doc.fileFormat ? String(doc.fileFormat).slice(0, 32) : null,
+              fileSize: doc.fileSize ? Number(doc.fileSize) : null,
               expiryDate: doc.expiryDate ? new Date(doc.expiryDate) : null,
             },
           });

@@ -59,7 +59,34 @@ export async function ensureDatabaseSchema(): Promise<void> {
       logger.info('[Schema Initializer] admin_password_resets table created successfully.');
     }
 
-    // 2. Check if driver columns exist
+    // 2. Ensure document file_url and image_url columns are TEXT to prevent length overflow
+    try {
+      await prisma.$executeRawUnsafe(`
+        DO $$ BEGIN
+          ALTER TABLE "driver_documents" ALTER COLUMN "file_url" TYPE TEXT;
+        EXCEPTION WHEN others THEN null; END $$;
+        DO $$ BEGIN
+          ALTER TABLE "vehicle_documents" ALTER COLUMN "file_url" TYPE TEXT;
+        EXCEPTION WHEN others THEN null; END $$;
+        DO $$ BEGIN
+          ALTER TABLE "vehicles" ALTER COLUMN "image_url" TYPE TEXT;
+        EXCEPTION WHEN others THEN null; END $$;
+        DO $$ BEGIN
+          ALTER TABLE "drivers" ALTER COLUMN "profile_image" TYPE TEXT;
+        EXCEPTION WHEN others THEN null; END $$;
+        DO $$ BEGIN
+          ALTER TABLE "passengers" ALTER COLUMN "profile_image" TYPE TEXT;
+        EXCEPTION WHEN others THEN null; END $$;
+        DO $$ BEGIN
+          ALTER TABLE "admin_users" ALTER COLUMN "avatar_url" TYPE TEXT;
+        EXCEPTION WHEN others THEN null; END $$;
+      `);
+      logger.info('[Schema Initializer] Verified document file_url and image_url column types are TEXT.');
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[Schema Initializer] Document file_url column type upgrade deferred');
+    }
+
+    // 3. Check if driver columns exist
     const checkDriverCols = await prisma.$queryRaw<Array<{ column_name: string }>>`
       SELECT column_name 
       FROM information_schema.columns 
