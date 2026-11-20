@@ -1,17 +1,90 @@
 /**
  * Kings Taxi Super Admin - Central API Client
  *
- * Configured for direct HTTPS communication with the Kings Taxi central backend
- * deployed on Render (https://kings-taxi.onrender.com/api/v1).
+ * Configured for direct HTTPS communication with the Kings Taxi central backend.
+ * Base URL: https://kings-taxi.onrender.com
+ * API Prefix: /api/v1
  */
 
-const RAW_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kings-taxi.onrender.com';
-const API_PREFIX = '/api/v1';
+/**
+ * Normalizes any provided base URL string to guarantee it represents the root origin
+ * without trailing slashes, /api, or /api/v1 suffixes.
+ *
+ * Guarantees:
+ *   "https://kings-taxi.onrender.com"        -> "https://kings-taxi.onrender.com"
+ *   "https://kings-taxi.onrender.com/"       -> "https://kings-taxi.onrender.com"
+ *   "https://kings-taxi.onrender.com/api"    -> "https://kings-taxi.onrender.com"
+ *   "https://kings-taxi.onrender.com/api/"   -> "https://kings-taxi.onrender.com"
+ *   "https://kings-taxi.onrender.com/api/v1" -> "https://kings-taxi.onrender.com"
+ *   "https://kings-taxi.onrender.com/api/v1/"-> "https://kings-taxi.onrender.com"
+ */
+export function getApiBaseUrl(): string {
+  const envUrl = (
+    process.env.NEXT_PUBLIC_API_URL || 'https://kings-taxi.onrender.com'
+  ).trim();
 
-// Safely construct API_BASE_URL ensuring /api/v1 is present
-export const API_BASE_URL = RAW_URL.replace(/\/+$/, '').endsWith(API_PREFIX)
-  ? RAW_URL.replace(/\/+$/, '')
-  : `${RAW_URL.replace(/\/+$/, '')}${API_PREFIX}`;
+  let base = envUrl.replace(/\/+$/, '');
+
+  // Sequentially strip any trailing /api/v1, /v1, or /api segments to get the clean host origin
+  while (
+    base.endsWith('/api/v1') ||
+    base.endsWith('/api') ||
+    base.endsWith('/v1')
+  ) {
+    if (base.endsWith('/api/v1')) {
+      base = base.slice(0, -'/api/v1'.length).replace(/\/+$/, '');
+    } else if (base.endsWith('/api')) {
+      base = base.slice(0, -'/api'.length).replace(/\/+$/, '');
+    } else if (base.endsWith('/v1')) {
+      base = base.slice(0, -'/v1'.length).replace(/\/+$/, '');
+    }
+  }
+
+  return base || 'https://kings-taxi.onrender.com';
+}
+
+export const API_BASE_URL = getApiBaseUrl();
+export const API_PREFIX = '/api/v1';
+
+/**
+ * Constructs a fully qualified API URL ensuring the /api/v1 prefix is added exactly once.
+ * Even if callers pass '/auth/admin/...', '/api/v1/auth/admin/...', or 'auth/admin/...',
+ * the resulting URL will never contain '/api/api/'.
+ */
+export function buildApiUrl(endpoint: string): string {
+  const base = getApiBaseUrl();
+  let path = (endpoint || '').trim();
+
+  if (!path.startsWith('/')) {
+    path = `/${path}`;
+  }
+
+  // Strip redundant leading /api/v1 or /api if the caller included it
+  while (path.startsWith('/api/v1/') || path.startsWith('/api/')) {
+    if (path.startsWith('/api/v1/')) {
+      path = path.slice('/api/v1'.length);
+    } else if (path.startsWith('/api/')) {
+      path = path.slice('/api'.length);
+    }
+  }
+
+  if (path === '/api/v1' || path === '/api') {
+    path = '';
+  }
+
+  if (path && !path.startsWith('/')) {
+    path = `/${path}`;
+  }
+
+  let fullUrl = `${base}${API_PREFIX}${path}`;
+
+  // Ultimate guarantee against duplicate /api segments:
+  while (fullUrl.includes('/api/api/')) {
+    fullUrl = fullUrl.replace('/api/api/', '/api/');
+  }
+
+  return fullUrl;
+}
 
 export interface RequestOptions extends RequestInit {
   timeoutMs?: number;
@@ -29,8 +102,7 @@ export async function apiRequest<T>(
     token = localStorage.getItem('kt_admin_token');
   }
 
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${API_BASE_URL}${cleanEndpoint}`;
+  const url = buildApiUrl(endpoint);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

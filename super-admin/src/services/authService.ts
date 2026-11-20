@@ -10,6 +10,7 @@ import { apiRequest } from './apiClient';
 
 const AUTH_STORAGE_KEY = 'kt_super_admin_session';
 const TOKEN_STORAGE_KEY = 'kt_admin_token';
+const REFRESH_TOKEN_STORAGE_KEY = 'kt_admin_refresh_token';
 
 export class AuthService {
   /**
@@ -51,7 +52,7 @@ export class AuthService {
           createdAt: apiRes.data.user.createdAt || new Date().toISOString(),
         };
 
-        this.saveSession(backendUser, apiRes.data.token);
+        this.saveSession(backendUser, apiRes.data.token, apiRes.data.refreshToken);
         return { success: true, user: backendUser };
       }
 
@@ -284,6 +285,83 @@ export class AuthService {
   }
 
   /**
+   * Verifies current administrator session with backend /auth/admin/me
+   */
+  static async verifySession(): Promise<{
+    success: boolean;
+    user?: AdminUser;
+    error?: string;
+  }> {
+    try {
+      const res = await apiRequest<any>('/auth/admin/me', { method: 'GET' });
+      if (res.success && res.data) {
+        const u = res.data;
+        const backendUser: AdminUser = {
+          id: u.id,
+          name: u.name || u.fullName,
+          email: u.email,
+          role: u.role,
+          avatarUrl: u.avatarUrl || '/branding/kings-taxi-monogram.png',
+          phone: u.phone || u.phoneNumber,
+          department: u.department || 'Executive Operations',
+          status: u.status || 'ACTIVE',
+          permissions: u.permissions || [],
+          mustChangePassword: false,
+          lastLoginAt: u.lastLoginAt,
+          createdAt: u.createdAt || new Date().toISOString(),
+        };
+        return { success: true, user: backendUser };
+      }
+      return { success: false, error: res.error || 'Session invalid or expired' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to verify session' };
+    }
+  }
+
+  /**
+   * Refreshes access token using stored refresh token
+   */
+  static async refreshToken(): Promise<{
+    success: boolean;
+    token?: string;
+    error?: string;
+  }> {
+    try {
+      const refreshToken =
+        typeof window !== 'undefined'
+          ? localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
+          : null;
+
+      if (!refreshToken) {
+        return { success: false, error: 'No refresh token found.' };
+      }
+
+      const res = await apiRequest<{ token: string; refreshToken?: string }>(
+        '/auth/refresh',
+        {
+          method: 'POST',
+          skipAuth: true,
+          body: JSON.stringify({ refreshToken }),
+        }
+      );
+
+      if (res.success && res.data?.token) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(TOKEN_STORAGE_KEY, res.data.token);
+          if (res.data.refreshToken) {
+            localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, res.data.refreshToken);
+          }
+        }
+        return { success: true, token: res.data.token };
+      }
+
+      return { success: false, error: res.error || 'Token refresh failed.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error refreshing token.' };
+    }
+  }
+
+  /**
    * Retrieves active session from browser storage.
    * Never defaults to simulated admin accounts.
    */
@@ -309,11 +387,14 @@ export class AuthService {
   /**
    * Persists authenticated administrator session
    */
-  static saveSession(user: AdminUser, token: string): void {
+  static saveSession(user: AdminUser, token: string, refreshToken?: string): void {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      if (refreshToken) {
+        localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+      }
       document.cookie = `kt_admin_logged_in=true; path=/; max-age=86400; SameSite=Lax; Secure`;
     } catch {
       // Non-blocking
@@ -330,6 +411,7 @@ export class AuthService {
       apiRequest('/auth/admin/logout', { method: 'POST' }).catch(() => {});
       localStorage.removeItem(AUTH_STORAGE_KEY);
       localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
       document.cookie = 'kt_admin_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     } catch {
       // Non-blocking

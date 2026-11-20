@@ -72,6 +72,7 @@ authRouter.post('/admin/forgot-password', authRateLimiter, AdminAuthController.f
 authRouter.post('/admin/resend-reset-otp', authRateLimiter, AdminAuthController.resendResetOtp);
 authRouter.post('/admin/verify-reset-otp', authRateLimiter, AdminAuthController.verifyResetOtp);
 authRouter.post('/admin/reset-password', authRateLimiter, AdminAuthController.resetPassword);
+authRouter.post('/admin/refresh', authRateLimiter, AuthController.refreshToken);
 authRouter.post(
   '/admin/change-password',
   authenticateToken,
