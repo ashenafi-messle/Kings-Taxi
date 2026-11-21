@@ -258,6 +258,10 @@ export default function VehiclesPage() {
                 { value: 'LUXURY_VIP', label: 'Luxury VIP' },
                 { value: 'TOURISM_4WD', label: 'Tourism 4WD' },
                 { value: 'MINIVAN_GROUP', label: 'Minivan Group' },
+                { value: 'COMFORT_VAN', label: 'Comfort Van' },
+                { value: 'EXECUTIVE', label: 'Executive' },
+                { value: 'SUV', label: 'SUV Premium' },
+                { value: 'MINIBUS', label: 'Minibus' },
               ]}
             />
             <FilterDropdown

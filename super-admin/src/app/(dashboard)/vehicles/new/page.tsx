@@ -199,6 +199,10 @@ export default function NewVehiclePage() {
                       <option value="LUXURY_VIP">Luxury VIP</option>
                       <option value="TOURISM_4WD">Tourism 4WD (Simien / Heritage)</option>
                       <option value="MINIVAN_GROUP">Minivan Group Shuttle</option>
+                      <option value="COMFORT_VAN">Comfort Van</option>
+                      <option value="EXECUTIVE">Executive</option>
+                      <option value="SUV">SUV Premium</option>
+                      <option value="MINIBUS">Minibus</option>
                     </select>
                   </div>
 

@@ -31,6 +31,11 @@ const DEFAULT_RATES: Record<VehicleType, FareRates> = {
   COMFORT_VAN: { baseFare: 150, perKilometreRate: 35, perMinuteRate: 3.0, minimumFare: 75, currency: 'ETB' },
   EXECUTIVE: { baseFare: 200, perKilometreRate: 45, perMinuteRate: 4.0, minimumFare: 100, currency: 'ETB' },
   MINIVAN_TOUR: { baseFare: 180, perKilometreRate: 40, perMinuteRate: 3.5, minimumFare: 90, currency: 'ETB' },
+  LUXURY_VIP: { baseFare: 250, perKilometreRate: 50, perMinuteRate: 4.5, minimumFare: 120, currency: 'ETB' },
+  TOURISM_4WD: { baseFare: 220, perKilometreRate: 45, perMinuteRate: 4.0, minimumFare: 110, currency: 'ETB' },
+  MINIVAN_GROUP: { baseFare: 190, perKilometreRate: 40, perMinuteRate: 3.5, minimumFare: 95, currency: 'ETB' },
+  SUV: { baseFare: 200, perKilometreRate: 45, perMinuteRate: 4.0, minimumFare: 100, currency: 'ETB' },
+  MINIBUS: { baseFare: 220, perKilometreRate: 42, perMinuteRate: 3.8, minimumFare: 100, currency: 'ETB' },
 };
 
 export class FareService {

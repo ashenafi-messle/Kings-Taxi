@@ -71,6 +71,11 @@ enum VehicleType {
   COMFORT_VAN
   EXECUTIVE
   MINIVAN_TOUR
+  LUXURY_VIP
+  TOURISM_4WD
+  MINIVAN_GROUP
+  SUV
+  MINIBUS
 }
 
 enum SupportedLanguage {

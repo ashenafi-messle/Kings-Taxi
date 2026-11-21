@@ -523,5 +523,147 @@ describe('Admin Drivers & Fleet Management Service Unit Tests', () => {
         })
       );
     });
+
+    it('11. registers vehicle with LUXURY_VIP category and normalizes vehicleType', async () => {
+      const mockCreated = {
+        id: 'veh-luxury-1',
+        plateNumber: '3-A99881-ET',
+        vinNumber: 'VIN-LUX-001',
+        make: 'Mercedes-Benz',
+        vehicleModel: 'E-Class',
+        manufacturingYear: 2024,
+        vehicleColor: 'Black',
+        vehicleType: 'LUXURY_VIP',
+        categoryName: 'Luxury VIP',
+        seatingCapacity: 4,
+        status: 'AVAILABLE',
+        verificationStatus: 'PENDING',
+        isActive: true,
+        fuelType: 'PETROL',
+        transmission: 'AUTOMATIC',
+        mileageKm: 5000,
+        imageUrl: null,
+        insurancePolicyNumber: null,
+        insuranceExpiry: null,
+        inspectionExpiry: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        driver: null,
+        assignments: [],
+        documents: [],
+        maintenances: [],
+        trips: [],
+      };
+
+      // 1. plate uniqueness
+      prismaMock.vehicle.findUnique.mockResolvedValueOnce(null);
+      // 2. vin uniqueness
+      prismaMock.vehicle.findUnique.mockResolvedValueOnce(null);
+      // 3. tx.vehicle.create
+      prismaMock.vehicle.create.mockResolvedValueOnce(mockCreated);
+      // 4. getVehicleById
+      prismaMock.vehicle.findUnique.mockResolvedValueOnce(mockCreated);
+
+      const vehicle = await adminVehicleService.createVehicle(
+        {
+          plateNumber: '3-A99881-ET',
+          vinNumber: 'VIN-LUX-001',
+          make: 'Mercedes-Benz',
+          model: 'E-Class',
+          year: 2024,
+          color: 'Black',
+          category: 'LUXURY_VIP' as any,
+          capacity: 4,
+        },
+        'admin@kings-taxi.com'
+      );
+
+      expect(vehicle).toBeDefined();
+      expect(vehicle.category).toBe('LUXURY_VIP');
+      expect(vehicle.categoryName).toBe('Luxury VIP');
+      expect(prismaMock.vehicle.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            vehicleType: 'LUXURY_VIP',
+            categoryName: 'Luxury VIP',
+          }),
+        })
+      );
+    });
+
+    it('12. normalizes legacy synonym LUXURY_EXECUTIVE to LUXURY_VIP', async () => {
+      const mockCreated = {
+        id: 'veh-synonym-1',
+        plateNumber: '3-A99882-ET',
+        vinNumber: null,
+        make: 'Lexus',
+        vehicleModel: 'ES 350',
+        manufacturingYear: 2023,
+        vehicleColor: 'Silver',
+        vehicleType: 'LUXURY_VIP',
+        categoryName: 'Luxury VIP',
+        seatingCapacity: 4,
+        status: 'AVAILABLE',
+        verificationStatus: 'PENDING',
+        isActive: true,
+        fuelType: 'PETROL',
+        transmission: 'AUTOMATIC',
+        mileageKm: 12000,
+        imageUrl: null,
+        insurancePolicyNumber: null,
+        insuranceExpiry: null,
+        inspectionExpiry: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        driver: null,
+        assignments: [],
+        documents: [],
+        maintenances: [],
+        trips: [],
+      };
+
+      // 1. plate uniqueness
+      prismaMock.vehicle.findUnique.mockResolvedValueOnce(null);
+      // 2. tx.vehicle.create
+      prismaMock.vehicle.create.mockResolvedValueOnce(mockCreated);
+      // 3. getVehicleById
+      prismaMock.vehicle.findUnique.mockResolvedValueOnce(mockCreated);
+
+      const vehicle = await adminVehicleService.createVehicle(
+        {
+          plateNumber: '3-A99882-ET',
+          make: 'Lexus',
+          model: 'ES 350',
+          category: 'LUXURY_EXECUTIVE' as any,
+        },
+        'admin@kings-taxi.com'
+      );
+
+      expect(vehicle).toBeDefined();
+      expect(vehicle.category).toBe('LUXURY_VIP');
+      expect(prismaMock.vehicle.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            vehicleType: 'LUXURY_VIP',
+          }),
+        })
+      );
+    });
+
+    it('13. rejects unknown vehicle category with HTTP 400 validation error', async () => {
+      await expect(
+        adminVehicleService.createVehicle(
+          {
+            plateNumber: '3-A99883-ET',
+            model: 'Flying Car',
+            category: 'HOVERCRAFT_SUBMARINE' as any,
+          },
+          'admin@kings-taxi.com'
+        )
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('Invalid vehicle category "HOVERCRAFT_SUBMARINE"'),
+      });
+    });
   });
 });

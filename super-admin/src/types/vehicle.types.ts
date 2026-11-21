@@ -2,7 +2,21 @@
  * Vehicle Entity & Fleet Management Type Definitions
  */
 
-export type VehicleCategory = 'SEDAN_STANDARD' | 'LUXURY_EXECUTIVE' | 'SUV_PREMIUM' | 'VAN_TOURISM' | 'AIRPORT_SHUTTLE';
+export type VehicleCategory =
+  | 'STANDARD_SEDAN'
+  | 'LUXURY_VIP'
+  | 'TOURISM_4WD'
+  | 'MINIVAN_GROUP'
+  | 'COMFORT_VAN'
+  | 'EXECUTIVE'
+  | 'MINIVAN_TOUR'
+  | 'SUV'
+  | 'MINIBUS'
+  | 'SEDAN_STANDARD'
+  | 'LUXURY_EXECUTIVE'
+  | 'SUV_PREMIUM'
+  | 'VAN_TOURISM'
+  | 'AIRPORT_SHUTTLE';
 export type VehicleStatus = 'AVAILABLE' | 'ASSIGNED' | 'ON_TRIP' | 'UNDER_MAINTENANCE' | 'INACTIVE' | 'ACTIVE' | 'MAINTENANCE';
 export type VehicleVerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 export type VehicleDocumentType =

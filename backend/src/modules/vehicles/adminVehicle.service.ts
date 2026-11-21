@@ -27,6 +27,79 @@ export interface VehicleListParams {
   sortOrder?: 'asc' | 'desc';
 }
 
+/**
+ * Normalizes input vehicle category / vehicleType strings into valid Prisma VehicleType enums.
+ * Supports legacy frontend category codes and common synonyms for full compatibility.
+ * Throws AppError(..., 400) when an unrecognized category is provided.
+ */
+export function normalizeVehicleType(rawType?: string | null): VehicleType {
+  if (!rawType || !String(rawType).trim()) {
+    return VehicleType.STANDARD_SEDAN;
+  }
+
+  const clean = String(rawType).trim().toUpperCase();
+
+  // Direct match to enum
+  if (Object.values(VehicleType).includes(clean as VehicleType)) {
+    return clean as VehicleType;
+  }
+
+  // Synonym mappings for frontend compatibility and legacy categories
+  const synonymMap: Record<string, VehicleType> = {
+    SEDAN_STANDARD: VehicleType.STANDARD_SEDAN,
+    SEDAN: VehicleType.STANDARD_SEDAN,
+    STANDARD: VehicleType.STANDARD_SEDAN,
+    LUXURY_EXECUTIVE: VehicleType.LUXURY_VIP,
+    VIP: VehicleType.LUXURY_VIP,
+    LUXURY: VehicleType.LUXURY_VIP,
+    EXECUTIVE_LUXURY: VehicleType.LUXURY_VIP,
+    SUV_PREMIUM: VehicleType.SUV,
+    '4WD': VehicleType.TOURISM_4WD,
+    TOURISM: VehicleType.TOURISM_4WD,
+    VAN_TOURISM: VehicleType.MINIVAN_GROUP,
+    VAN: VehicleType.COMFORT_VAN,
+    AIRPORT_SHUTTLE: VehicleType.MINIVAN_GROUP,
+    GROUP_SHUTTLE: VehicleType.MINIVAN_GROUP,
+    MINIVAN: VehicleType.MINIVAN_GROUP,
+    BUS: VehicleType.MINIBUS,
+  };
+
+  if (synonymMap[clean]) {
+    return synonymMap[clean];
+  }
+
+  const allowed = Object.values(VehicleType).join(', ');
+  throw new AppError(`Invalid vehicle category "${rawType}". Allowed categories: ${allowed}`, 400);
+}
+
+/**
+ * Gets a clean human-readable display name for a given VehicleType.
+ */
+export function getCategoryDisplayName(type: VehicleType): string {
+  switch (type) {
+    case VehicleType.STANDARD_SEDAN:
+      return 'Standard Sedan';
+    case VehicleType.LUXURY_VIP:
+      return 'Luxury VIP';
+    case VehicleType.TOURISM_4WD:
+      return 'Tourism 4WD';
+    case VehicleType.MINIVAN_GROUP:
+      return 'Minivan Group';
+    case VehicleType.COMFORT_VAN:
+      return 'Comfort Van';
+    case VehicleType.EXECUTIVE:
+      return 'Executive';
+    case VehicleType.MINIVAN_TOUR:
+      return 'Minivan Tour';
+    case VehicleType.SUV:
+      return 'SUV Premium';
+    case VehicleType.MINIBUS:
+      return 'Minibus';
+    default:
+      return String(type).replace(/_/g, ' ');
+  }
+}
+
 export interface CreateVehiclePayload {
   plateNumber: string;
   vinNumber?: string;
@@ -34,7 +107,8 @@ export interface CreateVehiclePayload {
   model: string;
   year?: number;
   color?: string;
-  category?: VehicleType;
+  category?: VehicleType | string;
+  vehicleType?: VehicleType | string;
   categoryName?: string;
   capacity?: number;
   fuelType?: string;
@@ -64,7 +138,8 @@ export interface UpdateVehiclePayload {
   model?: string;
   year?: number;
   color?: string;
-  category?: VehicleType;
+  category?: VehicleType | string;
+  vehicleType?: VehicleType | string;
   categoryName?: string;
   capacity?: number;
   fuelType?: string;
@@ -127,7 +202,11 @@ export class AdminVehicleService {
     }
 
     if (params.category && params.category !== 'ALL') {
-      where.vehicleType = params.category as VehicleType;
+      try {
+        where.vehicleType = normalizeVehicleType(params.category);
+      } catch {
+        where.vehicleType = params.category as VehicleType;
+      }
     }
 
     if (params.status && params.status !== 'ALL') {
@@ -389,6 +468,11 @@ export class AdminVehicleService {
   async createVehicle(payload: CreateVehiclePayload, adminIdentifier: string) {
     const cleanPlate = payload.plateNumber.trim().toUpperCase();
 
+    // Normalize and validate service category
+    const rawCategory = payload.category || (payload as any).vehicleType;
+    const vehicleType = normalizeVehicleType(rawCategory);
+    const categoryName = payload.categoryName || getCategoryDisplayName(vehicleType);
+
     // Verify plate uniqueness
     const existingPlate = await prisma.vehicle.findUnique({
       where: { plateNumber: cleanPlate },
@@ -486,8 +570,8 @@ export class AdminVehicleService {
             vehicleModel: payload.model.trim(),
             manufacturingYear: payload.year ? Number(payload.year) : 2022,
             vehicleColor: payload.color || 'White',
-            vehicleType: (payload.category as VehicleType) || VehicleType.STANDARD_SEDAN,
-            categoryName: payload.categoryName || null,
+            vehicleType,
+            categoryName,
             seatingCapacity: payload.capacity ? Number(payload.capacity) : 4,
             status: VehicleOperationalStatus.AVAILABLE,
             verificationStatus: VehicleVerificationStatus.PENDING,
@@ -570,7 +654,14 @@ export class AdminVehicleService {
     if (payload.color) data.vehicleColor = payload.color;
     if (payload.year) data.manufacturingYear = Number(payload.year);
     if (payload.capacity) data.seatingCapacity = Number(payload.capacity);
-    if (payload.category) data.vehicleType = payload.category as VehicleType;
+    const rawCategory = payload.category || (payload as any).vehicleType;
+    if (rawCategory) {
+      const vType = normalizeVehicleType(rawCategory);
+      data.vehicleType = vType;
+      if (!payload.categoryName) {
+        data.categoryName = getCategoryDisplayName(vType);
+      }
+    }
     if (payload.categoryName !== undefined) data.categoryName = payload.categoryName;
     if (payload.fuelType) data.fuelType = payload.fuelType;
     if (payload.transmission) data.transmission = payload.transmission;
