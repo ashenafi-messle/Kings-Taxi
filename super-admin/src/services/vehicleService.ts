@@ -1,5 +1,5 @@
 import { Vehicle, VehicleFilterParams, PaginatedResult } from '../types';
-import { apiRequest } from './apiClient';
+import { apiRequest, buildApiUrl, apiFetchBlob, getStoredAdminToken, BlobResult } from './apiClient';
 import { mockVehicles } from './mockData';
 
 let fallbackVehiclesData: Vehicle[] = [...mockVehicles];
@@ -401,5 +401,19 @@ export class VehicleService {
     const initialLen = fallbackVehiclesData.length;
     fallbackVehiclesData = fallbackVehiclesData.filter((v) => v.id !== id);
     return fallbackVehiclesData.length < initialLen;
+  }
+
+  /**
+   * Securely retrieve vehicle document binary stream as a Blob with automatic Bearer token injection
+   */
+  static async fetchDocumentBlob(documentId: string): Promise<BlobResult> {
+    return apiFetchBlob(`/admin/documents/${documentId}/preview`);
+  }
+
+  /**
+   * Securely download vehicle document binary as a Blob with automatic Bearer token injection
+   */
+  static async downloadDocumentBlob(documentId: string): Promise<BlobResult> {
+    return apiFetchBlob(`/admin/documents/${documentId}/download`);
   }
 }

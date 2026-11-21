@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { buildApiUrl } from '../../services/apiClient';
+import { apiFetchBlob, buildApiUrl, getStoredAdminToken } from '../../services/apiClient';
 import {
   ZoomIn,
   ZoomOut,
@@ -97,11 +97,21 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [imageLoading, setImageLoading] = useState<boolean>(true);
   const [imageError, setImageError] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isSessionExpired, setIsSessionExpired] = useState<boolean>(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [isPdf, setIsPdf] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [retryCount, setRetryCount] = useState<number>(0);
   const [actionType, setActionType] = useState<'APPROVE' | 'REJECT' | 'RESUBMIT' | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [reviewNotes, setReviewNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Check if string is a valid database UUID
+  const isUuid = (val?: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val || '');
 
   useEffect(() => {
     if (documents.length > 0 && (!selectedDocId || !documents.some((d) => d.id === selectedDocId))) {
@@ -109,9 +119,100 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
     }
   }, [documents, selectedDocId]);
 
-  if (!isOpen) return null;
-
   const activeDoc = documents.find((d) => d.id === selectedDocId) || documents[0];
+
+  // Option A — Authenticated Blob Preview & Revocation Lifecycle
+  useEffect(() => {
+    let isCancelled = false;
+    let createdObjectUrl: string | null = null;
+
+    async function loadProtectedDocument() {
+      if (!activeDoc) {
+        setBlobUrl(null);
+        setImageLoading(false);
+        return;
+      }
+
+      setImageLoading(true);
+      setFetchError(null);
+      setImageError(false);
+      setIsSessionExpired(false);
+
+      // 1. Direct Base64 Data URI
+      if (activeDoc.fileUrl?.startsWith('data:')) {
+        const detectedPdf =
+          activeDoc.fileFormat?.toLowerCase() === 'pdf' ||
+          activeDoc.fileName?.toLowerCase().endsWith('.pdf') ||
+          activeDoc.fileUrl.startsWith('data:application/pdf');
+        setIsPdf(detectedPdf);
+        setBlobUrl(activeDoc.fileUrl);
+        setImageLoading(false);
+        return;
+      }
+
+      // 2. Authenticated Protected Database Document via Central API Client
+      const hasPreviewEndpoint = activeDoc.previewUrl || (activeDoc.id && isUuid(activeDoc.id));
+      if (hasPreviewEndpoint) {
+        const endpoint = activeDoc.previewUrl || `/admin/documents/${activeDoc.id}/preview`;
+        const res = await apiFetchBlob(endpoint);
+
+        if (isCancelled) return;
+
+        if (res.success && res.blob) {
+          const detectedPdf =
+            res.contentType?.includes('application/pdf') ||
+            activeDoc.fileFormat?.toLowerCase() === 'pdf' ||
+            activeDoc.fileName?.toLowerCase().endsWith('.pdf') ||
+            activeDoc.fileUrl?.toLowerCase().includes('.pdf') ||
+            false;
+
+          setIsPdf(detectedPdf);
+          createdObjectUrl = URL.createObjectURL(res.blob);
+          setBlobUrl(createdObjectUrl);
+          setImageLoading(false);
+          return;
+        }
+
+        // Authenticated request failed
+        if (res.isExpired) {
+          setIsSessionExpired(true);
+          setFetchError('Your administrator session has expired. Please log in again.');
+        } else {
+          setFetchError(res.error || 'Failed to authenticate and retrieve document preview.');
+        }
+        setImageLoading(false);
+        setImageError(true);
+        return;
+      }
+
+      // 3. Fallback for mock/external HTTP image URLs without database record
+      if (activeDoc.fileUrl?.startsWith('http://') || activeDoc.fileUrl?.startsWith('https://')) {
+        const detectedPdf =
+          activeDoc.fileFormat?.toLowerCase() === 'pdf' ||
+          activeDoc.fileName?.toLowerCase().endsWith('.pdf') ||
+          activeDoc.fileUrl.toLowerCase().includes('.pdf');
+        setIsPdf(detectedPdf);
+        setBlobUrl(activeDoc.fileUrl);
+        setImageLoading(false);
+        return;
+      }
+
+      setFetchError('No document file or storage reference is available for preview.');
+      setImageLoading(false);
+      setImageError(true);
+    }
+
+    loadProtectedDocument();
+
+    return () => {
+      isCancelled = true;
+      if (createdObjectUrl) {
+        URL.revokeObjectURL(createdObjectUrl);
+      }
+    };
+  }, [activeDoc?.id, activeDoc?.fileUrl, activeDoc?.previewUrl, retryCount]);
+
+  if (!isOpen) return null;
 
   const handleSelectDoc = (id: string) => {
     setSelectedDocId(id);
@@ -119,6 +220,7 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
     setRotationDegree(0);
     setImageLoading(true);
     setImageError(false);
+    setFetchError(null);
     setActionType(null);
     setRejectionReason('');
     setReviewNotes('');
@@ -136,6 +238,59 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
   const handleResetView = () => {
     setZoomScale(1);
     setRotationDegree(0);
+  };
+
+  const handleDownload = async () => {
+    if (!activeDoc) return;
+    try {
+      setIsDownloading(true);
+      const ext = isPdf ? 'pdf' : (activeDoc.fileFormat || 'jpg').toLowerCase().replace(/^\./, '');
+      const downloadFilename = activeDoc.fileName || `${(activeDoc.documentType || 'document').toLowerCase()}.${ext}`;
+
+      // If we already have the authenticated blob in memory, download directly!
+      if (blobUrl && blobUrl.startsWith('blob:')) {
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = downloadFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      // Otherwise fetch via authenticated API client
+      const endpoint = activeDoc.downloadUrl || (isUuid(activeDoc.id) ? `/admin/documents/${activeDoc.id}/download` : '');
+      if (endpoint) {
+        const res = await apiFetchBlob(endpoint);
+        if (res.success && res.blob) {
+          const tempUrl = URL.createObjectURL(res.blob);
+          const link = document.createElement('a');
+          link.href = tempUrl;
+          link.download = res.fileName || downloadFilename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
+          return;
+        }
+      }
+
+      if (activeDoc.fileUrl) {
+        window.open(activeDoc.fileUrl, '_blank');
+      }
+    } catch (err: any) {
+      console.error('Failed to download document:', err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleOpenNewTab = () => {
+    if (blobUrl) {
+      window.open(blobUrl, '_blank');
+    } else if (activeDoc?.fileUrl) {
+      window.open(activeDoc.fileUrl, '_blank');
+    }
   };
 
   const handleSubmitReview = async () => {
@@ -177,49 +332,6 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
       setIsSubmitting(false);
     }
   };
-
-  // Determine file type and endpoints
-  const isPdf =
-    activeDoc?.fileFormat?.toLowerCase() === 'pdf' ||
-    activeDoc?.fileName?.toLowerCase().endsWith('.pdf') ||
-    activeDoc?.fileUrl?.toLowerCase().includes('.pdf');
-
-  // Check if string is a valid database UUID
-  const isUuid = (val?: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val || '');
-
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') || '' : '';
-
-  // Build authorized URLs with token for seamless iframe/stream access
-  let effectivePreviewUrl = '';
-  if (activeDoc?.previewUrl) {
-    if (activeDoc.previewUrl.startsWith('http')) {
-      const u = new URL(activeDoc.previewUrl);
-      if (token) u.searchParams.set('token', token);
-      effectivePreviewUrl = u.toString();
-    } else {
-      effectivePreviewUrl = `${buildApiUrl(activeDoc.previewUrl)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    }
-  } else if (activeDoc?.id && isUuid(activeDoc.id)) {
-    effectivePreviewUrl = `${buildApiUrl(`/admin/documents/${activeDoc.id}/preview`)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-  } else if (activeDoc?.fileUrl && (activeDoc.fileUrl.startsWith('http') || activeDoc.fileUrl.startsWith('data:'))) {
-    effectivePreviewUrl = activeDoc.fileUrl;
-  }
-
-  let effectiveDownloadUrl = '';
-  if (activeDoc?.downloadUrl) {
-    if (activeDoc.downloadUrl.startsWith('http')) {
-      const u = new URL(activeDoc.downloadUrl);
-      if (token) u.searchParams.set('token', token);
-      effectiveDownloadUrl = u.toString();
-    } else {
-      effectiveDownloadUrl = `${buildApiUrl(activeDoc.downloadUrl)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    }
-  } else if (activeDoc?.id && isUuid(activeDoc.id)) {
-    effectiveDownloadUrl = `${buildApiUrl(`/admin/documents/${activeDoc.id}/download`)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-  } else if (activeDoc?.fileUrl && (activeDoc.fileUrl.startsWith('http') || activeDoc.fileUrl.startsWith('data:'))) {
-    effectiveDownloadUrl = activeDoc.fileUrl;
-  }
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes || bytes <= 0) return 'Unknown size';
@@ -454,26 +566,31 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
                           </div>
                         )}
 
-                        <a
-                          href={effectiveDownloadUrl}
-                          download={activeDoc.fileName || 'document'}
+                        <button
+                          type="button"
+                          onClick={handleDownload}
+                          disabled={isDownloading || (!blobUrl && !activeDoc.fileUrl)}
                           className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
                           title="Download document file"
                         >
-                          <Download size={14} />
-                          <span className="d-none d-sm-inline">Download</span>
-                        </a>
+                          {isDownloading ? (
+                            <span className="spinner-border spinner-border-sm" role="status" />
+                          ) : (
+                            <Download size={14} />
+                          )}
+                          <span className="d-none d-sm-inline">{isDownloading ? 'Downloading...' : 'Download'}</span>
+                        </button>
 
-                        <a
-                          href={effectivePreviewUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={handleOpenNewTab}
+                          disabled={!blobUrl && !activeDoc.fileUrl}
                           className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
                           title="Open document in a dedicated browser tab"
                         >
                           <ExternalLink size={14} />
                           <span className="d-none d-sm-inline">New Tab</span>
-                        </a>
+                        </button>
                       </div>
                     </div>
 
@@ -489,28 +606,51 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
                       {imageLoading && (
                         <div className="position-absolute d-flex flex-column align-items-center justify-content-center text-light z-1">
                           <div className="spinner-border spinner-border-sm text-gold mb-2" role="status" />
-                          <span className="small opacity-75">Loading authorized document preview...</span>
+                          <span className="small opacity-75">Retrieving authenticated document stream...</span>
                         </div>
                       )}
 
-                      {!effectivePreviewUrl ? (
+                      {!imageLoading && fetchError ? (
+                        <div className="text-center text-white-50 p-4">
+                          <AlertTriangle size={36} className="text-warning mb-2 mx-auto" />
+                          <h6 className="text-white fw-bold mb-1">Unable to Display Document</h6>
+                          <p className="small mb-3 text-white-50" style={{ maxWidth: '420px' }}>
+                            {fetchError}
+                          </p>
+                          <div className="d-flex align-items-center justify-content-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setRetryCount((c) => c + 1)}
+                              className="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
+                            >
+                              <RefreshCw size={14} />
+                              <span>Retry Loading</span>
+                            </button>
+                            {isSessionExpired && (
+                              <a href="/login" className="btn btn-sm btn-gold text-dark fw-semibold">
+                                Sign In Again
+                              </a>
+                            )}
+                            {activeDoc?.fileUrl && (
+                              <a
+                                href={activeDoc.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-sm btn-outline-warning"
+                              >
+                                Try Direct Link
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ) : !imageLoading && !blobUrl ? (
                         <div className="text-center text-white-50 p-4">
                           <AlertTriangle size={32} className="text-warning mb-2 mx-auto" />
-                          <p className="small mb-2">No file preview URL available for this document.</p>
-                          {activeDoc?.fileUrl && (
-                            <a
-                              href={activeDoc.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="btn btn-sm btn-gold text-dark fw-semibold"
-                            >
-                              Open Source Link
-                            </a>
-                          )}
+                          <p className="small mb-2">No file preview available for this document.</p>
                         </div>
                       ) : isPdf ? (
                         <iframe
-                          src={effectivePreviewUrl}
+                          src={blobUrl!}
                           title="PDF Document Preview"
                           className="w-100 h-100 border-0"
                           style={{ minHeight: isFullscreen ? '520px' : '380px' }}
@@ -528,18 +668,18 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
                           {imageError ? (
                             <div className="text-center text-white-50 p-4">
                               <AlertTriangle size={32} className="text-warning mb-2 mx-auto" />
-                              <p className="small mb-2">Preview unavailable directly in frame.</p>
-                              <a
-                                href={effectiveDownloadUrl}
+                              <p className="small mb-2">Image preview could not be rendered.</p>
+                              <button
+                                type="button"
+                                onClick={handleDownload}
                                 className="btn btn-sm btn-gold text-dark fw-semibold"
-                                download
                               >
                                 Download to Inspect
-                              </a>
+                              </button>
                             </div>
                           ) : (
                             <img
-                              src={effectivePreviewUrl}
+                              src={blobUrl!}
                               alt={activeDoc.documentType}
                               className="img-fluid rounded transition-all"
                               onLoad={() => setImageLoading(false)}

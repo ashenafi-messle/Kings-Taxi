@@ -37,6 +37,9 @@ vi.mock('../../src/core/database/prisma', () => ({
 
 import { adminDocumentService } from '../../src/modules/documents/adminDocument.service';
 import { AppError } from '../../src/core/errors/appError';
+import { authenticateToken, requireRole } from '../../src/core/middleware/auth.middleware';
+import jwt from 'jsonwebtoken';
+import { env } from '../../src/config/env';
 
 const prismaMock = mockPrismaClient;
 
@@ -305,6 +308,111 @@ describe('AdminDocumentService Unit Tests', () => {
         where: { id: 'veh-99' },
         data: { verificationStatus: VehicleVerificationStatus.VERIFIED },
       });
+    });
+  });
+
+  describe('Authentication & RBAC Middleware for Document Verification', () => {
+    it('returns 401 UNAUTHORIZED when Authorization header and token query are missing', () => {
+      const req: any = { headers: {}, query: {} };
+      const res: any = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      const next = vi.fn();
+
+      authenticateToken(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'UNAUTHORIZED',
+          message: 'Missing or malformed Authorization header',
+        })
+      );
+    });
+
+    it('authenticates valid Bearer token and attaches decoded admin user', () => {
+      const payload = { sub: 'admin-1', role: 'SUPER_ADMIN', email: 'admin@kingstaxi.com' };
+      const token = jwt.sign(payload, env.JWT_ACCESS_SECRET);
+
+      const req: any = {
+        headers: { authorization: `Bearer ${token}` },
+        query: {},
+      };
+      const res: any = { locals: {} };
+      const next = vi.fn();
+
+      authenticateToken(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(req.user).toBeDefined();
+      expect(req.user.sub).toBe('admin-1');
+      expect(req.user.role).toBe('SUPER_ADMIN');
+    });
+
+    it('authenticates token passed via query parameter (?token=...) as fallback for browser streams', () => {
+      const payload = { sub: 'admin-2', role: 'ADMIN', email: 'staff@kingstaxi.com' };
+      const token = jwt.sign(payload, env.JWT_ACCESS_SECRET);
+
+      const req: any = {
+        headers: {},
+        query: { token },
+      };
+      const res: any = { locals: {} };
+      const next = vi.fn();
+
+      authenticateToken(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(req.user).toBeDefined();
+      expect(req.user.sub).toBe('admin-2');
+    });
+
+    it('returns 401 TOKEN_EXPIRED when access token has expired', () => {
+      const payload = { sub: 'admin-3', role: 'ADMIN' };
+      const expiredToken = jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: -10 });
+
+      const req: any = {
+        headers: { authorization: `Bearer ${expiredToken}` },
+        query: {},
+      };
+      const res: any = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      const next = vi.fn();
+
+      authenticateToken(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'TOKEN_EXPIRED',
+          message: expect.stringContaining('expired'),
+        })
+      );
+    });
+
+    it('enforces RBAC: allows ADMIN and SUPER_ADMIN but rejects PASSENGER with 403 FORBIDDEN', () => {
+      const guard = requireRole(['ADMIN', 'SUPER_ADMIN']);
+
+      const passengerReq: any = { user: { sub: 'p-1', role: 'PASSENGER' } };
+      const passengerRes: any = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      const next1 = vi.fn();
+      guard(passengerReq, passengerRes, next1);
+      expect(next1).not.toHaveBeenCalled();
+      expect(passengerRes.status).toHaveBeenCalledWith(403);
+
+      const adminReq: any = { user: { sub: 'a-1', role: 'ADMIN' } };
+      const adminRes: any = {};
+      const next2 = vi.fn();
+      guard(adminReq, adminRes, next2);
+      expect(next2).toHaveBeenCalled();
     });
   });
 });

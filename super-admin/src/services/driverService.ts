@@ -1,5 +1,5 @@
 import { Driver, DriverDocument, DriverFilterParams, PaginatedResult } from '../types';
-import { apiRequest, buildApiUrl } from './apiClient';
+import { apiRequest, buildApiUrl, apiFetchBlob, getStoredAdminToken, BlobResult } from './apiClient';
 import { mockDrivers } from './mockData';
 
 let fallbackDriversData: Driver[] = [...mockDrivers];
@@ -373,10 +373,7 @@ export class DriverService {
    * Build authorized preview URL for an administrator
    */
   static getDocumentPreviewUrl(documentId: string): string {
-    let token = '';
-    if (typeof window !== 'undefined') {
-      token = localStorage.getItem('accessToken') || '';
-    }
+    const token = getStoredAdminToken() || '';
     const base = buildApiUrl(`/admin/documents/${documentId}/preview`);
     return `${base}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   }
@@ -385,12 +382,23 @@ export class DriverService {
    * Build authorized download URL for an administrator
    */
   static getDocumentDownloadUrl(documentId: string): string {
-    let token = '';
-    if (typeof window !== 'undefined') {
-      token = localStorage.getItem('accessToken') || '';
-    }
+    const token = getStoredAdminToken() || '';
     const base = buildApiUrl(`/admin/documents/${documentId}/download`);
     return `${base}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  }
+
+  /**
+   * Securely retrieve document binary stream as a Blob with automatic Bearer token injection
+   */
+  static async fetchDocumentBlob(documentId: string): Promise<BlobResult> {
+    return apiFetchBlob(`/admin/documents/${documentId}/preview`);
+  }
+
+  /**
+   * Securely download document binary as a Blob with automatic Bearer token injection
+   */
+  static async downloadDocumentBlob(documentId: string): Promise<BlobResult> {
+    return apiFetchBlob(`/admin/documents/${documentId}/download`);
   }
 
   /**

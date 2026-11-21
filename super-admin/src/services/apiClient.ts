@@ -290,3 +290,134 @@ export async function apiRequest<T>(
     };
   }
 }
+
+export interface BlobResult {
+  success: boolean;
+  blob?: Blob;
+  contentType?: string;
+  fileName?: string;
+  error?: string;
+  isExpired?: boolean;
+}
+
+/**
+ * Executes an authenticated binary stream or document fetch with automatic Bearer token injection
+ * and single-flight token refresh. Returns a browser Blob for safe temporary object URL creation.
+ */
+export async function apiFetchBlob(
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<BlobResult> {
+  const { timeoutMs = 30000, skipAuth = false, _retried = false, ...fetchOptions } = options;
+
+  let token: string | null = null;
+  if (!skipAuth && typeof window !== 'undefined') {
+    token = localStorage.getItem('kt_admin_token');
+  }
+
+  const url = buildApiUrl(endpoint);
+
+  const headers: Record<string, string> = {
+    Accept: '*/*',
+    ...(options.headers as Record<string, string>),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      ...fetchOptions,
+      credentials: 'include',
+      headers,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      if (res.status === 401 && !skipAuth && !_retried) {
+        if (!refreshPromise) {
+          refreshPromise = executeSingleFlightRefresh().finally(() => {
+            refreshPromise = null;
+          });
+        }
+
+        const newAccessToken = await refreshPromise;
+
+        if (newAccessToken) {
+          const retryHeaders = {
+            ...headers,
+            Authorization: `Bearer ${newAccessToken}`,
+          };
+          return apiFetchBlob(endpoint, {
+            ...options,
+            _retried: true,
+            headers: retryHeaders,
+          });
+        }
+
+        return {
+          success: false,
+          error: 'Your administrator session has expired. Please sign in again.',
+          isExpired: true,
+        };
+      }
+
+      const errText = await res.text().catch(() => '');
+      let errMsg = `Failed to load document (HTTP ${res.status})`;
+      try {
+        const json = JSON.parse(errText);
+        errMsg = json?.message || json?.error?.message || errMsg;
+      } catch {
+        if (errText) errMsg = errText;
+      }
+
+      return {
+        success: false,
+        error: errMsg,
+      };
+    }
+
+    const blob = await res.blob();
+    const contentType = res.headers.get('content-type') || blob.type || 'application/octet-stream';
+
+    // Extract filename from Content-Disposition if present
+    let fileName: string | undefined;
+    const disposition = res.headers.get('content-disposition');
+    if (disposition) {
+      const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      if (match && match[1]) {
+        fileName = decodeURIComponent(match[1]);
+      }
+    }
+
+    return {
+      success: true,
+      blob,
+      contentType,
+      fileName,
+    };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      return {
+        success: false,
+        error: 'Document preview request timed out. Please retry.',
+      };
+    }
+    return {
+      success: false,
+      error: err.message || 'Failed to fetch document.',
+    };
+  }
+}
+
+export function getStoredAdminToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('kt_admin_token');
+}

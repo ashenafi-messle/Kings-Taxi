@@ -25,8 +25,8 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
   const authHeader = req.headers['authorization'];
   let token: string | undefined;
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.split(' ')[1];
+  if (authHeader && /^Bearer\s+/i.test(authHeader)) {
+    token = authHeader.replace(/^Bearer\s+/i, '').trim();
   } else if (req.query && typeof req.query.token === 'string' && req.query.token.trim()) {
     token = req.query.token.trim();
   }
