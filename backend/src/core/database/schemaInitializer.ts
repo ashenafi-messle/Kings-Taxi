@@ -80,6 +80,9 @@ export async function ensureDatabaseSchema(): Promise<void> {
         DO $$ BEGIN
           ALTER TABLE "admin_users" ALTER COLUMN "avatar_url" TYPE TEXT;
         EXCEPTION WHEN others THEN null; END $$;
+        DO $$ BEGIN
+          ALTER TABLE "refresh_tokens" ADD COLUMN IF NOT EXISTS "admin_id" UUID REFERENCES "admin_users"("id") ON DELETE CASCADE;
+        EXCEPTION WHEN others THEN null; END $$;
       `);
       logger.info('[Schema Initializer] Verified document file_url and image_url column types are TEXT.');
     } catch (err: any) {

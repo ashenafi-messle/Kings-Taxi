@@ -16,8 +16,14 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // If already authenticated with valid session, redirect directly to dashboard
+  // If already authenticated with valid session, redirect directly to dashboard; or show session expired banner
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('expired') === '1' || searchParams.get('session_expired') === 'true') {
+        setErrorMessage('Your administrator session has expired. Please sign in again.');
+      }
+    }
     const session = AuthService.getStoredSession();
     if (session.user && session.token) {
       router.replace('/');

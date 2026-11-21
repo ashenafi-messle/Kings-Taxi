@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../../core/database/prisma';
+import { prisma, isDbConnectionError } from '../../core/database/prisma';
 import { env } from '../../config/env';
 import { logger } from '../../core/logging/logger';
 import { AppError } from '../../core/errors/appError';
@@ -84,6 +84,22 @@ export interface AdminResetSessionData {
 // In-Memory Admin Fallback Store (Ensures seamless local dev & test reliability when DB SSH tunnel is offline)
 const inMemoryAdmins = new Map<string, AdminUserRecord>();
 const inMemoryResets = new Map<string, AdminResetSessionData>();
+
+export interface AdminRefreshTokenRecord {
+  id: string;
+  userId: string;
+  userType: UserRoleType;
+  tokenHash: string;
+  familyId: string;
+  isRevoked: boolean;
+  revokedAt: Date | null;
+  expiresAt: Date;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  adminId?: string | null;
+  createdAt: Date;
+}
+const inMemoryAdminRefreshTokens = new Map<string, AdminRefreshTokenRecord>();
 
 // Initialize default Super Admin accounts synchronously so inMemoryAdmins is always populated
 function initInMemoryAdmins() {
@@ -255,7 +271,7 @@ export class AdminAuthService {
       // Non-blocking in fallback mode
     }
 
-    // 5. Generate secure JWT token (12 hours)
+    // 5. Generate secure JWT token
     const token = jwt.sign(
       {
         sub: admin.id,
@@ -263,10 +279,16 @@ export class AdminAuthService {
         email: admin.email,
       },
       env.JWT_ACCESS_SECRET,
-      { expiresIn: '12h' }
+      { expiresIn: (env.ACCESS_TOKEN_EXPIRY || '15m') as any }
     );
 
-    const refreshToken = `kt_adm_rf_${admin.id}_${Date.now()}`;
+    const refreshToken = await this.createRefreshToken(
+      admin.id,
+      admin.role,
+      undefined,
+      params.ipAddress,
+      params.userAgent
+    );
 
     // 6. Record successful audit log
     await auditService.record({
@@ -301,6 +323,301 @@ export class AdminAuthService {
         createdAt: admin.createdAt.toISOString(),
       },
     };
+  }
+
+  /**
+   * Persists and rotates cryptographically secure refresh tokens in PostgreSQL
+   */
+  public async createRefreshToken(
+    adminId: string,
+    role: UserRoleType,
+    familyId?: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<string> {
+    const rawToken = `kt_adm_rf_${Date.now()}_${crypto.randomBytes(32).toString('hex')}`;
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const tokenFamily = familyId || `fam_adm_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+    const id = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const recordData: AdminRefreshTokenRecord = {
+      id,
+      userId: adminId,
+      userType: role,
+      tokenHash,
+      familyId: tokenFamily,
+      isRevoked: false,
+      revokedAt: null,
+      expiresAt,
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null,
+      adminId,
+      createdAt: new Date(),
+    };
+
+    // Store in-memory for resilience & tests
+    inMemoryAdminRefreshTokens.set(tokenHash, recordData);
+
+    try {
+      await prisma.refreshToken.create({
+        data: {
+          id,
+          userId: adminId,
+          userType: role,
+          tokenHash,
+          familyId: tokenFamily,
+          expiresAt,
+          ipAddress: ipAddress || null,
+          userAgent: userAgent || null,
+          adminId,
+        },
+      });
+    } catch (err: any) {
+      if (!isDbConnectionError(err)) {
+        logger.warn({ err: err.message }, '[AdminAuthService] Non-fatal DB error saving refresh token');
+      }
+    }
+
+    return rawToken;
+  }
+
+  /**
+   * Atomic Admin Token Refresh with Family Reuse Detection
+   */
+  public async refreshToken(rawRefreshToken: string, ipAddress?: string, userAgent?: string) {
+    if (!rawRefreshToken || typeof rawRefreshToken !== 'string') {
+      throw new AppError('Refresh token is required', 400, 'BAD_REQUEST');
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+
+    let storedToken: any = null;
+    let usingMemoryFallback = false;
+
+    try {
+      storedToken = await prisma.refreshToken.findUnique({
+        where: { tokenHash },
+        include: { admin: true },
+      });
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        storedToken = inMemoryAdminRefreshTokens.get(tokenHash) || null;
+        usingMemoryFallback = true;
+      } else {
+        logger.error({ err }, '[AdminAuthService] Database error looking up refresh token');
+        throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+      }
+    }
+
+    if (!storedToken && inMemoryAdminRefreshTokens.has(tokenHash)) {
+      storedToken = inMemoryAdminRefreshTokens.get(tokenHash);
+      usingMemoryFallback = true;
+    }
+
+    if (!storedToken) {
+      throw new AppError('Refresh token is invalid or expired', 401, 'INVALID_REFRESH_TOKEN');
+    }
+
+    // 1. REUSE DETECTION: If token is already revoked, an attacker or compromised client is replaying it!
+    if (storedToken.isRevoked) {
+      logger.warn(
+        { familyId: storedToken.familyId, adminId: storedToken.userId },
+        '[SecurityAlert] Revoked admin refresh token replayed! Terminating entire token family.'
+      );
+
+      // Revoke in memory
+      for (const [hash, tok] of inMemoryAdminRefreshTokens.entries()) {
+        if (tok.familyId === storedToken.familyId && !tok.isRevoked) {
+          inMemoryAdminRefreshTokens.set(hash, { ...tok, isRevoked: true, revokedAt: new Date() });
+        }
+      }
+
+      // Revoke in PostgreSQL
+      if (!usingMemoryFallback) {
+        try {
+          await prisma.refreshToken.updateMany({
+            where: { familyId: storedToken.familyId, isRevoked: false },
+            data: { isRevoked: true, revokedAt: new Date() },
+          });
+        } catch (err: any) {
+          if (!isDbConnectionError(err)) {
+            logger.error({ err, familyId: storedToken.familyId }, '[SecurityAlert] Failed to revoke compromised admin token family in DB');
+            throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+          }
+        }
+      }
+
+      throw new AppError(
+        'Compromised session token replayed. All sessions have been terminated for security.',
+        401,
+        'REFRESH_TOKEN_REVOKED'
+      );
+    }
+
+    // 2. Expiration check
+    if (new Date() > new Date(storedToken.expiresAt)) {
+      throw new AppError('Refresh token has expired', 401, 'EXPIRED_REFRESH_TOKEN');
+    }
+
+    // 3. Admin user verification
+    let admin: AdminUserRecord | null = storedToken.admin as any;
+    if (!admin) {
+      try {
+        const dbAdmin = await prisma.adminUser.findUnique({
+          where: { id: storedToken.userId },
+        });
+        if (dbAdmin) admin = dbAdmin as AdminUserRecord;
+      } catch {
+        // fallback
+      }
+    }
+    if (!admin) {
+      for (const a of inMemoryAdmins.values()) {
+        if (a.id === storedToken.userId) {
+          admin = a;
+          break;
+        }
+      }
+    }
+
+    if (!admin) {
+      throw new AppError('Administrator account associated with this session no longer exists.', 401, 'ACCOUNT_NOT_FOUND');
+    }
+
+    if (admin.accountStatus !== AccountStatus.ACTIVE) {
+      throw new AppError('This administrator account has been deactivated or suspended.', 403, 'ACCOUNT_INACTIVE');
+    }
+
+    if (admin.role !== UserRoleType.SUPER_ADMIN && admin.role !== UserRoleType.ADMIN) {
+      throw new AppError('Access denied. Administrator privileges required.', 403, 'FORBIDDEN');
+    }
+
+    // 4. Atomic Rotation & Concurrency Protection
+    if (usingMemoryFallback) {
+      if (storedToken.isRevoked) {
+        throw new AppError('Concurrent token refresh detected. Session has been revoked.', 401, 'CONCURRENT_REFRESH_REVOKED');
+      }
+      storedToken.isRevoked = true;
+      storedToken.revokedAt = new Date();
+      inMemoryAdminRefreshTokens.set(tokenHash, storedToken);
+    } else {
+      try {
+        const updateResult = await prisma.refreshToken.updateMany({
+          where: { id: storedToken.id, isRevoked: false },
+          data: { isRevoked: true, revokedAt: new Date() },
+        });
+
+        if (updateResult.count !== 1) {
+          logger.warn(
+            { familyId: storedToken.familyId, adminId: storedToken.userId },
+            '[SecurityAlert] Concurrent admin refresh token consumption detected.'
+          );
+          throw new AppError('Concurrent token refresh detected. Session has been revoked.', 401, 'CONCURRENT_REFRESH_REVOKED');
+        }
+      } catch (err: any) {
+        if (err instanceof AppError) throw err;
+        if (!isDbConnectionError(err)) {
+          logger.error({ err }, '[AdminAuthService] Database error during token rotation');
+          throw new AppError('Authentication service temporarily unavailable.', 503, 'SERVICE_UNAVAILABLE');
+        }
+      }
+    }
+
+    // 5. Create new rotated refresh token with SAME familyId
+    const newRawRefreshToken = await this.createRefreshToken(
+      admin.id,
+      admin.role,
+      storedToken.familyId,
+      ipAddress || storedToken.ipAddress,
+      userAgent || storedToken.userAgent
+    );
+
+    // 6. Generate new access token
+    const newAccessToken = jwt.sign(
+      {
+        sub: admin.id,
+        role: admin.role,
+        email: admin.email,
+      },
+      env.JWT_ACCESS_SECRET,
+      { expiresIn: (env.ACCESS_TOKEN_EXPIRY || '15m') as any }
+    );
+
+    // 7. Audit log
+    await auditService.record({
+      actorId: admin.id,
+      actorType: 'ADMIN',
+      action: 'ADMIN_TOKEN_REFRESH_SUCCESS',
+      entityType: 'AdminUser',
+      entityId: admin.id,
+      ipAddress,
+      userAgent,
+      metadata: { email: admin.email, role: admin.role },
+    });
+
+    return {
+      token: newAccessToken,
+      refreshToken: newRawRefreshToken,
+      user: {
+        id: admin.id,
+        name: admin.fullName,
+        email: admin.email,
+        role: admin.role,
+        department: admin.department || 'Executive Operations',
+        avatarUrl: admin.avatarUrl || '/branding/kings-taxi-monogram.png',
+        phone: admin.phoneNumber || undefined,
+        status: admin.accountStatus,
+        permissions: SUPER_ADMIN_PERMISSIONS,
+        lastLoginAt: admin.lastLoginAt ? new Date(admin.lastLoginAt).toISOString() : new Date().toISOString(),
+        createdAt: new Date(admin.createdAt).toISOString(),
+      },
+    };
+  }
+
+  /**
+   * Revoke active administrator session on logout
+   */
+  public async logout(rawRefreshToken?: string, adminId?: string) {
+    if (rawRefreshToken) {
+      const tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+      const tok = inMemoryAdminRefreshTokens.get(tokenHash);
+      if (tok) {
+        tok.isRevoked = true;
+        tok.revokedAt = new Date();
+        inMemoryAdminRefreshTokens.set(tokenHash, tok);
+      }
+      try {
+        await prisma.refreshToken.updateMany({
+          where: { tokenHash },
+          data: { isRevoked: true, revokedAt: new Date() },
+        });
+      } catch (err: any) {
+        if (!isDbConnectionError(err)) {
+          logger.error({ err }, '[AdminAuthService] Error revoking token during logout');
+        }
+      }
+    }
+
+    if (adminId) {
+      for (const [hash, tok] of inMemoryAdminRefreshTokens.entries()) {
+        if (tok.userId === adminId) {
+          inMemoryAdminRefreshTokens.set(hash, { ...tok, isRevoked: true, revokedAt: new Date() });
+        }
+      }
+      try {
+        await prisma.refreshToken.updateMany({
+          where: { adminId, isRevoked: false },
+          data: { isRevoked: true, revokedAt: new Date() },
+        });
+      } catch (err: any) {
+        if (!isDbConnectionError(err)) {
+          logger.error({ err }, '[AdminAuthService] Error revoking admin tokens during logout');
+        }
+      }
+    }
+
+    return { loggedOut: true };
   }
 
   /**

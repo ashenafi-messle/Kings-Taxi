@@ -284,4 +284,97 @@ describe('Hotel & Heritage Booking Approval Workflow', () => {
     const notifs = notificationService.getInMemoryNotifications('pax_test_02');
     expect(notifs.some((n) => n.title.includes('Declined'))).toBe(true);
   });
+
+  describe('Admin JWT Token Expiration, Rotation & Automatic Refresh', () => {
+    it('1. Admin login generates short-lived access token and cryptographically secure refresh token', async () => {
+      const loginRes = await adminAuthService.login({
+        email: 'admin@kingstaxi.et',
+        password: 'Admin@123',
+        ipAddress: '127.0.0.1',
+        userAgent: 'Vitest/AdminTest',
+      });
+
+      expect(loginRes.token).toBeDefined();
+      expect(loginRes.refreshToken).toBeDefined();
+      expect(loginRes.refreshToken.startsWith('kt_adm_rf_')).toBe(true);
+      expect(loginRes.user.email).toBe('admin@kingstaxi.et');
+      expect(loginRes.user.role).toBe('SUPER_ADMIN');
+    });
+
+    it('2. Refresh with valid refresh token returns renewed access token and new rotated refresh token', async () => {
+      const loginRes = await adminAuthService.login({
+        email: 'admin@kingstaxi.et',
+        password: 'Admin@123',
+      });
+
+      const originalRefreshToken = loginRes.refreshToken;
+
+      const refreshRes = await adminAuthService.refreshToken(originalRefreshToken);
+
+      expect(refreshRes.token).toBeDefined();
+      expect(refreshRes.refreshToken).toBeDefined();
+      expect(refreshRes.refreshToken).not.toBe(originalRefreshToken);
+      expect(refreshRes.user.id).toBe(loginRes.user.id);
+      expect(refreshRes.user.role).toBe('SUPER_ADMIN');
+    });
+
+    it('3. Old refresh token is revoked after rotation and cannot be used again', async () => {
+      const loginRes = await adminAuthService.login({
+        email: 'admin@kingstaxi.et',
+        password: 'Admin@123',
+      });
+
+      const originalToken = loginRes.refreshToken;
+      const firstRefresh = await adminAuthService.refreshToken(originalToken);
+
+      expect(firstRefresh.token).toBeDefined();
+
+      // Using the old token again triggers reuse detection
+      await expect(
+        adminAuthService.refreshToken(originalToken)
+      ).rejects.toThrow('Compromised session token replayed');
+    });
+
+    it('4. Reuse Detection: Replaying a revoked refresh token revokes the entire token family', async () => {
+      const loginRes = await adminAuthService.login({
+        email: 'admin@kingstaxi.et',
+        password: 'Admin@123',
+      });
+
+      const token1 = loginRes.refreshToken;
+      const refresh1 = await adminAuthService.refreshToken(token1);
+      const token2 = refresh1.refreshToken;
+
+      // Attacker replays token1 -> should trigger reuse alert and revoke token family
+      await expect(
+        adminAuthService.refreshToken(token1)
+      ).rejects.toThrow('Compromised session token replayed');
+
+      // Now token2 (even if unexpired) must also be revoked as part of the compromised family
+      await expect(
+        adminAuthService.refreshToken(token2)
+      ).rejects.toThrow('Compromised session token replayed');
+    });
+
+    it('5. Invalid or corrupted refresh token is rejected with HTTP 401', async () => {
+      await expect(
+        adminAuthService.refreshToken('kt_adm_rf_completely_bogus_token_12345')
+      ).rejects.toThrow('Refresh token is invalid or expired');
+    });
+
+    it('6. Admin logout revokes the refresh token session', async () => {
+      const loginRes = await adminAuthService.login({
+        email: 'admin@kingstaxi.et',
+        password: 'Admin@123',
+      });
+
+      const logoutResult = await adminAuthService.logout(loginRes.refreshToken, loginRes.user.id);
+      expect(logoutResult.loggedOut).toBe(true);
+
+      // Attempting to refresh after logout must be rejected
+      await expect(
+        adminAuthService.refreshToken(loginRes.refreshToken)
+      ).rejects.toThrow();
+    });
+  });
 });

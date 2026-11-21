@@ -21,6 +21,19 @@ export class AdminAuthController {
         userAgent,
       });
 
+      // Attach HttpOnly, Secure SameSite=none cookie
+      try {
+        res.cookie('kt_admin_refresh_token', result.refreshToken, {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+          path: '/api/v1/auth/admin',
+        });
+      } catch {
+        // Non-blocking
+      }
+
       ApiResponse.success(res, result, 'Administrator authenticated successfully');
     } catch (err: any) {
       ApiResponse.error(res, 'AUTH_ERROR', err.message || 'Authentication failed', err.statusCode || 401);
@@ -168,7 +181,69 @@ export class AdminAuthController {
     }
   }
 
-  public static async logout(_req: Request, res: Response) {
-    ApiResponse.success(res, { loggedOut: true }, 'Administrator session terminated successfully');
+  public static async refreshToken(req: Request, res: Response) {
+    try {
+      let rawRefreshToken = req.body?.refreshToken;
+      if (!rawRefreshToken && req.headers.cookie) {
+        const match = req.headers.cookie.match(/kt_admin_refresh_token=([^;]+)/);
+        if (match) rawRefreshToken = decodeURIComponent(match[1]);
+      }
+
+      if (!rawRefreshToken) {
+        ApiResponse.error(res, 'INVALID_REFRESH_TOKEN', 'Refresh token is required', 401);
+        return;
+      }
+
+      const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string);
+      const userAgent = req.headers['user-agent'];
+
+      const result = await adminAuthService.refreshToken(rawRefreshToken, ipAddress, userAgent);
+
+      try {
+        res.cookie('kt_admin_refresh_token', result.refreshToken, {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+          path: '/api/v1/auth/admin',
+        });
+      } catch {
+        // Non-blocking
+      }
+
+      ApiResponse.success(res, result, 'Token refreshed successfully');
+    } catch (err: any) {
+      ApiResponse.error(
+        res,
+        err.code || 'REFRESH_ERROR',
+        err.message || 'Token refresh failed',
+        err.statusCode || 401
+      );
+    }
+  }
+
+  public static async logout(req: Request, res: Response) {
+    try {
+      let rawRefreshToken = req.body?.refreshToken;
+      if (!rawRefreshToken && req.headers.cookie) {
+        const match = req.headers.cookie.match(/kt_admin_refresh_token=([^;]+)/);
+        if (match) rawRefreshToken = decodeURIComponent(match[1]);
+      }
+      const adminId = req.user?.sub;
+      await adminAuthService.logout(rawRefreshToken, adminId);
+      try {
+        res.clearCookie('kt_admin_refresh_token', { path: '/api/v1/auth/admin' });
+      } catch {
+        // Non-blocking
+      }
+      ApiResponse.success(res, { loggedOut: true }, 'Administrator session terminated successfully');
+    } catch (err: any) {
+      try {
+        res.clearCookie('kt_admin_refresh_token', { path: '/api/v1/auth/admin' });
+      } catch {
+        // Non-blocking
+      }
+      ApiResponse.success(res, { loggedOut: true }, 'Administrator session terminated');
+    }
   }
 }

@@ -6,7 +6,7 @@
  */
 
 import { AdminUser, LoginCredentials, PasswordResetPayload } from '../types';
-import { apiRequest } from './apiClient';
+import { apiRequest, executeSingleFlightRefresh } from './apiClient';
 
 const AUTH_STORAGE_KEY = 'kt_super_admin_session';
 const TOKEN_STORAGE_KEY = 'kt_admin_token';
@@ -319,7 +319,7 @@ export class AuthService {
   }
 
   /**
-   * Refreshes access token using stored refresh token
+   * Refreshes access token using central single-flight refresh mechanism
    */
   static async refreshToken(): Promise<{
     success: boolean;
@@ -327,35 +327,11 @@ export class AuthService {
     error?: string;
   }> {
     try {
-      const refreshToken =
-        typeof window !== 'undefined'
-          ? localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
-          : null;
-
-      if (!refreshToken) {
-        return { success: false, error: 'No refresh token found.' };
+      const token = await executeSingleFlightRefresh();
+      if (token) {
+        return { success: true, token };
       }
-
-      const res = await apiRequest<{ token: string; refreshToken?: string }>(
-        '/auth/refresh',
-        {
-          method: 'POST',
-          skipAuth: true,
-          body: JSON.stringify({ refreshToken }),
-        }
-      );
-
-      if (res.success && res.data?.token) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(TOKEN_STORAGE_KEY, res.data.token);
-          if (res.data.refreshToken) {
-            localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, res.data.refreshToken);
-          }
-        }
-        return { success: true, token: res.data.token };
-      }
-
-      return { success: false, error: res.error || 'Token refresh failed.' };
+      return { success: false, error: 'Session expired. Please sign in again.' };
     } catch (err: any) {
       return { success: false, error: err.message || 'Error refreshing token.' };
     }
@@ -407,8 +383,12 @@ export class AuthService {
   static logout(): void {
     if (typeof window === 'undefined') return;
     try {
-      // Non-blocking notification to backend
-      apiRequest('/auth/admin/logout', { method: 'POST' }).catch(() => {});
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
+      // Non-blocking notification to backend with refreshToken for database revocation
+      apiRequest('/auth/admin/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => {});
       localStorage.removeItem(AUTH_STORAGE_KEY);
       localStorage.removeItem(TOKEN_STORAGE_KEY);
       localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);

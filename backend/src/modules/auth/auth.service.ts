@@ -8,6 +8,7 @@ import { EmailService } from '../../integrations/email/email.service';
 import { TelegramService } from '../../integrations/telegram/telegram.service';
 import { TelegramIdentityStore } from '../../integrations/telegram/telegramIdentity.store';
 import { normalizeEthiopianPhone } from '../../utils/phone';
+import { adminAuthService } from './adminAuth.service';
 
 export type RegistrationMethod = 'email' | 'telegram';
 
@@ -1414,7 +1415,7 @@ export class AuthService {
       storedToken = await withDbTimeout(
         prisma.refreshToken.findUnique({
           where: { tokenHash },
-          include: { passenger: true },
+          include: { passenger: true, admin: true },
         })
       );
     } catch (err: any) {
@@ -1476,6 +1477,11 @@ export class AuthService {
     // 2. Check expiration
     if (new Date() > storedToken.expiresAt) {
       throw new AppError('Refresh token has expired', 401, 'EXPIRED_REFRESH_TOKEN');
+    }
+
+    // Delegate to AdminAuthService if this is an administrative refresh token
+    if (storedToken.adminId || storedToken.userType === 'ADMIN' || storedToken.userType === 'SUPER_ADMIN') {
+      return adminAuthService.refreshToken(rawRefreshToken);
     }
 
     // 3. ATOMIC TOKEN ROTATION & CONCURRENCY PROTECTION (Single DB Transaction)
