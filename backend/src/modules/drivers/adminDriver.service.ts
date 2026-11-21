@@ -458,11 +458,37 @@ export class AdminDriverService {
     }> = [];
     const uploadedAssets: UploadedAssetReference[] = [];
 
+    // Optional profile photo upload
+    let cleanProfileImage: string | null = null;
+    const rawAvatar = (payload as any).profileImage || (payload as any).avatarUrl;
+    if (rawAvatar && typeof rawAvatar === 'string') {
+      if (rawAvatar.startsWith('http://') || rawAvatar.startsWith('https://')) {
+        cleanProfileImage = rawAvatar;
+      } else if (rawAvatar.startsWith('data:') || rawAvatar.length > 512) {
+        try {
+          const avatarUpload = await validateAndUploadDocument(rawAvatar, {
+            folder: `kings-taxi/drivers/${newDriverId}/profile`,
+            publicIdPrefix: 'avatar',
+            fileName: 'profile.jpg',
+          });
+          cleanProfileImage = avatarUpload.fileUrl;
+          if (avatarUpload.isUploaded && avatarUpload.publicId) {
+            uploadedAssets.push({
+              publicId: avatarUpload.publicId,
+              resourceType: avatarUpload.resourceType,
+            });
+          }
+        } catch (avatarErr: any) {
+          logger.warn({ error: avatarErr.message }, '[AdminDriverService] Profile avatar upload failed, continuing without avatar');
+        }
+      }
+    }
+
     if (payload.documents && payload.documents.length > 0) {
       for (const doc of payload.documents) {
         if (!doc.fileUrl) continue;
         const uploadResult = await validateAndUploadDocument(doc.fileUrl, {
-          folder: `kings-taxi/drivers/${newDriverId}`,
+          folder: `kings-taxi/drivers/${newDriverId}/documents`,
           publicIdPrefix: (doc.documentType || 'DOC').toLowerCase().replace(/[^a-z0-9_]/g, '_'),
           fileName: doc.fileName,
           declaredFormat: doc.fileFormat,
@@ -498,6 +524,7 @@ export class AdminDriverService {
             phoneNumber: cleanPhone,
             email: cleanEmail || null,
             passwordHash,
+            profileImage: cleanProfileImage,
             accountStatus: AccountStatus.PENDING_VERIFICATION,
             verificationStatus: DriverVerificationStatus.PENDING,
             availabilityStatus: DriverAvailabilityStatus.OFFLINE,

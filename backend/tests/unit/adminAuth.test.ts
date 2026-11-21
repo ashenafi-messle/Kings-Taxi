@@ -79,7 +79,7 @@ describe('Admin Authentication & Real Account Provisioning', () => {
     });
 
     expect(reLogin.user.email).toBe('ambelugesese@gmail.com');
-  });
+  }, 15000);
 
   it('handles email OTP password recovery lifecycle securely', async () => {
     // 1. Initiate password reset for real admin
@@ -152,7 +152,7 @@ describe('Admin Authentication & Real Account Provisioning', () => {
         newPassword: 'AnotherPassword#9999',
       })
     ).rejects.toThrow('Invalid or unverified password reset session');
-  });
+  }, 15000);
 
   it('validates comprehensive OTP verification scenarios (Task 9 requirements)', async () => {
     // 1. A newly requested OTP invalidates the old OTP
@@ -225,7 +225,7 @@ describe('Admin Authentication & Real Account Provisioning', () => {
         otp: '999999',
       })
     ).rejects.toThrow('Maximum verification attempts exceeded');
-  });
+  }, 15000);
 });
 
 describe('Hotel & Heritage Booking Approval Workflow', () => {

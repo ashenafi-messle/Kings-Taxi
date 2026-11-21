@@ -64,7 +64,7 @@ export class VehicleDocumentService {
 
     if (data.fileUrl && (data.fileUrl.startsWith('data:') || data.fileUrl.length > 512)) {
       const uploadRes = await validateAndUploadDocument(data.fileUrl, {
-        folder: `kings-taxi/vehicles/${vehicleId}`,
+        folder: `kings-taxi/vehicles/${vehicleId}/documents`,
         publicIdPrefix: (data.documentType || 'VDOC').toLowerCase().replace(/[^a-z0-9_]/g, '_'),
         fileName: data.fileName,
         declaredFormat: data.fileFormat,

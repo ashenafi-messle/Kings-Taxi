@@ -424,7 +424,7 @@ export class AdminVehicleService {
     if (cleanImageUrl && (cleanImageUrl.startsWith('data:') || cleanImageUrl.length > 512)) {
       try {
         const imgUpload = await validateAndUploadDocument(cleanImageUrl, {
-          folder: `kings-taxi/vehicles/${vehicleId}`,
+          folder: `kings-taxi/vehicles/${vehicleId}/images`,
           publicIdPrefix: 'photo',
           fileName: 'vehicle-photo.jpg',
         });
@@ -444,7 +444,7 @@ export class AdminVehicleService {
       for (const doc of payload.documents) {
         if (!doc.fileUrl) continue;
         const uploadResult = await validateAndUploadDocument(doc.fileUrl, {
-          folder: `kings-taxi/vehicles/${vehicleId}`,
+          folder: `kings-taxi/vehicles/${vehicleId}/documents`,
           publicIdPrefix: (doc.documentType || 'VDOC').toLowerCase().replace(/[^a-z0-9_]/g, '_'),
           fileName: doc.fileName,
           declaredFormat: doc.fileFormat,

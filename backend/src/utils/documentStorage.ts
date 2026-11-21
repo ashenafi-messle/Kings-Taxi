@@ -35,7 +35,7 @@ export interface UploadedAssetReference {
 
 /**
  * Validates document size and mime type, and uploads Base64 / Data URI payloads
- * to storage (Cloudinary or resilient fallback) prior to database insertion.
+ * to Cloudinary storage prior to database insertion.
  */
 export async function validateAndUploadDocument(
   fileData: string,
@@ -53,7 +53,7 @@ export async function validateAndUploadDocument(
 
   const trimmed = fileData.trim();
 
-  // If already an HTTP/HTTPS URL, preserve it
+  // If already an HTTP/HTTPS URL, preserve it directly without re-uploading
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return {
       fileUrl: trimmed,
@@ -95,7 +95,7 @@ export async function validateAndUploadDocument(
       extension = 'webp';
     }
   } else {
-    // If raw base64 or other string, check filename or declared format
+    // If raw base64 or other string, detect from filename or declared format
     if (options.fileName) {
       const ext = options.fileName.split('.').pop()?.toLowerCase();
       if (ext && ALLOWED_DOCUMENT_EXTENSIONS.has(ext)) {
@@ -109,7 +109,6 @@ export async function validateAndUploadDocument(
       }
     }
 
-    // Default to jpg if image without explicit extension
     if (!extension) {
       extension = 'jpg';
     }
@@ -147,7 +146,26 @@ export async function validateAndUploadDocument(
       resourceType,
     };
   } catch (err: any) {
-    logger.error({ error: err.message, folder: options.folder }, '[validateAndUploadDocument] Upload failed');
+    if (err instanceof AppError) {
+      throw err;
+    }
+
+    logger.error(
+      { error: err.message, httpCode: err.http_code, folder: options.folder },
+      '[validateAndUploadDocument] Document upload failed'
+    );
+
+    // Map upstream Cloudinary errors to appropriate HTTP status
+    if (err.http_code === 400 || err.message?.includes('Invalid') || err.message?.includes('format')) {
+      throw new AppError(`Document upload rejected by storage provider: ${err.message}`, 400);
+    }
+    if (err.http_code === 403 || err.message?.includes('permissions')) {
+      throw new AppError(`Storage authorization error: ${err.message}`, 503);
+    }
+    if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED') {
+      throw new AppError('Storage service timeout. Please try again.', 504);
+    }
+
     throw new AppError(`Document upload failed: ${err.message}`, 502);
   }
 }

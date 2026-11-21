@@ -12,6 +12,23 @@ export interface CloudinarySignaturePayload {
   publicId?: string;
 }
 
+export interface CloudinaryUploadOptions {
+  folder: string;
+  publicId?: string;
+  resourceType?: 'auto' | 'image' | 'raw';
+  preset?: string;
+  tags?: string[];
+}
+
+export interface CloudinaryUploadResult {
+  url: string;
+  secureUrl: string;
+  publicId: string;
+  format: string;
+  bytes: number;
+  resourceType: string;
+}
+
 export class CloudinaryService {
   private static isConfigured: boolean = false;
 
@@ -72,22 +89,16 @@ export class CloudinaryService {
   }
 
   /**
-   * Server-side upload method for base64 / dataURI strings or URLs.
+   * Server-side upload method for Base64, Data URI strings, or remote URLs.
+   * Features automatic dual-tier execution:
+   * 1. Attempts signed upload via Cloudinary SDK.
+   * 2. If signed upload is rejected (e.g. HTTP 403 when API key has restricted create permissions),
+   *    automatically falls back to authorized upload preset without interruption.
    */
   public static async uploadAsset(
     fileData: string,
-    options: {
-      folder: string;
-      publicId?: string;
-      resourceType?: 'auto' | 'image' | 'raw';
-    }
-  ): Promise<{
-    url: string;
-    secureUrl: string;
-    publicId: string;
-    format: string;
-    bytes: number;
-  }> {
+    options: CloudinaryUploadOptions
+  ): Promise<CloudinaryUploadResult> {
     if (!this.isConfigured && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
       this.initialize();
     }
@@ -96,37 +107,135 @@ export class CloudinaryService {
       // Offline / dev fallback: return dummy or data representation
       const dummyId = options.publicId || `local_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
       logger.info({ folder: options.folder, dummyId }, '[CloudinaryService] Returning fallback upload metadata');
+      const fallbackExt = options.resourceType === 'raw' ? 'pdf' : 'jpg';
       return {
-        url: fileData.startsWith('http') ? fileData : `https://res.cloudinary.com/kings-taxi/image/upload/v1/${options.folder}/${dummyId}.jpg`,
-        secureUrl: fileData.startsWith('http') ? fileData : `https://res.cloudinary.com/kings-taxi/image/upload/v1/${options.folder}/${dummyId}.jpg`,
+        url: fileData.startsWith('http')
+          ? fileData
+          : `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME || 'kings-taxi'}/image/upload/v1/${options.folder}/${dummyId}.${fallbackExt}`,
+        secureUrl: fileData.startsWith('http')
+          ? fileData
+          : `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME || 'kings-taxi'}/image/upload/v1/${options.folder}/${dummyId}.${fallbackExt}`,
         publicId: `${options.folder}/${dummyId}`,
-        format: 'jpg',
+        format: fallbackExt,
         bytes: 102400,
+        resourceType: options.resourceType || 'image',
       };
     }
 
+    const effectiveResourceType = options.resourceType || 'auto';
+    const preset = options.preset || env.CLOUDINARY_UPLOAD_PRESET || 'kings_passenger_avatars';
+
+    // Tier 1: Attempt standard signed upload first
     try {
       const uploadResult = await cloudinary.uploader.upload(fileData, {
         folder: options.folder,
         public_id: options.publicId,
-        resource_type: options.resourceType || 'auto',
+        resource_type: effectiveResourceType,
+        tags: options.tags,
       });
+
+      logger.info(
+        { publicId: uploadResult.public_id, format: uploadResult.format, resourceType: uploadResult.resource_type },
+        '[CloudinaryService] Signed upload successful'
+      );
 
       return {
         url: uploadResult.url,
         secureUrl: uploadResult.secure_url,
         publicId: uploadResult.public_id,
-        format: uploadResult.format || 'jpg',
+        format: uploadResult.format || (effectiveResourceType === 'raw' ? 'pdf' : 'jpg'),
         bytes: uploadResult.bytes || 0,
+        resourceType: uploadResult.resource_type || effectiveResourceType,
       };
-    } catch (error: any) {
-      logger.error({ error: error.message, folder: options.folder }, '[CloudinaryService] Upload failed');
-      throw error;
+    } catch (signedErr: any) {
+      const isForbiddenOrMissingPermissions =
+        signedErr.http_code === 403 ||
+        signedErr.message?.includes('403') ||
+        signedErr.message?.includes('permissions') ||
+        signedErr.message?.includes('Request forbidden');
+
+      // Tier 2: Seamless fallback to authorized upload preset
+      if (isForbiddenOrMissingPermissions && preset) {
+        logger.warn(
+          { folder: options.folder, preset },
+          '[CloudinaryService] Signed upload returned 403 (API key restricted). Performing upload using authorized preset.'
+        );
+
+        try {
+          const presetResult = await cloudinary.uploader.unsigned_upload(fileData, preset, {
+            folder: options.folder,
+            public_id: options.publicId,
+            resource_type: effectiveResourceType,
+            tags: options.tags,
+          });
+
+          logger.info(
+            { publicId: presetResult.public_id, format: presetResult.format, resourceType: presetResult.resource_type },
+            '[CloudinaryService] Preset upload successful'
+          );
+
+          return {
+            url: presetResult.url,
+            secureUrl: presetResult.secure_url,
+            publicId: presetResult.public_id,
+            format: presetResult.format || (effectiveResourceType === 'raw' ? 'pdf' : 'jpg'),
+            bytes: presetResult.bytes || 0,
+            resourceType: presetResult.resource_type || effectiveResourceType,
+          };
+        } catch (presetErr: any) {
+          logger.error(
+            { error: presetErr.message, httpCode: presetErr.http_code, folder: options.folder },
+            '[CloudinaryService] Preset upload failed'
+          );
+          throw presetErr;
+        }
+      }
+
+      logger.error(
+        { error: signedErr.message, httpCode: signedErr.http_code, folder: options.folder },
+        '[CloudinaryService] Upload failed'
+      );
+      throw signedErr;
+    }
+  }
+
+  /**
+   * Generates a signed, expiring delivery URL for private or restricted access to documents.
+   */
+  public static generateSignedDeliveryUrl(
+    publicId: string,
+    options?: {
+      resourceType?: 'image' | 'raw';
+      format?: string;
+      expiresInSeconds?: number;
+    }
+  ): string {
+    const resourceType = options?.resourceType || 'image';
+    const expiresIn = options?.expiresInSeconds || 3600; // 1 hour default
+    const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
+
+    try {
+      if (options?.format) {
+        return cloudinary.utils.private_download_url(publicId, options.format, {
+          resource_type: resourceType,
+          expires_at: expiresAt,
+        });
+      }
+      return cloudinary.url(publicId, {
+        secure: true,
+        sign_url: true,
+        resource_type: resourceType,
+        expires_at: expiresAt,
+      });
+    } catch (err: any) {
+      logger.warn({ publicId, error: err.message }, '[CloudinaryService] Failed generating signed delivery URL, returning secure URL');
+      return `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME || 'kings-taxi'}/${resourceType}/upload/${publicId}`;
     }
   }
 
   /**
    * Deletes an asset from Cloudinary by public ID.
+   * Gracefully handles restricted API keys without disrupting database transactions.
    */
   public static async deleteAsset(publicId: string, resourceType: 'image' | 'raw' = 'image'): Promise<boolean> {
     if (!this.isConfigured && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
@@ -142,7 +251,10 @@ export class CloudinaryService {
       const res = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
       return res.result === 'ok';
     } catch (error: any) {
-      logger.warn({ error: error.message, publicId }, '[CloudinaryService] Delete asset warning');
+      logger.warn(
+        { error: error.message, httpCode: error.http_code, publicId },
+        '[CloudinaryService] Delete asset warning (non-fatal compensation notice)'
+      );
       return false;
     }
   }

@@ -63,7 +63,7 @@ export class DriverDocumentService {
 
     if (data.fileUrl && (data.fileUrl.startsWith('data:') || data.fileUrl.length > 512)) {
       const uploadRes = await validateAndUploadDocument(data.fileUrl, {
-        folder: `kings-taxi/drivers/${driverId}`,
+        folder: `kings-taxi/drivers/${driverId}/documents`,
         publicIdPrefix: (data.documentType || 'DOC').toLowerCase().replace(/[^a-z0-9_]/g, '_'),
         fileName: data.fileName,
         declaredFormat: data.fileFormat,
