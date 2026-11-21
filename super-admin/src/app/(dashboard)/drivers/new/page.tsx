@@ -156,9 +156,26 @@ export default function NewDriverPage() {
 
             <div className="card-body p-4">
               {error && (
-                <div className="alert alert-danger d-flex align-items-center gap-2 py-2.5 px-3 mb-4 rounded-3 text-sm">
-                  <AlertCircle size={18} className="flex-shrink-0" />
-                  <div>{error}</div>
+                <div className="alert alert-danger d-flex align-items-start gap-2.5 py-3 px-3 mb-4 rounded-3 text-sm">
+                  <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-danger" />
+                  <div className="flex-grow-1">
+                    <div className="fw-semibold text-danger mb-1">
+                      {error.includes('already registered')
+                        ? 'Driver Already Registered (Conflict 409)'
+                        : 'Registration Failed'}
+                    </div>
+                    <div className="text-secondary small">{error}</div>
+                    {error.includes('already registered') && (
+                      <div className="d-flex align-items-center gap-2 mt-2 pt-2 border-top border-danger border-opacity-25">
+                        <Link href="/drivers" className="btn btn-sm btn-outline-danger py-1 px-2 text-xs">
+                          Search Existing Drivers
+                        </Link>
+                        <span className="text-xs text-muted">
+                          Driver phone numbers and emails must be unique in Kings Taxi. Please enter a new phone number or email.
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -190,8 +207,15 @@ export default function NewDriverPage() {
                       value={formData.phone}
                       onChange={handleChange}
                       placeholder="+251 91 234 5678"
-                      className="form-control form-control-sm py-2 shadow-none font-monospace"
+                      className={`form-control form-control-sm py-2 shadow-none font-monospace ${
+                        error.includes('phone') ? 'is-invalid border-danger' : ''
+                      }`}
                     />
+                    {error.includes('phone') && (
+                      <div className="invalid-feedback text-xs d-block mt-1">
+                        This phone number is already registered to an existing driver.
+                      </div>
+                    )}
                   </div>
 
                   <div className="col-12 col-md-6">
@@ -204,8 +228,15 @@ export default function NewDriverPage() {
                       value={formData.email}
                       onChange={handleChange}
                       placeholder="driver@example.com"
-                      className="form-control form-control-sm py-2 shadow-none"
+                      className={`form-control form-control-sm py-2 shadow-none ${
+                        error.includes('email') ? 'is-invalid border-danger' : ''
+                      }`}
                     />
+                    {error.includes('email') && (
+                      <div className="invalid-feedback text-xs d-block mt-1">
+                        This email address is already registered to an existing driver.
+                      </div>
+                    )}
                   </div>
 
                   <div className="col-12 col-md-6">

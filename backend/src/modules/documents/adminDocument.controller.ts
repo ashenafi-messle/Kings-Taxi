@@ -25,6 +25,12 @@ export class AdminDocumentController {
    */
   async previewDocument(req: Request, res: Response): Promise<void> {
     try {
+      res.removeHeader('X-Frame-Options');
+      res.setHeader(
+        'Content-Security-Policy',
+        "frame-ancestors 'self' https://*.vercel.app https://kings-taxi*.vercel.app http://localhost:*"
+      );
+
       const { documentId } = req.params;
       const { stream, contentType, contentDisposition } = await adminDocumentService.getDocumentStream(
         documentId,
@@ -44,6 +50,7 @@ export class AdminDocumentController {
 
       stream.pipe(res);
     } catch (err: any) {
+      res.removeHeader('X-Frame-Options');
       logger.error({ err: err.message, documentId: req.params.documentId }, '[AdminDocumentController] Failed to preview document');
       if (!res.headersSent) {
         ApiResponse.error(res, 'PREVIEW_ERROR', err.message || 'Unable to preview document', err.statusCode || 500);

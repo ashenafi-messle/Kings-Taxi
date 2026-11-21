@@ -155,8 +155,8 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
       actionType === 'APPROVE'
         ? 'APPROVED'
         : actionType === 'REJECT'
-        ? 'REJECTED'
-        : 'REQUIRES_RESUBMISSION';
+          ? 'REJECTED'
+          : 'REQUIRES_RESUBMISSION';
 
     try {
       setIsSubmitting(true);
@@ -183,25 +183,35 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
     activeDoc?.fileName?.toLowerCase().endsWith('.pdf') ||
     activeDoc?.fileUrl?.toLowerCase().includes('.pdf');
 
+  // Check if string is a valid database UUID
+  const isUuid = (val?: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val || '');
+
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') || '' : '';
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://kings-taxi.onrender.com/api/v1';
 
   // Build authorized URLs with token for seamless iframe/stream access
-  const effectivePreviewUrl = activeDoc?.previewUrl
-    ? (activeDoc.previewUrl.startsWith('http')
-        ? activeDoc.previewUrl
-        : `${apiBase.replace(/\/api\/v1$/, '')}${activeDoc.previewUrl}${token ? `?token=${encodeURIComponent(token)}` : ''}`)
-    : activeDoc?.id
-    ? `${apiBase}/admin/documents/${activeDoc.id}/preview${token ? `?token=${encodeURIComponent(token)}` : ''}`
-    : activeDoc?.fileUrl || '';
+  let effectivePreviewUrl = '';
+  if (activeDoc?.previewUrl) {
+    effectivePreviewUrl = activeDoc.previewUrl.startsWith('http')
+      ? activeDoc.previewUrl
+      : `${apiBase.replace(/\/api\/v1$/, '')}${activeDoc.previewUrl}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  } else if (activeDoc?.id && isUuid(activeDoc.id)) {
+    effectivePreviewUrl = `${apiBase}/admin/documents/${activeDoc.id}/preview${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  } else if (activeDoc?.fileUrl && (activeDoc.fileUrl.startsWith('http') || activeDoc.fileUrl.startsWith('data:'))) {
+    effectivePreviewUrl = activeDoc.fileUrl;
+  }
 
-  const effectiveDownloadUrl = activeDoc?.downloadUrl
-    ? (activeDoc.downloadUrl.startsWith('http')
-        ? activeDoc.downloadUrl
-        : `${apiBase.replace(/\/api\/v1$/, '')}${activeDoc.downloadUrl}${token ? `?token=${encodeURIComponent(token)}` : ''}`)
-    : activeDoc?.id
-    ? `${apiBase}/admin/documents/${activeDoc.id}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`
-    : activeDoc?.fileUrl || '';
+  let effectiveDownloadUrl = '';
+  if (activeDoc?.downloadUrl) {
+    effectiveDownloadUrl = activeDoc.downloadUrl.startsWith('http')
+      ? activeDoc.downloadUrl
+      : `${apiBase.replace(/\/api\/v1$/, '')}${activeDoc.downloadUrl}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  } else if (activeDoc?.id && isUuid(activeDoc.id)) {
+    effectiveDownloadUrl = `${apiBase}/admin/documents/${activeDoc.id}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  } else if (activeDoc?.fileUrl && (activeDoc.fileUrl.startsWith('http') || activeDoc.fileUrl.startsWith('data:'))) {
+    effectiveDownloadUrl = activeDoc.fileUrl;
+  }
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes || bytes <= 0) return 'Unknown size';
@@ -218,9 +228,8 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
       role="dialog"
     >
       <div
-        className={`modal-dialog modal-dialog-centered modal-dialog-scrollable ${
-          isFullscreen ? 'modal-fullscreen p-3' : 'modal-xl'
-        }`}
+        className={`modal-dialog modal-dialog-centered modal-dialog-scrollable ${isFullscreen ? 'modal-fullscreen p-3' : 'modal-xl'
+          }`}
         role="document"
       >
         <div
@@ -318,11 +327,10 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
                           key={doc.id}
                           type="button"
                           onClick={() => handleSelectDoc(doc.id)}
-                          className={`btn text-start p-2.5 rounded-3 border d-flex justify-content-between align-items-center transition-all ${
-                            isSelected
-                              ? 'bg-white shadow-sm border-gold fw-semibold'
-                              : 'bg-white border-light text-muted hover-shadow'
-                          }`}
+                          className={`btn text-start p-2.5 rounded-3 border d-flex justify-content-between align-items-center transition-all ${isSelected
+                            ? 'bg-white shadow-sm border-gold fw-semibold'
+                            : 'bg-white border-light text-muted hover-shadow'
+                            }`}
                           style={{
                             borderLeft: isSelected ? '4px solid #D4AF37' : undefined,
                             borderColor: isSelected ? '#EAC76A' : 'var(--kt-border, #E8DFCE)',
@@ -353,13 +361,12 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
                   <div className="d-flex align-items-center justify-content-between">
                     <span className="fw-bold text-obsidian">{currentOverallStatus || 'PENDING'}</span>
                     <span
-                      className={`badge ${
-                        currentOverallStatus === 'APPROVED' || currentOverallStatus === 'VERIFIED'
-                          ? 'bg-success'
-                          : currentOverallStatus === 'REJECTED'
+                      className={`badge ${currentOverallStatus === 'APPROVED' || currentOverallStatus === 'VERIFIED'
+                        ? 'bg-success'
+                        : currentOverallStatus === 'REJECTED'
                           ? 'bg-danger'
                           : 'bg-warning text-dark'
-                      }`}
+                        }`}
                     >
                       {currentOverallStatus || 'PENDING'}
                     </span>
@@ -478,7 +485,22 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
                         </div>
                       )}
 
-                      {isPdf ? (
+                      {!effectivePreviewUrl ? (
+                        <div className="text-center text-white-50 p-4">
+                          <AlertTriangle size={32} className="text-warning mb-2 mx-auto" />
+                          <p className="small mb-2">No file preview URL available for this document.</p>
+                          {activeDoc?.fileUrl && (
+                            <a
+                              href={activeDoc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-sm btn-gold text-dark fw-semibold"
+                            >
+                              Open Source Link
+                            </a>
+                          )}
+                        </div>
+                      ) : isPdf ? (
                         <iframe
                           src={effectivePreviewUrl}
                           title="PDF Document Preview"
@@ -636,13 +658,12 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
                           </button>
                           <button
                             type="button"
-                            className={`btn btn-sm ${
-                              actionType === 'APPROVE'
-                                ? 'btn-success'
-                                : actionType === 'REJECT'
+                            className={`btn btn-sm ${actionType === 'APPROVE'
+                              ? 'btn-success'
+                              : actionType === 'REJECT'
                                 ? 'btn-danger'
                                 : 'btn-warning text-dark'
-                            }`}
+                              }`}
                             onClick={handleSubmitReview}
                             disabled={isSubmitting}
                           >
@@ -655,15 +676,14 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
                         <div className="d-flex align-items-center gap-2">
                           <span className="small text-muted">Current Decision:</span>
                           <span
-                            className={`badge ${
-                              activeDoc.status === 'APPROVED'
-                                ? 'bg-success'
-                                : activeDoc.status === 'REJECTED'
+                            className={`badge ${activeDoc.status === 'APPROVED'
+                              ? 'bg-success'
+                              : activeDoc.status === 'REJECTED'
                                 ? 'bg-danger'
                                 : activeDoc.status === 'REQUIRES_RESUBMISSION'
-                                ? 'bg-warning text-dark'
-                                : 'bg-secondary'
-                            }`}
+                                  ? 'bg-warning text-dark'
+                                  : 'bg-secondary'
+                              }`}
                           >
                             {activeDoc.status}
                           </span>
