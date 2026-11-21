@@ -9,6 +9,11 @@ import {
 } from '@prisma/client';
 import { AppError } from '../../core/errors/appError';
 import { logger } from '../../core/logging/logger';
+import {
+  validateAndUploadDocument,
+  cleanupUploadedAssets,
+  UploadedAssetReference,
+} from '../../utils/documentStorage';
 
 export interface VehicleListParams {
   search?: string;
@@ -402,79 +407,148 @@ export class AdminVehicleService {
 
     const vehicleId = crypto.randomUUID();
 
-    const created = await prisma.$transaction(async (tx) => {
-      const v = await tx.vehicle.create({
-        data: {
-          id: vehicleId,
-          plateNumber: cleanPlate,
-          vinNumber: cleanVin || null,
-          make: payload.make || 'Toyota',
-          vehicleModel: payload.model.trim(),
-          manufacturingYear: payload.year ? Number(payload.year) : 2022,
-          vehicleColor: payload.color || 'White',
-          vehicleType: (payload.category as VehicleType) || VehicleType.STANDARD_SEDAN,
-          categoryName: payload.categoryName || null,
-          seatingCapacity: payload.capacity ? Number(payload.capacity) : 4,
-          status: VehicleOperationalStatus.AVAILABLE,
-          verificationStatus: VehicleVerificationStatus.PENDING,
-          isActive: true,
-          fuelType: payload.fuelType || 'PETROL',
-          transmission: payload.transmission || 'AUTOMATIC',
-          mileageKm: payload.mileageKm ? Number(payload.mileageKm) : 0,
-          imageUrl: payload.imageUrl || null,
-          insurancePolicyNumber: payload.insurancePolicyNumber || null,
-          insuranceExpiry: payload.insuranceExpiry ? new Date(payload.insuranceExpiry) : null,
-          inspectionExpiry: payload.inspectionExpiry ? new Date(payload.inspectionExpiry) : null,
-        },
-      });
+    // Pre-process, validate and upload any documents/image to storage before database transaction
+    const processedDocuments: Array<{
+      documentType: string;
+      documentNumber?: string | null;
+      fileUrl: string;
+      publicId?: string | null;
+      fileName?: string | null;
+      fileFormat?: string | null;
+      fileSize?: number | null;
+      expiryDate?: Date | null;
+    }> = [];
+    const uploadedAssets: UploadedAssetReference[] = [];
 
-      // Insert initial vehicle documents if provided
-      if (payload.documents && payload.documents.length > 0) {
-        for (const doc of payload.documents) {
+    let cleanImageUrl = payload.imageUrl || null;
+    if (cleanImageUrl && (cleanImageUrl.startsWith('data:') || cleanImageUrl.length > 512)) {
+      try {
+        const imgUpload = await validateAndUploadDocument(cleanImageUrl, {
+          folder: `kings-taxi/vehicles/${vehicleId}`,
+          publicIdPrefix: 'photo',
+          fileName: 'vehicle-photo.jpg',
+        });
+        cleanImageUrl = imgUpload.fileUrl;
+        if (imgUpload.isUploaded && imgUpload.publicId) {
+          uploadedAssets.push({
+            publicId: imgUpload.publicId,
+            resourceType: imgUpload.resourceType,
+          });
+        }
+      } catch (imgErr: any) {
+        logger.warn({ error: imgErr.message }, '[AdminVehicleService] Vehicle photo upload failed, skipping');
+      }
+    }
+
+    if (payload.documents && payload.documents.length > 0) {
+      for (const doc of payload.documents) {
+        if (!doc.fileUrl) continue;
+        const uploadResult = await validateAndUploadDocument(doc.fileUrl, {
+          folder: `kings-taxi/vehicles/${vehicleId}`,
+          publicIdPrefix: (doc.documentType || 'VDOC').toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+          fileName: doc.fileName,
+          declaredFormat: doc.fileFormat,
+          declaredSize: doc.fileSize,
+        });
+
+        if (uploadResult.isUploaded && uploadResult.publicId) {
+          uploadedAssets.push({
+            publicId: uploadResult.publicId,
+            resourceType: uploadResult.resourceType,
+          });
+        }
+
+        processedDocuments.push({
+          documentType: String(doc.documentType || 'DOCUMENT').slice(0, 64),
+          documentNumber: doc.documentNumber ? String(doc.documentNumber).slice(0, 128) : null,
+          fileUrl: uploadResult.fileUrl,
+          publicId: uploadResult.publicId ? String(uploadResult.publicId).slice(0, 255) : (doc.publicId ? String(doc.publicId).slice(0, 255) : null),
+          fileName: doc.fileName ? String(doc.fileName).slice(0, 255) : null,
+          fileFormat: uploadResult.fileFormat ? String(uploadResult.fileFormat).slice(0, 32) : (doc.fileFormat ? String(doc.fileFormat).slice(0, 32) : null),
+          fileSize: uploadResult.fileSize || doc.fileSize || null,
+          expiryDate: doc.expiryDate ? new Date(doc.expiryDate) : null,
+        });
+      }
+    }
+
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        const v = await tx.vehicle.create({
+          data: {
+            id: vehicleId,
+            plateNumber: cleanPlate,
+            vinNumber: cleanVin || null,
+            make: payload.make || 'Toyota',
+            vehicleModel: payload.model.trim(),
+            manufacturingYear: payload.year ? Number(payload.year) : 2022,
+            vehicleColor: payload.color || 'White',
+            vehicleType: (payload.category as VehicleType) || VehicleType.STANDARD_SEDAN,
+            categoryName: payload.categoryName || null,
+            seatingCapacity: payload.capacity ? Number(payload.capacity) : 4,
+            status: VehicleOperationalStatus.AVAILABLE,
+            verificationStatus: VehicleVerificationStatus.PENDING,
+            isActive: true,
+            fuelType: payload.fuelType || 'PETROL',
+            transmission: payload.transmission || 'AUTOMATIC',
+            mileageKm: payload.mileageKm ? Number(payload.mileageKm) : 0,
+            imageUrl: cleanImageUrl,
+            insurancePolicyNumber: payload.insurancePolicyNumber || null,
+            insuranceExpiry: payload.insuranceExpiry ? new Date(payload.insuranceExpiry) : null,
+            inspectionExpiry: payload.inspectionExpiry ? new Date(payload.inspectionExpiry) : null,
+          },
+        });
+
+        // Insert initial vehicle documents with clean storage URLs
+        for (const doc of processedDocuments) {
           await tx.vehicleDocument.create({
             data: {
               vehicleId: v.id,
-              documentType: String(doc.documentType || 'DOCUMENT').slice(0, 64),
-              documentNumber: doc.documentNumber ? String(doc.documentNumber).slice(0, 128) : null,
+              documentType: doc.documentType,
+              documentNumber: doc.documentNumber,
               fileUrl: doc.fileUrl,
-              publicId: doc.publicId ? String(doc.publicId).slice(0, 255) : null,
-              fileName: doc.fileName ? String(doc.fileName).slice(0, 255) : null,
-              fileFormat: doc.fileFormat ? String(doc.fileFormat).slice(0, 32) : null,
-              fileSize: doc.fileSize ? Number(doc.fileSize) : null,
-              expiryDate: doc.expiryDate ? new Date(doc.expiryDate) : null,
+              publicId: doc.publicId,
+              fileName: doc.fileName,
+              fileFormat: doc.fileFormat,
+              fileSize: doc.fileSize,
+              expiryDate: doc.expiryDate,
             },
           });
         }
-      }
 
-      // Initial assignment if requested and driver is eligible
-      if (payload.assignedDriverId) {
-        const driver = await tx.driver.findUnique({ where: { id: payload.assignedDriverId } });
-        if (driver && driver.verificationStatus === DriverVerificationStatus.APPROVED) {
-          await (tx as any).vehicleAssignment.create({
-            data: {
-              vehicleId: v.id,
-              driverId: driver.id,
-              assignedBy: adminIdentifier,
-              isActive: true,
-              notes: 'Initial assignment upon vehicle registration',
-            },
-          });
-          await tx.vehicle.update({
-            where: { id: v.id },
-            data: {
-              driverId: driver.id,
-              status: VehicleOperationalStatus.ASSIGNED,
-            },
-          });
+        // Initial assignment if requested and driver is eligible
+        if (payload.assignedDriverId) {
+          const driver = await tx.driver.findUnique({ where: { id: payload.assignedDriverId } });
+          if (driver && driver.verificationStatus === DriverVerificationStatus.APPROVED) {
+            await (tx as any).vehicleAssignment.create({
+              data: {
+                vehicleId: v.id,
+                driverId: driver.id,
+                assignedBy: adminIdentifier,
+                isActive: true,
+                notes: 'Initial assignment upon vehicle registration',
+              },
+            });
+            await tx.vehicle.update({
+              where: { id: v.id },
+              data: {
+                driverId: driver.id,
+                status: VehicleOperationalStatus.ASSIGNED,
+              },
+            });
+          }
         }
+
+        return v;
+      });
+
+      logger.info({ vehicleId: created.id, plate: cleanPlate, admin: adminIdentifier }, '[AdminVehicleService] Vehicle created successfully');
+      return this.getVehicleById(created.id);
+    } catch (txError: any) {
+      if (uploadedAssets.length > 0) {
+        await cleanupUploadedAssets(uploadedAssets);
       }
-
-      return v;
-    });
-
-    logger.info({ vehicleId: created.id, plate: cleanPlate, admin: adminIdentifier }, '[AdminVehicleService] Vehicle created successfully');
-    return this.getVehicleById(created.id);
+      throw txError;
+    }
   }
 
   /**

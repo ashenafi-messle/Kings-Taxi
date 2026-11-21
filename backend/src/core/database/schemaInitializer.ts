@@ -60,34 +60,24 @@ export async function ensureDatabaseSchema(): Promise<void> {
     }
 
     // 2. Ensure document file_url and image_url columns are TEXT to prevent length overflow
-    try {
-      await prisma.$executeRawUnsafe(`
-        DO $$ BEGIN
-          ALTER TABLE "driver_documents" ALTER COLUMN "file_url" TYPE TEXT;
-        EXCEPTION WHEN others THEN null; END $$;
-        DO $$ BEGIN
-          ALTER TABLE "vehicle_documents" ALTER COLUMN "file_url" TYPE TEXT;
-        EXCEPTION WHEN others THEN null; END $$;
-        DO $$ BEGIN
-          ALTER TABLE "vehicles" ALTER COLUMN "image_url" TYPE TEXT;
-        EXCEPTION WHEN others THEN null; END $$;
-        DO $$ BEGIN
-          ALTER TABLE "drivers" ALTER COLUMN "profile_image" TYPE TEXT;
-        EXCEPTION WHEN others THEN null; END $$;
-        DO $$ BEGIN
-          ALTER TABLE "passengers" ALTER COLUMN "profile_image" TYPE TEXT;
-        EXCEPTION WHEN others THEN null; END $$;
-        DO $$ BEGIN
-          ALTER TABLE "admin_users" ALTER COLUMN "avatar_url" TYPE TEXT;
-        EXCEPTION WHEN others THEN null; END $$;
-        DO $$ BEGIN
-          ALTER TABLE "refresh_tokens" ADD COLUMN IF NOT EXISTS "admin_id" UUID REFERENCES "admin_users"("id") ON DELETE CASCADE;
-        EXCEPTION WHEN others THEN null; END $$;
-      `);
-      logger.info('[Schema Initializer] Verified document file_url and image_url column types are TEXT.');
-    } catch (err: any) {
-      logger.warn({ err: err.message }, '[Schema Initializer] Document file_url column type upgrade deferred');
+    const ddlUpgrades = [
+      'ALTER TABLE "driver_documents" ALTER COLUMN "file_url" TYPE TEXT;',
+      'ALTER TABLE "vehicle_documents" ALTER COLUMN "file_url" TYPE TEXT;',
+      'ALTER TABLE "vehicles" ALTER COLUMN "image_url" TYPE TEXT;',
+      'ALTER TABLE "drivers" ALTER COLUMN "profile_image" TYPE TEXT;',
+      'ALTER TABLE "passengers" ALTER COLUMN "profile_image" TYPE TEXT;',
+      'ALTER TABLE "admin_users" ALTER COLUMN "avatar_url" TYPE TEXT;',
+      'ALTER TABLE "refresh_tokens" ADD COLUMN IF NOT EXISTS "admin_id" UUID REFERENCES "admin_users"("id") ON DELETE CASCADE;',
+    ];
+
+    for (const sql of ddlUpgrades) {
+      try {
+        await prisma.$executeRawUnsafe(sql);
+      } catch (err: any) {
+        // Safe to ignore if already applied or column already TEXT
+      }
     }
+    logger.info('[Schema Initializer] Verified document file_url and image_url column types are TEXT.');
 
     // 3. Check if driver columns exist
     const checkDriverCols = await prisma.$queryRaw<Array<{ column_name: string }>>`

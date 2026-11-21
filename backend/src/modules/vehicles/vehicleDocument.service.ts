@@ -3,6 +3,11 @@ import { DocumentReviewStatus, VehicleVerificationStatus } from '@prisma/client'
 import { AppError } from '../../core/errors/appError';
 import { logger } from '../../core/logging/logger';
 import { CloudinaryService } from '../../integrations/cloudinary/cloudinary.service';
+import {
+  validateAndUploadDocument,
+  cleanupUploadedAssets,
+  UploadedAssetReference,
+} from '../../utils/documentStorage';
 
 // Mandatory document types for full vehicle verification
 export const MANDATORY_VEHICLE_DOCUMENT_TYPES = [
@@ -51,6 +56,34 @@ export class VehicleDocumentService {
       expiryDate?: Date | string;
     }
   ) {
+    const uploadedAssets: UploadedAssetReference[] = [];
+    let effectiveFileUrl = data.fileUrl;
+    let effectivePublicId = data.publicId;
+    let effectiveFileFormat = data.fileFormat;
+    let effectiveFileSize = data.fileSize;
+
+    if (data.fileUrl && (data.fileUrl.startsWith('data:') || data.fileUrl.length > 512)) {
+      const uploadRes = await validateAndUploadDocument(data.fileUrl, {
+        folder: `kings-taxi/vehicles/${vehicleId}`,
+        publicIdPrefix: (data.documentType || 'VDOC').toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+        fileName: data.fileName,
+        declaredFormat: data.fileFormat,
+        declaredSize: data.fileSize,
+      });
+
+      effectiveFileUrl = uploadRes.fileUrl;
+      effectivePublicId = uploadRes.publicId;
+      effectiveFileFormat = uploadRes.fileFormat;
+      effectiveFileSize = uploadRes.fileSize;
+
+      if (uploadRes.isUploaded && uploadRes.publicId) {
+        uploadedAssets.push({
+          publicId: uploadRes.publicId,
+          resourceType: uploadRes.resourceType,
+        });
+      }
+    }
+
     try {
       const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
       if (!vehicle) {
@@ -64,11 +97,11 @@ export class VehicleDocumentService {
           vehicleId,
           documentType: String(data.documentType || 'DOCUMENT').slice(0, 64),
           documentNumber: data.documentNumber ? String(data.documentNumber).slice(0, 128) : null,
-          fileUrl: data.fileUrl,
-          publicId: data.publicId ? String(data.publicId).slice(0, 255) : null,
+          fileUrl: effectiveFileUrl,
+          publicId: effectivePublicId ? String(effectivePublicId).slice(0, 255) : null,
           fileName: data.fileName ? String(data.fileName).slice(0, 255) : null,
-          fileFormat: data.fileFormat ? String(data.fileFormat).slice(0, 32) : null,
-          fileSize: data.fileSize ? Number(data.fileSize) : null,
+          fileFormat: effectiveFileFormat ? String(effectiveFileFormat).slice(0, 32) : null,
+          fileSize: effectiveFileSize ? Number(effectiveFileSize) : null,
           status: DocumentReviewStatus.PENDING_REVIEW,
           expiryDate: expiry,
         },
@@ -77,17 +110,20 @@ export class VehicleDocumentService {
       await this.recalculateVehicleVerification(vehicleId);
       return newDoc;
     } catch (err: any) {
+      if (uploadedAssets.length > 0 && !isDbConnectionError(err)) {
+        await cleanupUploadedAssets(uploadedAssets);
+      }
       if (isDbConnectionError(err)) {
         const dummyDoc = {
           id: `vdoc_${Date.now()}`,
           vehicleId,
           documentType: data.documentType,
           documentNumber: data.documentNumber || null,
-          fileUrl: data.fileUrl,
-          publicId: data.publicId || null,
+          fileUrl: effectiveFileUrl,
+          publicId: effectivePublicId || null,
           fileName: data.fileName || 'vehicle-document.pdf',
-          fileFormat: data.fileFormat || 'pdf',
-          fileSize: data.fileSize || 2048,
+          fileFormat: effectiveFileFormat || 'pdf',
+          fileSize: effectiveFileSize || 2048,
           status: DocumentReviewStatus.PENDING_REVIEW,
           rejectionReason: null,
           reviewNotes: null,

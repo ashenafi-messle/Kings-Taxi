@@ -241,7 +241,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 fill
                 sizes="38px"
                 style={{ objectFit: 'cover' }}
-                priority
               />
             </div>
 
@@ -386,7 +385,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     fill
                     sizes="36px"
                     style={{ objectFit: 'cover' }}
-                    priority
                   />
                 </div>
                 <div>
