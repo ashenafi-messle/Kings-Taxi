@@ -1,5 +1,5 @@
 import { Driver, DriverDocument, DriverFilterParams, PaginatedResult } from '../types';
-import { apiRequest } from './apiClient';
+import { apiRequest, buildApiUrl } from './apiClient';
 import { mockDrivers } from './mockData';
 
 let fallbackDriversData: Driver[] = [...mockDrivers];
@@ -373,24 +373,24 @@ export class DriverService {
    * Build authorized preview URL for an administrator
    */
   static getDocumentPreviewUrl(documentId: string): string {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://kings-taxi.onrender.com/api/v1';
     let token = '';
     if (typeof window !== 'undefined') {
       token = localStorage.getItem('accessToken') || '';
     }
-    return `${baseUrl}/admin/documents/${documentId}/preview${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const base = buildApiUrl(`/admin/documents/${documentId}/preview`);
+    return `${base}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   }
 
   /**
    * Build authorized download URL for an administrator
    */
   static getDocumentDownloadUrl(documentId: string): string {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://kings-taxi.onrender.com/api/v1';
     let token = '';
     if (typeof window !== 'undefined') {
       token = localStorage.getItem('accessToken') || '';
     }
-    return `${baseUrl}/admin/documents/${documentId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const base = buildApiUrl(`/admin/documents/${documentId}/download`);
+    return `${base}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   }
 
   /**

@@ -21,6 +21,17 @@ export function createApp(): Express {
   // 1. Trust proxy for reverse proxy deployments (Nginx on VPS / Docker)
   app.set('trust proxy', 1);
 
+  // Normalize incoming URLs: clean up duplicate slashes and redundant /api prefixes from client proxies
+  app.use((req, _res, next) => {
+    if (req.url && (req.url.includes('//') || req.url.includes('/api//') || req.url.includes('/api/api/'))) {
+      req.url = req.url
+        .replace(/\/api\/\/api\//g, '/api/')
+        .replace(/\/api\/api\//g, '/api/')
+        .replace(/([^:]\/)\/+/g, '$1');
+    }
+    next();
+  });
+
   // 2. Request correlation ID
   app.use(requestIdMiddleware);
 

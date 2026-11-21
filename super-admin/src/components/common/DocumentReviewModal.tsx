@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { buildApiUrl } from '../../services/apiClient';
 import {
   ZoomIn,
   ZoomOut,
@@ -188,27 +189,34 @@ export const DocumentReviewModal: React.FC<DocumentReviewModalProps> = ({
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val || '');
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') || '' : '';
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://kings-taxi.onrender.com/api/v1';
 
   // Build authorized URLs with token for seamless iframe/stream access
   let effectivePreviewUrl = '';
   if (activeDoc?.previewUrl) {
-    effectivePreviewUrl = activeDoc.previewUrl.startsWith('http')
-      ? activeDoc.previewUrl
-      : `${apiBase.replace(/\/api\/v1$/, '')}${activeDoc.previewUrl}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    if (activeDoc.previewUrl.startsWith('http')) {
+      const u = new URL(activeDoc.previewUrl);
+      if (token) u.searchParams.set('token', token);
+      effectivePreviewUrl = u.toString();
+    } else {
+      effectivePreviewUrl = `${buildApiUrl(activeDoc.previewUrl)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    }
   } else if (activeDoc?.id && isUuid(activeDoc.id)) {
-    effectivePreviewUrl = `${apiBase}/admin/documents/${activeDoc.id}/preview${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    effectivePreviewUrl = `${buildApiUrl(`/admin/documents/${activeDoc.id}/preview`)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   } else if (activeDoc?.fileUrl && (activeDoc.fileUrl.startsWith('http') || activeDoc.fileUrl.startsWith('data:'))) {
     effectivePreviewUrl = activeDoc.fileUrl;
   }
 
   let effectiveDownloadUrl = '';
   if (activeDoc?.downloadUrl) {
-    effectiveDownloadUrl = activeDoc.downloadUrl.startsWith('http')
-      ? activeDoc.downloadUrl
-      : `${apiBase.replace(/\/api\/v1$/, '')}${activeDoc.downloadUrl}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    if (activeDoc.downloadUrl.startsWith('http')) {
+      const u = new URL(activeDoc.downloadUrl);
+      if (token) u.searchParams.set('token', token);
+      effectiveDownloadUrl = u.toString();
+    } else {
+      effectiveDownloadUrl = `${buildApiUrl(activeDoc.downloadUrl)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    }
   } else if (activeDoc?.id && isUuid(activeDoc.id)) {
-    effectiveDownloadUrl = `${apiBase}/admin/documents/${activeDoc.id}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    effectiveDownloadUrl = `${buildApiUrl(`/admin/documents/${activeDoc.id}/download`)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   } else if (activeDoc?.fileUrl && (activeDoc.fileUrl.startsWith('http') || activeDoc.fileUrl.startsWith('data:'))) {
     effectiveDownloadUrl = activeDoc.fileUrl;
   }
