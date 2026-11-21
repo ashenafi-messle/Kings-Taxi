@@ -222,9 +222,8 @@ export default function VehicleDetailPage() {
             </Link>
             <button
               type="button"
-              className={`btn btn-sm d-flex align-items-center gap-1.5 ${
-                vehicle.status === 'ACTIVE' ? 'btn-outline-warning' : 'btn-success'
-              }`}
+              className={`btn btn-sm d-flex align-items-center gap-1.5 ${vehicle.status === 'ACTIVE' ? 'btn-outline-warning' : 'btn-success'
+                }`}
               onClick={handleToggleMaintenance}
               disabled={isUpdating}
             >
@@ -530,6 +529,9 @@ export default function VehicleDetailPage() {
             documentType: d.documentType || 'DOCUMENT',
             documentNumber: d.documentNumber,
             fileUrl: d.fileUrl,
+            publicId: d.publicId,
+            previewUrl: d.previewUrl,
+            downloadUrl: d.downloadUrl,
             fileName: d.fileName,
             fileFormat: d.fileFormat,
             fileSize: d.fileSize,
@@ -539,6 +541,7 @@ export default function VehicleDetailPage() {
             reviewedBy: d.reviewedBy,
             reviewedAt: d.reviewedAt,
             expiryDate: d.expiryDate,
+            createdAt: d.createdAt,
           }))}
           onReviewDocument={handleReviewDocument}
         />

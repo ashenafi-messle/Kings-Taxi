@@ -1,4 +1,4 @@
-import { Driver, DriverFilterParams, PaginatedResult } from '../types';
+import { Driver, DriverDocument, DriverFilterParams, PaginatedResult } from '../types';
 import { apiRequest } from './apiClient';
 import { mockDrivers } from './mockData';
 
@@ -297,14 +297,23 @@ export class DriverService {
     }
   ): Promise<Driver | null> {
     try {
-      // Review specific document endpoint
-      const res = await apiRequest<any>(`/drivers/${driverId}/documents/${documentId}/status`, {
+      // 1. Try dedicated admin document verification endpoint
+      let res = await apiRequest<any>(`/admin/documents/${documentId}/verification`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(review),
       });
 
-      if (res.success) {
+      if (!res?.success) {
+        // Fallback to driver-nested route
+        res = await apiRequest<any>(`/admin/drivers/${driverId}/documents/${documentId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(review),
+        });
+      }
+
+      if (res?.success) {
         return this.getDriverById(driverId);
       }
     } catch (err) {
@@ -342,6 +351,46 @@ export class DriverService {
 
     driver.updatedAt = new Date().toISOString();
     return driver;
+  }
+
+  /**
+   * Retrieve all verification documents for a driver
+   */
+  static async getDriverDocuments(driverId: string): Promise<DriverDocument[]> {
+    try {
+      const res = await apiRequest<DriverDocument[]>(`/admin/drivers/${driverId}/documents`);
+      if (res.success && Array.isArray(res.data)) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] Failed to load documents from API:', err);
+    }
+    const d = await this.getDriverById(driverId);
+    return d?.documents || [];
+  }
+
+  /**
+   * Build authorized preview URL for an administrator
+   */
+  static getDocumentPreviewUrl(documentId: string): string {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://kings-taxi.onrender.com/api/v1';
+    let token = '';
+    if (typeof window !== 'undefined') {
+      token = localStorage.getItem('accessToken') || '';
+    }
+    return `${baseUrl}/admin/documents/${documentId}/preview${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  }
+
+  /**
+   * Build authorized download URL for an administrator
+   */
+  static getDocumentDownloadUrl(documentId: string): string {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://kings-taxi.onrender.com/api/v1';
+    let token = '';
+    if (typeof window !== 'undefined') {
+      token = localStorage.getItem('accessToken') || '';
+    }
+    return `${baseUrl}/admin/documents/${documentId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   }
 
   /**

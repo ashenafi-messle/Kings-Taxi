@@ -288,6 +288,9 @@ export default function VehiclesPage() {
             documentType: d.documentType || 'DOCUMENT',
             documentNumber: d.documentNumber,
             fileUrl: d.fileUrl,
+            publicId: d.publicId,
+            previewUrl: d.previewUrl,
+            downloadUrl: d.downloadUrl,
             fileName: d.fileName,
             fileFormat: d.fileFormat,
             fileSize: d.fileSize,
@@ -297,6 +300,7 @@ export default function VehiclesPage() {
             reviewedBy: d.reviewedBy,
             reviewedAt: d.reviewedAt,
             expiryDate: d.expiryDate,
+            createdAt: d.createdAt,
           }))}
           onReviewDocument={handleReviewDocument}
         />

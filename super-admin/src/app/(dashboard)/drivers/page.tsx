@@ -371,6 +371,9 @@ export default function DriversPage() {
             documentType: d.documentType || d.type || 'DOCUMENT',
             documentNumber: d.documentNumber,
             fileUrl: d.fileUrl,
+            publicId: d.publicId,
+            previewUrl: d.previewUrl,
+            downloadUrl: d.downloadUrl,
             fileName: d.fileName,
             fileFormat: d.fileFormat,
             fileSize: d.fileSize,
@@ -380,6 +383,7 @@ export default function DriversPage() {
             reviewedBy: d.reviewedBy,
             reviewedAt: d.reviewedAt,
             expiryDate: d.expiryDate,
+            createdAt: d.createdAt,
           }))}
           onReviewDocument={handleReviewDocument}
         />

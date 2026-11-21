@@ -336,13 +336,22 @@ export class VehicleService {
     }
   ): Promise<Vehicle | null> {
     try {
-      const res = await apiRequest<any>(`/vehicles/${vehicleId}/documents/${documentId}/status`, {
+      // 1. Try dedicated admin document verification endpoint
+      let res = await apiRequest<any>(`/admin/documents/${documentId}/verification`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(review),
       });
 
-      if (res.success) {
+      if (!res?.success) {
+        res = await apiRequest<any>(`/admin/vehicles/${vehicleId}/documents/${documentId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(review),
+        });
+      }
+
+      if (res?.success) {
         return this.getVehicleById(vehicleId);
       }
     } catch (err) {

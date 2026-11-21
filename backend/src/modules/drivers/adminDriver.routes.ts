@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { adminDriverController } from './adminDriver.controller';
+import { adminDocumentController } from '../documents/adminDocument.controller';
 import { authenticateToken, requireRole } from '../../core/middleware/auth.middleware';
 
 export const adminDriverRouter = Router();
@@ -16,5 +17,8 @@ adminDriverRouter.get('/:id', (req, res) => adminDriverController.getDriverById(
 adminDriverRouter.patch('/:id', (req, res) => adminDriverController.updateDriver(req, res));
 adminDriverRouter.patch('/:id/status', (req, res) => adminDriverController.updateStatus(req, res));
 adminDriverRouter.patch('/:id/verification', (req, res) => adminDriverController.updateVerification(req, res));
-adminDriverRouter.get('/:id/documents', (req, res) => adminDriverController.getDocuments(req, res));
+adminDriverRouter.get('/:id/documents', (req, res) => adminDocumentController.getDriverDocuments(req, res));
+adminDriverRouter.get('/:id/documents/:documentId', (req, res) => adminDocumentController.getDriverDocumentById(req, res));
+adminDriverRouter.patch('/:id/documents/:documentId/status', (req, res) => adminDocumentController.reviewDocument(req, res));
+adminDriverRouter.patch('/:id/documents/:documentId/verification', (req, res) => adminDocumentController.reviewDocument(req, res));
 adminDriverRouter.get('/:id/trips', (req, res) => adminDriverController.getTrips(req, res));

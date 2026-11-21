@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { adminVehicleController } from './adminVehicle.controller';
+import { adminDocumentController } from '../documents/adminDocument.controller';
 import { authenticateToken, requireRole } from '../../core/middleware/auth.middleware';
 
 export const adminVehicleRouter = Router();
@@ -26,3 +27,6 @@ adminVehicleRouter.post('/:id/maintenance', (req, res) => adminVehicleController
 adminVehicleRouter.patch('/:id/maintenance/:maintenanceId', (req, res) => adminVehicleController.updateMaintenance(req, res));
 
 adminVehicleRouter.get('/:id/documents', (req, res) => adminVehicleController.getDocuments(req, res));
+adminVehicleRouter.patch('/:id/documents/:documentId/status', (req, res) => adminDocumentController.reviewDocument(req, res));
+adminVehicleRouter.patch('/:id/documents/:documentId/verification', (req, res) => adminDocumentController.reviewDocument(req, res));
+

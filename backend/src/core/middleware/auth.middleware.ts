@@ -23,12 +23,18 @@ declare global {
 
 export function authenticateToken(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers['authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let token: string | undefined;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query && typeof req.query.token === 'string' && req.query.token.trim()) {
+    token = req.query.token.trim();
+  }
+
+  if (!token) {
     ApiResponse.error(res, 'UNAUTHORIZED', 'Missing or malformed Authorization header', 401);
     return;
   }
-
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as TokenPayload;
     req.user = decoded;

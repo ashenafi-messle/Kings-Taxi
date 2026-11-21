@@ -15,6 +15,8 @@ export interface DriverDocument {
   expiryDate?: string;
   fileUrl: string;
   publicId?: string;
+  previewUrl?: string;
+  downloadUrl?: string;
   fileName?: string;
   fileFormat?: string;
   fileSize?: number;
@@ -26,6 +28,7 @@ export interface DriverDocument {
   reviewedAt?: string;
   uploadedAt?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Driver {

@@ -368,7 +368,11 @@ export class AdminVehicleService {
       assignedDriverName: assignedDriver?.fullName,
       assignedDriverPhone: assignedDriver?.phoneNumber,
       assignedDriver,
-      documents: vehicle.documents,
+      documents: (vehicle.documents || []).map((doc: any) => ({
+        ...doc,
+        previewUrl: `/api/v1/admin/documents/${doc.id}/preview`,
+        downloadUrl: `/api/v1/admin/documents/${doc.id}/download`,
+      })),
       assignmentHistory: vehicle.assignments,
       maintenanceRecords: vehicle.maintenances,
       recentTrips: vehicle.trips,
@@ -928,10 +932,15 @@ export class AdminVehicleService {
    * List vehicle documents
    */
   async getVehicleDocuments(vehicleId: string) {
-    return prisma.vehicleDocument.findMany({
+    const docs = await prisma.vehicleDocument.findMany({
       where: { vehicleId },
       orderBy: { createdAt: 'desc' },
     });
+    return docs.map((doc: any) => ({
+      ...doc,
+      previewUrl: `/api/v1/admin/documents/${doc.id}/preview`,
+      downloadUrl: `/api/v1/admin/documents/${doc.id}/download`,
+    }));
   }
 }
 

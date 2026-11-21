@@ -23,6 +23,15 @@ describe('Document Storage & Validation Utility', () => {
   });
 
   it('validates and uploads Base64 image data URIs to clean storage URLs', async () => {
+    vi.spyOn(CloudinaryService, 'uploadAsset').mockResolvedValue({
+      secureUrl: 'https://res.cloudinary.com/oxzqogef/image/upload/v1/license.png',
+      url: 'http://res.cloudinary.com/oxzqogef/image/upload/v1/license.png',
+      publicId: 'kings-taxi/drivers/test-driver-1/documents/license_123',
+      format: 'png',
+      bytes: 68,
+      resourceType: 'image',
+    });
+
     // 1x1 transparent PNG data URI
     const base64Png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
@@ -38,6 +47,15 @@ describe('Document Storage & Validation Utility', () => {
   });
 
   it('validates and uploads Base64 PDF documents with raw resourceType', async () => {
+    vi.spyOn(CloudinaryService, 'uploadAsset').mockResolvedValue({
+      secureUrl: 'https://res.cloudinary.com/oxzqogef/raw/upload/v1/police.pdf',
+      url: 'http://res.cloudinary.com/oxzqogef/raw/upload/v1/police.pdf',
+      publicId: 'kings-taxi/drivers/test-driver-2/documents/police_clearance_123',
+      format: 'pdf',
+      bytes: 1024,
+      resourceType: 'raw',
+    });
+
     // Minimal PDF header
     const base64Pdf = 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCjQgMCBvYmoKPDwgL0xlbmd0aCA1IDAgUiAvRmlsdGVyIC9GbGF0ZURlY29kZSA+PgpzdHJlYW0KeAE=';
 
