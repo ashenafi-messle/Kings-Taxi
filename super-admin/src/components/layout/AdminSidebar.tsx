@@ -12,7 +12,6 @@ import {
   Car,
   UserCheck,
   Building2,
-  Briefcase,
   CalendarCheck,
   Landmark,
   Compass,
@@ -68,7 +67,6 @@ const navGroups: NavGroup[] = [
   {
     groupTitle: 'TOURISM & HOSPITALITY',
     items: [
-      { label: 'Hotel Partners', href: '/hotel-partners', icon: Briefcase },
       { label: 'Partner Hotels', href: '/hotels', icon: Building2 },
       { label: 'Hotel Bookings', href: '/hotel-bookings', icon: CalendarCheck },
       { label: 'Heritage Sites', href: '/heritage', icon: Landmark },

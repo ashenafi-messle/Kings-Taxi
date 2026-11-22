@@ -14,7 +14,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   className = '',
 }) => {
   const normStatus = (status || '').toUpperCase();
-  const displayLabel = label || status.replace(/_/g, ' ');
+  const displayLabel = label || (status ? String(status).replace(/_/g, ' ') : 'ACTIVE');
 
   // Determine variant styling
   let badgeStyle = {

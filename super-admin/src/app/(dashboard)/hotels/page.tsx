@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Building2,
-  Briefcase,
   Plus,
   Eye,
   Star,
@@ -62,17 +61,16 @@ export default function HotelsPage() {
             <Building2 size={22} />
           </div>
           <div>
-            <div className="fw-bold text-obsidian text-sm">{h.name}</div>
+            <div className="fw-bold text-obsidian text-sm">{h.name || 'Unnamed Hotel'}</div>
             {h.partner?.businessName && (
               <div className="text-gold text-xs d-flex align-items-center gap-1">
-                <Briefcase size={11} />
                 <span>{h.partner.businessName}</span>
               </div>
             )}
             <div className="text-muted text-xs d-flex align-items-center gap-1 mt-0.5">
               <MapPin size={12} />
               <span>
-                {h.address}, {h.city}
+                {h.address || 'Address Not Specified'}, {h.city || 'Gondar'}
               </span>
             </div>
           </div>
@@ -87,9 +85,11 @@ export default function HotelsPage() {
         <div>
           <div className="d-flex align-items-center gap-1 text-sm fw-semibold">
             <Star size={14} className="text-gold fill-gold" />
-            <span>{h.starRating} Stars</span>
+            <span>{h.starRating ?? 4} Stars</span>
           </div>
-          <span className="badge bg-light text-dark border mt-1 text-xs">{h.categoryLabel}</span>
+          <span className="badge bg-light text-dark border mt-1 text-xs">
+            {h.categoryLabel || (h.category ? String(h.category).replace(/_/g, ' ') : 'Boutique Hotel')}
+          </span>
         </div>
       ),
     },
@@ -99,11 +99,11 @@ export default function HotelsPage() {
       render: (h) => {
         let totalInv = 0;
         let availInv = 0;
-        h.roomTypes.forEach((rt) => {
-          totalInv += rt.totalInventory;
+        (h.roomTypes || []).forEach((rt) => {
+          totalInv += rt.totalInventory || 0;
           availInv += rt.availableInventory ?? rt.availableRooms ?? 0;
         });
-        const booked = totalInv - availInv;
+        const booked = Math.max(0, totalInv - availInv);
         return (
           <div>
             <div className="d-flex align-items-center gap-1.5 text-sm fw-bold text-obsidian">
@@ -122,8 +122,8 @@ export default function HotelsPage() {
       header: 'Contact',
       render: (h) => (
         <div>
-          <div className="text-sm fw-medium font-monospace">{h.phone}</div>
-          <div className="text-muted text-xs">{h.email}</div>
+          <div className="text-sm fw-medium font-monospace">{h.phone || 'N/A'}</div>
+          <div className="text-muted text-xs">{h.email || 'N/A'}</div>
         </div>
       ),
     },
@@ -131,7 +131,7 @@ export default function HotelsPage() {
       key: 'status',
       header: 'Status',
       sortable: true,
-      render: (h) => <StatusBadge status={h.status} size="sm" />,
+      render: (h) => <StatusBadge status={h.status || 'ACTIVE'} size="sm" />,
     },
     {
       key: 'actions',
@@ -162,10 +162,6 @@ export default function HotelsPage() {
         ]}
         actions={
           <div className="d-flex align-items-center gap-2">
-            <Link href="/hotel-partners" className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1.5">
-              <Briefcase size={14} />
-              <span>Hotel Partners</span>
-            </Link>
             <Link href="/hotel-bookings" className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1.5">
               <CalendarCheck size={14} />
               <span>View Bookings</span>
