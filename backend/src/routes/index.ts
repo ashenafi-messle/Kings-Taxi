@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { healthRouter } from '../modules/health/health.routes';
 import { authRouter } from '../modules/auth';
-import { passengerRouter } from '../modules/passengers';
+import { passengerRouter, adminPassengerRouter } from '../modules/passengers';
 import { passengerBookingHistoryController } from '../modules/passengers/passengerBookingHistory.controller';
 import { authenticateToken } from '../core/middleware/auth.middleware';
 import { driverRouter, adminDriverRouter } from '../modules/drivers';
@@ -60,5 +60,6 @@ apiV1Router.use('/admin/support', adminSupportRouter);
 apiV1Router.use('/admin/drivers', adminDriverRouter);
 apiV1Router.use('/admin/vehicles', adminVehicleRouter);
 apiV1Router.use('/admin/documents', adminDocumentRouter);
+apiV1Router.use('/admin/passengers', adminPassengerRouter);
 apiV1Router.use('/', hospitalityRouter);
 apiV1Router.use('/', heritageRouter);

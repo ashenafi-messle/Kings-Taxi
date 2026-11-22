@@ -127,3 +127,9 @@ passengerRouter.post('/rides/:id/cancel', authenticateToken, (req, res) => booki
 passengerRouter.post('/rides/:rideId/change-destination', authenticateToken, (req, res) =>
   tripController.changeDestination(req, res)
 );
+
+// Admin Passenger Management exports
+export * from './adminPassenger.routes';
+export * from './adminPassenger.controller';
+export * from './adminPassenger.service';
+

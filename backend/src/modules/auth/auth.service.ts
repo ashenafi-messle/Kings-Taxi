@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { AccountStatus } from '@prisma/client';
 import { prisma, isDbConnectionError } from '../../core/database/prisma';
 import { env } from '../../config/env';
 import { AppError } from '../../core/errors/appError';
@@ -850,10 +851,10 @@ export class AuthService {
     const tgProviderId = linkedTelegram?.telegramUserId || session.identifier;
     const tgMetadata = linkedTelegram
       ? {
-          chatId: linkedTelegram.chatId,
-          phone: linkedTelegram.phone,
-          username: linkedTelegram.username || null,
-        }
+        chatId: linkedTelegram.chatId,
+        phone: linkedTelegram.phone,
+        username: linkedTelegram.username || null,
+      }
       : undefined;
 
     let createdPassenger: any;
@@ -977,6 +978,14 @@ export class AuthService {
 
     if (!passenger) {
       throw new AppError('Invalid email/phone or password', 401, 'INVALID_CREDENTIALS');
+    }
+
+    if (passenger.accountStatus === AccountStatus.SUSPENDED) {
+      throw new AppError(
+        'Your account has been suspended. Please contact customer support.',
+        403,
+        'ACCOUNT_SUSPENDED'
+      );
     }
 
     let isValid = false;
@@ -1484,6 +1493,14 @@ export class AuthService {
       return adminAuthService.refreshToken(rawRefreshToken);
     }
 
+    if (storedToken.passenger?.accountStatus === AccountStatus.SUSPENDED) {
+      throw new AppError(
+        'Your account has been suspended. Please contact customer support.',
+        403,
+        'ACCOUNT_SUSPENDED'
+      );
+    }
+
     // 3. ATOMIC TOKEN ROTATION & CONCURRENCY PROTECTION (Single DB Transaction)
     const passenger = storedToken.passenger || { id: storedToken.userId };
     const newAccessToken = this.generateAccessToken(passenger);
@@ -1736,10 +1753,10 @@ export class AuthService {
           connected: telegramCheck.success,
           botDetails: telegramCheck.bot
             ? {
-                id: telegramCheck.bot.id,
-                username: telegramCheck.bot.username,
-                firstName: telegramCheck.bot.first_name,
-              }
+              id: telegramCheck.bot.id,
+              username: telegramCheck.bot.username,
+              firstName: telegramCheck.bot.first_name,
+            }
             : null,
           webhookInfo: webhookCheck.info || null,
           error: telegramCheck.error,

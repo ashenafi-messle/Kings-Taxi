@@ -372,6 +372,9 @@ model Passenger {
   emergencyContactName  String? @map("emergency_contact_name") @db.VarChar(128)
   emergencyContactPhone String? @map("emergency_contact_phone") @db.VarChar(32)
 
+  suspensionReason      String?   @map("suspension_reason") @db.Text
+  suspendedAt           DateTime? @map("suspended_at") @db.Timestamptz(6)
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
