@@ -361,7 +361,7 @@ export class HotelService {
       if (params.limit) q.set('limit', String(params.limit));
 
       const res = await apiRequest<any>(`/admin/hotels?${q.toString()}`);
-      if (res.success && res.data?.hotels && res.data.hotels.length > 0) {
+      if (res.success && res.data?.hotels && Array.isArray(res.data.hotels)) {
         const mappedHotels: Hotel[] = res.data.hotels.map((h: any) => ({
           id: h.id,
           name: h.name,
@@ -410,11 +410,20 @@ export class HotelService {
           updatedAt: h.updatedAt || new Date().toISOString(),
         }));
 
+        // Merge any newly added hotels in memory that are not yet returned by backend
+        const backendIds = new Set(mappedHotels.map((h) => h.id));
+        const localCreated = hotelsData.filter((h) => !backendIds.has(h.id));
+        let allHotels = [...localCreated, ...mappedHotels];
+
+        if (params.city && params.city !== 'ALL') {
+          allHotels = allHotels.filter((h) => h.city?.toLowerCase() === params.city?.toLowerCase());
+        }
+
         return {
-          items: mappedHotels,
-          total: res.data.pagination?.total || mappedHotels.length,
+          items: allHotels,
+          total: allHotels.length,
           page: res.data.pagination?.page || 1,
-          limit: res.data.pagination?.limit || 10,
+          limit: res.data.pagination?.limit || 100,
           totalPages: res.data.pagination?.totalPages || 1,
         };
       }
@@ -422,7 +431,7 @@ export class HotelService {
       // Offline fallback
     }
 
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 100));
     let filtered = [...hotelsData];
 
     if (params.search) {
@@ -439,16 +448,12 @@ export class HotelService {
       filtered = filtered.filter((h) => h.city.toLowerCase() === params.city?.toLowerCase());
     }
 
-    if (params.category && params.category !== 'ALL') {
-      filtered = filtered.filter((h) => h.category === params.category);
-    }
-
     if (params.status && params.status !== 'ALL') {
       filtered = filtered.filter((h) => h.status === params.status);
     }
 
     const page = params.page || 1;
-    const limit = params.limit || 10;
+    const limit = params.limit || 100;
     const total = filtered.length;
     const totalPages = Math.ceil(total / limit) || 1;
     const start = (page - 1) * limit;
@@ -526,8 +531,8 @@ export class HotelService {
         body: JSON.stringify({
           name: payload.name,
           slug: payload.slug,
-          partnerId: payload.partnerId,
-          category: payload.category,
+          partnerId: payload.partnerId || null,
+          category: payload.category || 'BOUTIQUE_HERITAGE',
           coverImageUrl: payload.heroImage,
           description: payload.description || 'Hotel description',
           address: payload.address || 'Gondar, Ethiopia',
@@ -552,7 +557,7 @@ export class HotelService {
           description: res.data.description,
           starRating: res.data.starRating || 4,
           category: res.data.category || 'BOUTIQUE_HERITAGE',
-          categoryLabel: res.data.category || 'Boutique Hotel',
+          categoryLabel: (res.data.category ? String(res.data.category).replace(/_/g, ' ') : 'Boutique Hotel'),
           city: res.data.city || 'Gondar',
           address: res.data.address,
           latitude: Number(res.data.latitude || 12.6078),
@@ -569,17 +574,16 @@ export class HotelService {
           availableRooms: 10,
           status: 'ACTIVE',
           roomTypes: [],
-          createdAt: res.data.createdAt,
-          updatedAt: res.data.updatedAt,
+          createdAt: res.data.createdAt || new Date().toISOString(),
+          updatedAt: res.data.updatedAt || new Date().toISOString(),
         };
-        hotelsData = [created, ...hotelsData];
+        hotelsData = [created, ...hotelsData.filter((h) => h.id !== created.id)];
         return created;
       }
     } catch {
       // Fallback
     }
 
-    await new Promise((r) => setTimeout(r, 200));
     const newId = `htl_${Date.now()}`;
     const slug = (payload.name || 'hotel').toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
@@ -589,8 +593,8 @@ export class HotelService {
       slug,
       description: payload.description || '',
       starRating: payload.starRating || 4,
-      category: payload.category || 'BOUTIQUE_HERITAGE',
-      categoryLabel: payload.categoryLabel || 'Boutique Hotel',
+      category: 'BOUTIQUE_HERITAGE',
+      categoryLabel: 'Boutique Hotel',
       city: payload.city || 'Gondar',
       address: payload.address || '',
       latitude: payload.latitude || 12.6078,
@@ -605,14 +609,14 @@ export class HotelService {
       galleryImages: payload.galleryImages || [],
       totalRooms: payload.totalRooms || 20,
       availableRooms: payload.availableRooms || 20,
-      status: payload.status || 'ACTIVE',
-      partnerId: payload.partnerId,
+      status: 'ACTIVE',
+      partnerId: undefined,
       roomTypes: payload.roomTypes || [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    hotelsData = [newHotel, ...hotelsData];
+    hotelsData = [newHotel, ...hotelsData.filter((h) => h.id !== newHotel.id)];
     return newHotel;
   }
 

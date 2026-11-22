@@ -24,14 +24,12 @@ export default function HotelsPage() {
   const router = useRouter();
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [cityFilter, setCityFilter] = useState('ALL');
 
   const fetchHotels = async () => {
     setIsLoading(true);
     try {
       const res = await HotelService.getHotels({
-        category: categoryFilter,
         city: cityFilter,
         limit: 100,
       });
@@ -45,7 +43,7 @@ export default function HotelsPage() {
 
   useEffect(() => {
     fetchHotels();
-  }, [categoryFilter, cityFilter]);
+  }, [cityFilter]);
 
   const columns: Column<Hotel>[] = [
     {
@@ -62,11 +60,6 @@ export default function HotelsPage() {
           </div>
           <div>
             <div className="fw-bold text-obsidian text-sm">{h.name || 'Unnamed Hotel'}</div>
-            {h.partner?.businessName && (
-              <div className="text-gold text-xs d-flex align-items-center gap-1">
-                <span>{h.partner.businessName}</span>
-              </div>
-            )}
             <div className="text-muted text-xs d-flex align-items-center gap-1 mt-0.5">
               <MapPin size={12} />
               <span>
@@ -79,17 +72,12 @@ export default function HotelsPage() {
     },
     {
       key: 'starRating',
-      header: 'Rating & Tier',
+      header: 'Star Rating',
       sortable: true,
       render: (h) => (
-        <div>
-          <div className="d-flex align-items-center gap-1 text-sm fw-semibold">
-            <Star size={14} className="text-gold fill-gold" />
-            <span>{h.starRating ?? 4} Stars</span>
-          </div>
-          <span className="badge bg-light text-dark border mt-1 text-xs">
-            {h.categoryLabel || (h.category ? String(h.category).replace(/_/g, ' ') : 'Boutique Hotel')}
-          </span>
+        <div className="d-flex align-items-center gap-1 text-sm fw-semibold">
+          <Star size={14} className="text-gold fill-gold" />
+          <span>{h.starRating ?? 4} Stars</span>
         </div>
       ),
     },
@@ -194,19 +182,10 @@ export default function HotelsPage() {
               options={[
                 { value: 'ALL', label: 'All Cities' },
                 { value: 'Gondar', label: 'Gondar' },
+                { value: 'Addis Ababa', label: 'Addis Ababa' },
                 { value: 'Bahir Dar', label: 'Bahir Dar' },
                 { value: 'Lalibela', label: 'Lalibela' },
-              ]}
-            />
-            <FilterDropdown
-              label="Tier"
-              value={categoryFilter}
-              onChange={setCategoryFilter}
-              options={[
-                { value: 'ALL', label: 'All Categories' },
-                { value: 'LUXURY_RESORT', label: 'Luxury Resort' },
-                { value: 'HISTORIC_HERITAGE', label: 'Historic Heritage' },
-                { value: 'BOUTIQUE', label: 'Boutique Hotel' },
+                { value: 'Hawassa', label: 'Hawassa' },
               ]}
             />
           </div>

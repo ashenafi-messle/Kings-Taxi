@@ -1,20 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Building2, Briefcase, ArrowLeft, Save, AlertCircle } from 'lucide-react';
+import { Building2, ArrowLeft, Save, AlertCircle } from 'lucide-react';
 import { PageHeader } from '../../../../components/common/PageHeader';
 import { HotelService } from '../../../../services/hotelService';
-import { HotelPartner } from '../../../../types';
 
 export default function NewHotelPage() {
   const router = useRouter();
-  const [partners, setPartners] = useState<HotelPartner[]>([]);
   const [formData, setFormData] = useState({
     name: '',
-    partnerId: '',
-    category: 'BOUTIQUE_HERITAGE',
     city: 'Gondar',
     address: '',
     starRating: 4,
@@ -24,10 +20,6 @@ export default function NewHotelPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    HotelService.getPartners({ limit: 50 }).then((res) => setPartners(res.items)).catch(console.error);
-  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -85,7 +77,7 @@ export default function NewHotelPage() {
             <div className="card-header bg-white border-bottom border-light p-3">
               <div className="d-flex align-items-center gap-2">
                 <Building2 size={18} className="text-gold" />
-                <h3 className="h6 fw-bold text-obsidian mb-0">Hotel Partner Information</h3>
+                <h3 className="h6 fw-bold text-obsidian mb-0">Hotel Information</h3>
               </div>
             </div>
 
@@ -131,42 +123,6 @@ export default function NewHotelPage() {
                   </div>
 
                   <div className="col-12 col-md-6">
-                    <label className="form-label text-sm fw-medium text-obsidian mb-1">
-                      Partner Organization
-                    </label>
-                    <select
-                      name="partnerId"
-                      value={formData.partnerId}
-                      onChange={handleChange}
-                      className="form-select form-select-sm py-2 shadow-none"
-                    >
-                      <option value="">-- Direct / Kings Taxi Hospitality --</option>
-                      {partners.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.businessName} ({p.partnerCode})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-sm fw-medium text-obsidian mb-1">
-                      Hospitality Category *
-                    </label>
-                    <select
-                      name="category"
-                      value={formData.category}
-                      onChange={handleChange}
-                      className="form-select form-select-sm py-2 shadow-none"
-                    >
-                      <option value="BOUTIQUE_HERITAGE">Boutique Heritage Hotel</option>
-                      <option value="LUXURY_5_STAR">5-Star Luxury Resort</option>
-                      <option value="BUSINESS_4_STAR">4-Star Business & Conference</option>
-                      <option value="RESORT_LODGE">Highland Eco Resort & Lodge</option>
-                    </select>
-                  </div>
-
-                  <div className="col-12 col-md-6">
                     <label className="form-label text-sm fw-medium text-obsidian mb-1">City *</label>
                     <select
                       name="city"
@@ -182,7 +138,7 @@ export default function NewHotelPage() {
                     </select>
                   </div>
 
-                  <div className="col-12">
+                  <div className="col-12 col-md-6">
                     <label className="form-label text-sm fw-medium text-obsidian mb-1">
                       Street Address & Landmark *
                     </label>
