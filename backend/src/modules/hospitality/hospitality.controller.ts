@@ -438,6 +438,17 @@ export class HospitalityController {
     }
   }
 
+  async adminVerifyHotel(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub;
+      const { verificationStatus, reason } = req.body;
+      const verified = await hotelService.verifyHotel(req.params.id, verificationStatus, adminId, reason);
+      ApiResponse.success(res, verified, `Hotel verification updated to ${verificationStatus}`);
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to update hotel verification');
+    }
+  }
+
   async adminDeleteHotel(req: Request, res: Response) {
     try {
       const deleted = await hotelService.deleteHotel(req.params.id);

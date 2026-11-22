@@ -14,6 +14,7 @@ import { notificationRouter } from '../modules/notifications';
 import { subcityRouter } from '../modules/subcities';
 import { supportRouter, adminSupportRouter } from '../modules/support';
 import { hospitalityRouter } from '../modules/hospitality';
+import { adminHotelPartnerRouter } from '../modules/hotel-partners';
 import { heritageRouter } from '../modules/heritage';
 
 export const apiV1Router = Router();
@@ -61,5 +62,7 @@ apiV1Router.use('/admin/drivers', adminDriverRouter);
 apiV1Router.use('/admin/vehicles', adminVehicleRouter);
 apiV1Router.use('/admin/documents', adminDocumentRouter);
 apiV1Router.use('/admin/passengers', adminPassengerRouter);
+apiV1Router.use('/admin/hotel-partners', adminHotelPartnerRouter);
+apiV1Router.use('/hospitality', hospitalityRouter);
 apiV1Router.use('/', hospitalityRouter);
 apiV1Router.use('/', heritageRouter);

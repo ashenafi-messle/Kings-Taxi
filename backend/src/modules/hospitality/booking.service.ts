@@ -226,12 +226,13 @@ export class HospitalityBookingService {
       );
 
       const pricePerRoom = seasonalRate ? seasonalRate.pricePerNight : roomType.basePricePerNight;
-      const dayTotalForRooms = pricePerRoom.times(numberOfRooms);
+      const priceDecimal = new Prisma.Decimal(pricePerRoom);
+      const dayTotalForRooms = priceDecimal.times(numberOfRooms);
       roomSubtotalDecimal = roomSubtotalDecimal.plus(dayTotalForRooms);
 
       nightlyBreakdown.push({
         date: curDateStr,
-        price: Number(pricePerRoom),
+        price: Number(priceDecimal),
         source: seasonalRate ? 'SEASONAL_RATE' : 'BASE_PRICE',
       });
     }
@@ -443,6 +444,7 @@ export class HospitalityBookingService {
             grandTotal: new Prisma.Decimal(quote.grandTotal),
             bookingStatus: HotelBookingStatus.CONFIRMED,
             paymentStatus: PaymentStatus.PENDING,
+            holdExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
             specialRequests: dto.specialRequests || null,
             priceSnapshot: quote as any,
             confirmedAt: new Date(),
@@ -758,6 +760,9 @@ export class HospitalityBookingService {
           },
           transferBooking: true,
           payment: true,
+          statusHistory: {
+            orderBy: { createdAt: 'desc' },
+          },
         },
       });
 
@@ -983,6 +988,9 @@ export class HospitalityBookingService {
           },
           transferBooking: true,
           payment: true,
+          statusHistory: {
+            orderBy: { createdAt: 'desc' },
+          },
         },
       });
 
@@ -1044,7 +1052,7 @@ export class HospitalityBookingService {
               },
               select: { quantity: true },
             });
-            const currentlyBooked = overlapping.reduce((sum, item) => sum + item.quantity, 0);
+            const currentlyBooked = (overlapping || []).reduce((sum: number, item: any) => sum + item.quantity, 0);
             const available = roomType.totalInventory - currentlyBooked;
             if (available < lineItem.quantity) {
               throw new Error(
@@ -1070,6 +1078,17 @@ export class HospitalityBookingService {
             passenger: true,
             bookingRooms: { include: { roomType: true } },
             payment: true,
+          },
+        });
+
+        // Record status history transition
+        await tx.hotelBookingStatusHistory.create({
+          data: {
+            hotelBookingId: id,
+            fromStatus: booking.bookingStatus,
+            toStatus: HotelBookingStatus.CONFIRMED,
+            changedByAdminId: adminId,
+            note: adminNote || 'Accepted and confirmed by Super Admin',
           },
         });
 
@@ -1164,6 +1183,17 @@ export class HospitalityBookingService {
             passenger: true,
             bookingRooms: { include: { roomType: true } },
             payment: true,
+          },
+        });
+
+        // Record status history transition
+        await tx.hotelBookingStatusHistory.create({
+          data: {
+            hotelBookingId: id,
+            fromStatus: booking.bookingStatus,
+            toStatus: HotelBookingStatus.DECLINED,
+            changedByAdminId: adminId,
+            note: `Declined: ${declineReason.trim()}${adminNote ? ` (${adminNote.trim()})` : ''}`,
           },
         });
 

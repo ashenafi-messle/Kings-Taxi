@@ -52,6 +52,10 @@ hospitalityRouter.get('/admin/hotels', adminAuth, (req: Request, res: Response) 
 hospitalityRouter.post('/admin/hotels', adminAuth, (req: Request, res: Response) => hospitalityController.adminCreateHotel(req, res));
 hospitalityRouter.get('/admin/hotels/:id', adminAuth, (req: Request, res: Response) => hospitalityController.adminGetHotel(req, res));
 hospitalityRouter.patch('/admin/hotels/:id', adminAuth, (req: Request, res: Response) => hospitalityController.adminUpdateHotel(req, res));
+hospitalityRouter.put('/admin/hotels/:id', adminAuth, (req: Request, res: Response) => hospitalityController.adminUpdateHotel(req, res));
+hospitalityRouter.post('/admin/hotels/:id/verify', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminVerifyHotel(req, res)
+);
 hospitalityRouter.delete('/admin/hotels/:id', adminAuth, (req: Request, res: Response) => hospitalityController.adminDeleteHotel(req, res));
 hospitalityRouter.post('/admin/hotels/:id/publish', adminAuth, (req: Request, res: Response) => hospitalityController.adminPublishHotel(req, res));
 hospitalityRouter.post('/admin/hotels/:id/unpublish', adminAuth, (req: Request, res: Response) =>

@@ -2,8 +2,55 @@
  * Hotel Entity & Dynamic Room Inventory Management Type Definitions
  */
 
-export type HotelStatus = 'ACTIVE' | 'INACTIVE' | 'UNDER_RENOVATION';
+export type HotelStatus = 'ACTIVE' | 'INACTIVE' | 'UNDER_RENOVATION' | 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED' | 'ARCHIVED';
 export type HotelCategory = 'LUXURY_5_STAR' | 'BOUTIQUE_HERITAGE' | 'BUSINESS_4_STAR' | 'RESORT_LODGE';
+
+export type PartnerAccountStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REJECTED' | 'INACTIVE';
+export type PartnerVerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type HotelPublicationStatus = 'DRAFT' | 'PENDING_REVIEW' | 'APPROVED' | 'PUBLISHED' | 'REJECTED' | 'UNPUBLISHED';
+
+export interface HotelPartner {
+  id: string;
+  partnerCode: string;
+  businessName: string;
+  tradeName?: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  alternativePhone?: string;
+  businessAddress: string;
+  city: string;
+  region: string;
+  country: string;
+  businessLicenseNumber?: string;
+  taxIdentificationNumber?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountName?: string;
+  commissionRate: number;
+  profileImageUrl?: string;
+  status: PartnerAccountStatus;
+  verificationStatus: PartnerVerificationStatus;
+  verifiedAt?: string;
+  verifiedByAdminId?: string;
+  rejectionReason?: string;
+  internalNotes?: string;
+  totalHotels?: number;
+  totalDocuments?: number;
+  hotels?: any[];
+  documents?: any[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HotelPartnerFilterParams {
+  search?: string;
+  status?: string;
+  verificationStatus?: string;
+  city?: string;
+  page?: number;
+  limit?: number;
+}
 
 export interface HotelAmenity {
   id: string;
@@ -74,6 +121,15 @@ export interface Hotel {
   totalRooms: number;
   availableRooms: number;
   status: HotelStatus;
+  partnerId?: string;
+  partner?: {
+    id: string;
+    businessName: string;
+    partnerCode: string;
+  };
+  verificationStatus?: PartnerVerificationStatus;
+  publicationStatus?: HotelPublicationStatus;
+  rejectionReason?: string;
 
   roomTypes: HotelRoomType[];
 

@@ -1,5 +1,8 @@
 import {
   HotelStatus,
+  HotelCategory,
+  HotelVerificationStatus,
+  HotelPublicationStatus,
   RoomTypeStatus,
   VehicleType,
   PaymentMethod,
@@ -8,6 +11,9 @@ import {
 export interface CreateHotelDto {
   name: string;
   slug?: string;
+  partnerId?: string;
+  category?: HotelCategory;
+  coverImageUrl?: string;
   description: string;
   shortDescription?: string;
   address: string;
@@ -28,6 +34,9 @@ export interface CreateHotelDto {
 
 export interface UpdateHotelDto {
   name?: string;
+  partnerId?: string;
+  category?: HotelCategory;
+  coverImageUrl?: string;
   description?: string;
   shortDescription?: string;
   address?: string;
@@ -44,6 +53,9 @@ export interface UpdateHotelDto {
   timezone?: string;
   featured?: boolean;
   status?: HotelStatus;
+  verificationStatus?: HotelVerificationStatus;
+  publicationStatus?: HotelPublicationStatus;
+  rejectionReason?: string;
   amenitySlugs?: string[];
 }
 

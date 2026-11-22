@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Building2,
+  Briefcase,
   Plus,
   Eye,
   Star,
@@ -62,6 +63,12 @@ export default function HotelsPage() {
           </div>
           <div>
             <div className="fw-bold text-obsidian text-sm">{h.name}</div>
+            {h.partner?.businessName && (
+              <div className="text-gold text-xs d-flex align-items-center gap-1">
+                <Briefcase size={11} />
+                <span>{h.partner.businessName}</span>
+              </div>
+            )}
             <div className="text-muted text-xs d-flex align-items-center gap-1 mt-0.5">
               <MapPin size={12} />
               <span>
@@ -155,8 +162,12 @@ export default function HotelsPage() {
         ]}
         actions={
           <div className="d-flex align-items-center gap-2">
-            <Link href="/hotel-bookings" className="btn btn-outline-secondary btn-sm">
-              <CalendarCheck size={14} className="me-1" />
+            <Link href="/hotel-partners" className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1.5">
+              <Briefcase size={14} />
+              <span>Hotel Partners</span>
+            </Link>
+            <Link href="/hotel-bookings" className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1.5">
+              <CalendarCheck size={14} />
               <span>View Bookings</span>
             </Link>
             <Link

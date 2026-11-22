@@ -257,6 +257,53 @@ enum HotelStatus {
   ARCHIVED
 }
 
+enum PartnerAccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+  INACTIVE
+}
+
+enum PartnerVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum HotelCategory {
+  LUXURY_5_STAR
+  BOUTIQUE_HERITAGE
+  BUSINESS_4_STAR
+  RESORT_LODGE
+}
+
+enum HotelVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum HotelPublicationStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  PUBLISHED
+  REJECTED
+  UNPUBLISHED
+}
+
+enum HotelDocumentType {
+  BUSINESS_LICENSE
+  TAX_IDENTIFICATION_CERTIFICATE
+  COMMERCIAL_REGISTRATION
+  HOTEL_ACCREDITATION
+  TOURISM_COMMISSION_PERMIT
+  INSURANCE_CERTIFICATE
+  PARTNERSHIP_AGREEMENT
+  OTHER
+}
+
 enum RoomTypeStatus {
   ACTIVE
   INACTIVE
@@ -1073,41 +1120,116 @@ model RideDestinationRevision {
 }
 
 // ==============================================================================
+// 18b. Hotel Partner Entity & Verification Documents
+// ==============================================================================
+
+model HotelPartner {
+  id                      String                    @id @default(uuid()) @db.Uuid
+  partnerCode             String                    @unique @map("partner_code") @db.VarChar(32)
+  businessName            String                    @map("business_name") @db.VarChar(128)
+  tradeName               String?                   @map("trade_name") @db.VarChar(128)
+  contactPerson           String                    @map("contact_person") @db.VarChar(128)
+  email                   String                    @unique @db.VarChar(255)
+  phone                   String                    @unique @db.VarChar(32)
+  alternativePhone        String?                   @map("alternative_phone") @db.VarChar(32)
+  businessAddress         String                    @map("business_address") @db.VarChar(255)
+  city                    String                    @default("Gondar") @db.VarChar(64)
+  region                  String                    @default("Amhara") @db.VarChar(64)
+  country                 String                    @default("Ethiopia") @db.VarChar(64)
+  businessLicenseNumber   String?                   @map("business_license_number") @db.VarChar(64)
+  taxIdentificationNumber String?                   @map("tax_identification_number") @db.VarChar(64)
+  bankName                String?                   @map("bank_name") @db.VarChar(64)
+  bankAccountNumber       String?                   @map("bank_account_number") @db.VarChar(64)
+  bankAccountName         String?                   @map("bank_account_name") @db.VarChar(128)
+  commissionRate          Decimal                   @default(10.00) @map("commission_rate") @db.Decimal(5, 2)
+  profileImageUrl         String?                   @map("profile_image_url") @db.VarChar(512)
+  status                  PartnerAccountStatus      @default(PENDING)
+  verificationStatus      PartnerVerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt              DateTime?                 @map("verified_at") @db.Timestamptz(6)
+  verifiedByAdminId       String?                   @map("verified_by_admin_id") @db.Uuid
+  rejectionReason         String?                   @map("rejection_reason") @db.Text
+  internalNotes           String?                   @map("internal_notes") @db.Text
+  createdAt               DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  hotels    Hotel[]
+  documents HotelPartnerDocument[]
+
+  @@index([status, verificationStatus])
+  @@index([city])
+  @@index([createdAt])
+  @@map("hotel_partners")
+}
+
+model HotelPartnerDocument {
+  id                String               @id @default(uuid()) @db.Uuid
+  partnerId         String               @map("partner_id") @db.Uuid
+  documentType      HotelDocumentType    @default(BUSINESS_LICENSE) @map("document_type")
+  documentNumber    String?              @map("document_number") @db.VarChar(64)
+  documentUrl       String               @map("document_url") @db.VarChar(512)
+  publicId          String?              @map("public_id") @db.VarChar(255)
+  fileFormat        String?              @map("file_format") @db.VarChar(32)
+  fileSize          Int?                 @map("file_size")
+  status            DocumentReviewStatus @default(PENDING_REVIEW)
+  verifiedAt        DateTime?            @map("verified_at") @db.Timestamptz(6)
+  verifiedByAdminId String?              @map("verified_by_admin_id") @db.Uuid
+  rejectionReason   String?              @map("rejection_reason") @db.Text
+  expiryDate        DateTime?            @map("expiry_date") @db.Date
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  partner HotelPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, documentType])
+  @@map("hotel_partner_documents")
+}
+
+// ==============================================================================
 // 19. Hotel Entity
 // ==============================================================================
 
 model Hotel {
-  id               String      @id @default(uuid()) @db.Uuid
-  name             String      @db.VarChar(128)
-  slug             String      @unique @db.VarChar(128)
-  description      String      @db.Text
-  shortDescription String?     @map("short_description") @db.VarChar(255)
-  address          String      @db.VarChar(255)
-  city             String      @default("Gondar") @db.VarChar(64)
-  subCity          String?     @map("sub_city") @db.VarChar(64)
-  latitude         Float
-  longitude        Float
-  contactPhone     String      @map("contact_phone") @db.VarChar(32)
-  contactEmail     String?     @map("contact_email") @db.VarChar(255)
-  website          String?     @db.VarChar(255)
-  starRating       Int?        @default(4) @map("star_rating")
-  checkInTime      String      @default("14:00") @map("check_in_time") @db.VarChar(16)
-  checkOutTime     String      @default("11:00") @map("check_out_time") @db.VarChar(16)
-  timezone         String      @default("Africa/Addis_Ababa") @db.VarChar(64)
-  status           HotelStatus @default(DRAFT)
-  featured         Boolean     @default(false)
-  publishedAt      DateTime?   @map("published_at") @db.Timestamptz(6)
-  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
-  createdByAdminId String?     @map("created_by_admin_id") @db.Uuid
-  updatedByAdminId String?     @map("updated_by_admin_id") @db.Uuid
+  id                 String                  @id @default(uuid()) @db.Uuid
+  partnerId          String?                 @map("partner_id") @db.Uuid
+  name               String                  @db.VarChar(128)
+  slug               String                  @unique @db.VarChar(128)
+  description        String                  @db.Text
+  shortDescription   String?                 @map("short_description") @db.VarChar(255)
+  category           HotelCategory           @default(BOUTIQUE_HERITAGE)
+  address            String                  @db.VarChar(255)
+  city               String                  @default("Gondar") @db.VarChar(64)
+  subCity            String?                 @map("sub_city") @db.VarChar(64)
+  latitude           Float
+  longitude          Float
+  contactPhone       String                  @map("contact_phone") @db.VarChar(32)
+  contactEmail       String?                 @map("contact_email") @db.VarChar(255)
+  website            String?                 @db.VarChar(255)
+  starRating         Int?                    @default(4) @map("star_rating")
+  checkInTime        String                  @default("14:00") @map("check_in_time") @db.VarChar(16)
+  checkOutTime       String                  @default("11:00") @map("check_out_time") @db.VarChar(16)
+  timezone           String                  @default("Africa/Addis_Ababa") @db.VarChar(64)
+  status             HotelStatus             @default(DRAFT)
+  verificationStatus HotelVerificationStatus @default(PENDING) @map("verification_status")
+  publicationStatus  HotelPublicationStatus  @default(DRAFT) @map("publication_status")
+  coverImageUrl      String?                 @map("cover_image_url") @db.VarChar(512)
+  rejectionReason    String?                 @map("rejection_reason") @db.Text
+  verifiedAt         DateTime?               @map("verified_at") @db.Timestamptz(6)
+  verifiedByAdminId  String?                 @map("verified_by_admin_id") @db.Uuid
+  featured           Boolean                 @default(false)
+  publishedAt        DateTime?               @map("published_at") @db.Timestamptz(6)
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByAdminId   String?                 @map("created_by_admin_id") @db.Uuid
+  updatedByAdminId   String?                 @map("updated_by_admin_id") @db.Uuid
 
+  partner       HotelPartner?          @relation(fields: [partnerId], references: [id], onDelete: SetNull)
   images        HotelImage[]
   amenities     HotelAmenityRelation[]
   roomTypes     HotelRoomType[]
   transferRates AirportTransferRate[]
   hotelBookings HotelBooking[]
 
+  @@index([partnerId])
   @@index([city, status])
   @@index([featured, status])
   @@index([slug])
@@ -1250,45 +1372,70 @@ model AirportTransferRate {
 // ==============================================================================
 
 model HotelBooking {
-  id               String             @id @default(uuid()) @db.Uuid
-  bookingReference String             @unique @map("booking_reference") @db.VarChar(64)
-  passengerId      String             @map("passenger_id") @db.Uuid
-  hotelId          String             @map("hotel_id") @db.Uuid
-  checkInDate      DateTime           @map("check_in_date") @db.Date
-  checkOutDate     DateTime           @map("check_out_date") @db.Date
-  adults           Int                @default(1)
-  children         Int                @default(0)
-  numberOfRooms    Int                @default(1) @map("number_of_rooms")
-  currency         String             @default("ETB") @db.VarChar(8)
-  roomSubtotal     Decimal            @map("room_subtotal") @db.Decimal(10, 2)
-  transferSubtotal Decimal            @default(0) @map("transfer_subtotal") @db.Decimal(10, 2)
-  additionalFees   Decimal            @default(0) @map("additional_fees") @db.Decimal(10, 2)
-  discountAmount   Decimal            @default(0) @map("discount_amount") @db.Decimal(10, 2)
-  grandTotal       Decimal            @map("grand_total") @db.Decimal(10, 2)
-  bookingStatus    HotelBookingStatus @default(PENDING) @map("booking_status")
-  paymentStatus    PaymentStatus      @default(PENDING) @map("payment_status")
-  specialRequests  String?            @map("special_requests") @db.Text
-  priceSnapshot    Json?              @map("price_snapshot")
-  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
-  confirmedAt      DateTime?          @map("confirmed_at") @db.Timestamptz(6)
-  cancelledAt      DateTime?          @map("cancelled_at") @db.Timestamptz(6)
-  reviewedByAdminId String?           @map("reviewed_by_admin_id") @db.Uuid
-  reviewedAt       DateTime?          @map("reviewed_at") @db.Timestamptz(6)
-  declineReason    String?            @map("decline_reason") @db.Text
-  adminReviewNote  String?            @map("admin_review_note") @db.Text
+  id                  String             @id @default(uuid()) @db.Uuid
+  bookingReference    String             @unique @map("booking_reference") @db.VarChar(64)
+  passengerId         String             @map("passenger_id") @db.Uuid
+  hotelId             String             @map("hotel_id") @db.Uuid
+  checkInDate         DateTime           @map("check_in_date") @db.Date
+  checkOutDate        DateTime           @map("check_out_date") @db.Date
+  adults              Int                @default(1)
+  children            Int                @default(0)
+  numberOfRooms       Int                @default(1) @map("number_of_rooms")
+  currency            String             @default("ETB") @db.VarChar(8)
+  roomSubtotal        Decimal            @map("room_subtotal") @db.Decimal(10, 2)
+  transferSubtotal    Decimal            @default(0) @map("transfer_subtotal") @db.Decimal(10, 2)
+  additionalFees      Decimal            @default(0) @map("additional_fees") @db.Decimal(10, 2)
+  discountAmount      Decimal            @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  commissionAmount    Decimal            @default(0) @map("commission_amount") @db.Decimal(10, 2)
+  partnerPayoutAmount Decimal            @default(0) @map("partner_payout_amount") @db.Decimal(10, 2)
+  grandTotal          Decimal            @map("grand_total") @db.Decimal(10, 2)
+  bookingStatus       HotelBookingStatus @default(PENDING) @map("booking_status")
+  paymentStatus       PaymentStatus      @default(PENDING) @map("payment_status")
+  holdExpiresAt       DateTime?          @map("hold_expires_at") @db.Timestamptz(6)
+  specialRequests     String?            @map("special_requests") @db.Text
+  priceSnapshot       Json?              @map("price_snapshot")
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  confirmedAt         DateTime?          @map("confirmed_at") @db.Timestamptz(6)
+  cancelledAt         DateTime?          @map("cancelled_at") @db.Timestamptz(6)
+  reviewedByAdminId   String?            @map("reviewed_by_admin_id") @db.Uuid
+  reviewedAt          DateTime?          @map("reviewed_at") @db.Timestamptz(6)
+  declineReason       String?            @map("decline_reason") @db.Text
+  adminReviewNote     String?            @map("admin_review_note") @db.Text
 
-  passenger       Passenger             @relation(fields: [passengerId], references: [id], onDelete: Restrict)
-  hotel           Hotel                 @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  passenger       Passenger                   @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  hotel           Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Restrict)
   bookingRooms    HotelBookingRoom[]
   transferBooking HotelTransferBooking?
   payment         Payment?
+  statusHistory   HotelBookingStatusHistory[]
 
   @@index([passengerId, bookingStatus])
   @@index([hotelId, checkInDate, checkOutDate])
   @@index([bookingReference])
   @@index([createdAt])
+  @@index([holdExpiresAt])
   @@map("hotel_bookings")
+}
+
+// ==============================================================================
+// 25b. Hotel Booking Status History Entity
+// ==============================================================================
+
+model HotelBookingStatusHistory {
+  id                 String              @id @default(uuid()) @db.Uuid
+  hotelBookingId     String              @map("hotel_booking_id") @db.Uuid
+  fromStatus         HotelBookingStatus? @map("from_status")
+  toStatus           HotelBookingStatus  @map("to_status")
+  changedByAdminId   String?             @map("changed_by_admin_id") @db.Uuid
+  changedByAdminName String?             @map("changed_by_admin_name") @db.VarChar(128)
+  note               String?             @db.Text
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  booking HotelBooking @relation(fields: [hotelBookingId], references: [id], onDelete: Cascade)
+
+  @@index([hotelBookingId, createdAt])
+  @@map("hotel_booking_status_histories")
 }
 
 // ==============================================================================

@@ -2,6 +2,7 @@ import { prisma } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
 import { Prisma } from '@prisma/client';
 import { CreateRoomTypeDto, UpdateRoomTypeDto, CreateRateDto } from './hospitality.types';
+import { validateAndUploadDocument } from '../../utils/documentStorage';
 import {
   parseCalendarDate,
   validateBookingDates,
@@ -213,6 +214,7 @@ export class RoomService {
           maximumChildren: room.maximumChildren,
           totalInventory: room.totalInventory,
           remainingInventory,
+          availableInventory: remainingInventory,
           isAvailable: hasEnoughInventory && isCapacitySufficient,
           basePricePerNight: Number(room.basePricePerNight),
           averageNightlyPrice,
@@ -371,6 +373,30 @@ export class RoomService {
       isPrimary: hasPrimary ? !!img.isPrimary : idx === 0,
     }));
 
+    // Resilient Base64 upload to Cloudinary if image data URIs are supplied
+    const processedImages = await Promise.all(
+      normalized.map(async (img) => {
+        if (img.imageUrl && (img.imageUrl.startsWith('data:') || img.imageUrl.length > 500)) {
+          try {
+            const uploadRes = await validateAndUploadDocument(img.imageUrl, {
+              folder: `kings-taxi/hotel-rooms/${roomTypeId.slice(0, 8)}`,
+              publicIdPrefix: `room_img_${roomTypeId.slice(0, 8)}`,
+            });
+            return {
+              ...img,
+              imageUrl: uploadRes.fileUrl,
+              publicId: uploadRes.publicId || img.publicId,
+              fileFormat: uploadRes.fileFormat || img.fileFormat,
+              fileSize: uploadRes.fileSize || img.fileSize,
+            };
+          } catch {
+            return img;
+          }
+        }
+        return img;
+      })
+    );
+
     try {
       const room = await prisma.hotelRoomType.findUnique({ where: { id: roomTypeId } });
       if (!room) throw new Error('ROOM_TYPE_NOT_FOUND: Room type does not exist');
@@ -379,7 +405,7 @@ export class RoomService {
         await tx.roomImage.deleteMany({ where: { roomTypeId } });
 
         const created = await Promise.all(
-          normalized.map((img, idx) =>
+          processedImages.map((img, idx) =>
             tx.roomImage.create({
               data: {
                 roomTypeId,

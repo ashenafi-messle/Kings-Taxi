@@ -181,6 +181,29 @@ export default function HotelDetailPage() {
               <ArrowLeft size={14} className="me-1" />
               <span>Back</span>
             </Link>
+            {hotel.status === 'PUBLISHED' || hotel.status === 'ACTIVE' ? (
+              <button
+                type="button"
+                className="btn btn-outline-warning btn-sm"
+                onClick={async () => {
+                  await HotelService.unpublishHotel(hotel.id);
+                  loadHotel();
+                }}
+              >
+                Unpublish
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-outline-success btn-sm"
+                onClick={async () => {
+                  await HotelService.publishHotel(hotel.id);
+                  loadHotel();
+                }}
+              >
+                Publish to App
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-gold btn-sm d-flex align-items-center gap-1.5 fw-semibold"

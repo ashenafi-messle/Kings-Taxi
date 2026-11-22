@@ -1,7 +1,8 @@
 import { prisma } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
-import { HotelStatus } from '@prisma/client';
+import { HotelStatus, HotelCategory, HotelPublicationStatus, HotelVerificationStatus } from '@prisma/client';
 import { CreateHotelDto, UpdateHotelDto, CreateHotelImageDto } from './hospitality.types';
+import { validateAndUploadDocument } from '../../utils/documentStorage';
 
 export function isDbConnectionError(err: any): boolean {
   if (!err) return false;
@@ -487,6 +488,9 @@ export class HotelService {
     return prisma.$transaction(async (tx) => {
       const hotel = await tx.hotel.create({
         data: {
+          partnerId: dto.partnerId || null,
+          category: dto.category || HotelCategory.BOUTIQUE_HERITAGE,
+          coverImageUrl: dto.coverImageUrl || null,
           name: dto.name,
           slug: finalSlug,
           description: dto.description,
@@ -504,6 +508,8 @@ export class HotelService {
           checkOutTime: dto.checkOutTime || '11:00',
           timezone: dto.timezone || 'Africa/Addis_Ababa',
           status: HotelStatus.DRAFT,
+          verificationStatus: HotelVerificationStatus.PENDING,
+          publicationStatus: HotelPublicationStatus.DRAFT,
           featured: dto.featured ?? false,
           createdByAdminId: adminId,
         },
@@ -542,6 +548,12 @@ export class HotelService {
       const updated = await tx.hotel.update({
         where: { id },
         data: {
+          partnerId: dto.partnerId !== undefined ? dto.partnerId : undefined,
+          category: dto.category !== undefined ? dto.category : undefined,
+          coverImageUrl: dto.coverImageUrl !== undefined ? dto.coverImageUrl : undefined,
+          verificationStatus: dto.verificationStatus !== undefined ? dto.verificationStatus : undefined,
+          publicationStatus: dto.publicationStatus !== undefined ? dto.publicationStatus : undefined,
+          rejectionReason: dto.rejectionReason !== undefined ? dto.rejectionReason : undefined,
           name: dto.name,
           description: dto.description,
           shortDescription: dto.shortDescription,
@@ -596,6 +608,7 @@ export class HotelService {
       where: { id },
       data: {
         status: HotelStatus.PUBLISHED,
+        publicationStatus: HotelPublicationStatus.PUBLISHED,
         publishedAt: new Date(),
         updatedByAdminId: adminId,
       },
@@ -613,6 +626,31 @@ export class HotelService {
       where: { id },
       data: {
         status: HotelStatus.UNPUBLISHED,
+        publicationStatus: HotelPublicationStatus.UNPUBLISHED,
+        updatedByAdminId: adminId,
+      },
+    });
+  }
+
+  /**
+   * Super Admin: Verify or reject hotel property
+   */
+  async verifyHotel(
+    id: string,
+    verificationStatus: HotelVerificationStatus,
+    adminId?: string,
+    reason?: string
+  ) {
+    const hotel = await prisma.hotel.findUnique({ where: { id } });
+    if (!hotel) throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
+
+    return prisma.hotel.update({
+      where: { id },
+      data: {
+        verificationStatus,
+        verifiedAt: verificationStatus === HotelVerificationStatus.APPROVED ? new Date() : null,
+        verifiedByAdminId: adminId || null,
+        rejectionReason: verificationStatus === HotelVerificationStatus.REJECTED ? reason || null : null,
         updatedByAdminId: adminId,
       },
     });
@@ -635,24 +673,46 @@ export class HotelService {
   }
 
   /**
-   * Super Admin: Upload and associate an image
+   * Super Admin: Upload and associate an image via Cloudinary
    */
   async addImage(hotelId: string, dto: CreateHotelImageDto) {
     const hotel = await prisma.hotel.findUnique({ where: { id: hotelId } });
     if (!hotel) throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
 
+    let finalImageUrl = dto.imageUrl;
+    let publicId: string | undefined = undefined;
+
+    // Resilient Base64 / Cloudinary upload integration
+    if (dto.imageUrl && (dto.imageUrl.startsWith('data:') || dto.imageUrl.length > 500)) {
+      try {
+        const uploadRes = await validateAndUploadDocument(dto.imageUrl, {
+          folder: 'kings-taxi/hotels',
+          publicIdPrefix: `htl_img_${hotelId.slice(0, 8)}`,
+        });
+        finalImageUrl = uploadRes.fileUrl;
+        publicId = uploadRes.publicId;
+      } catch (uploadErr: any) {
+        logger.warn({ error: uploadErr.message }, '[addImage] Cloudinary upload fallback, storing direct payload');
+      }
+    }
+
     if (dto.isCover) {
-      // Remove isCover flag from existing images
+      // Remove isCover flag from existing images and set as hotel cover
       await prisma.hotelImage.updateMany({
         where: { hotelId },
         data: { isCover: false },
+      });
+      await prisma.hotel.update({
+        where: { id: hotelId },
+        data: { coverImageUrl: finalImageUrl },
       });
     }
 
     return prisma.hotelImage.create({
       data: {
         hotelId,
-        imageUrl: dto.imageUrl,
+        imageUrl: finalImageUrl,
+        publicId: publicId || null,
         altText: dto.altText,
         displayOrder: dto.displayOrder || 0,
         isCover: dto.isCover || false,
@@ -968,36 +1028,82 @@ export class HotelService {
    * Super Admin: List all hotels regardless of status
    */
   async listAdminHotels(page = 1, limit = 20) {
-  const skip = (page - 1) * limit;
-  const [hotels, total] = await Promise.all([
-    prisma.hotel.findMany({
-      include: {
-        images: { take: 1, orderBy: { isCover: 'desc' } },
-        _count: {
-          select: {
-            roomTypes: true,
-            transferRates: true,
-            hotelBookings: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.hotel.count(),
-  ]);
+    const skip = (page - 1) * limit;
 
-  return {
-    hotels,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  };
-}
+    try {
+      const [hotels, total] = await Promise.all([
+        prisma.hotel.findMany({
+          include: {
+            partner: {
+              select: {
+                id: true,
+                businessName: true,
+                partnerCode: true,
+              },
+            },
+            images: { orderBy: { displayOrder: 'asc' } },
+            roomTypes: {
+              select: {
+                id: true,
+                name: true,
+                basePricePerNight: true,
+                totalInventory: true,
+                status: true,
+              },
+            },
+            _count: {
+              select: {
+                roomTypes: true,
+                transferRates: true,
+                hotelBookings: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.hotel.count(),
+      ]);
+
+      return {
+        hotels,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      };
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        logger.warn('[listAdminHotels] DB unreachable, returning built-in hotels');
+        const hotels = BUILTIN_GONDAR_HOTELS.map((h) => ({
+          ...h,
+          partner: {
+            id: 'hp-gondar-hospitality-corp',
+            businessName: 'Gondar Heritage Hospitality Group Ltd',
+            partnerCode: 'HP-10001',
+          },
+          _count: {
+            roomTypes: h.roomTypes?.length || 3,
+            transferRates: 1,
+            hotelBookings: 5,
+          },
+        }));
+        return {
+          hotels,
+          pagination: {
+            page: 1,
+            limit,
+            total: hotels.length,
+            totalPages: 1,
+          },
+        };
+      }
+      throw err;
+    }
+  }
 }
 
 export const hotelService = new HotelService();
