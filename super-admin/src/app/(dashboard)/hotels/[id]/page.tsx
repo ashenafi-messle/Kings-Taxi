@@ -303,11 +303,10 @@ export default function HotelDetailPage() {
                         <div className="d-flex align-items-center gap-2 mb-1">
                           <h4 className="h6 fw-bold text-obsidian mb-0">{room.name}</h4>
                           <span
-                            className={`badge text-xs ${
-                              availableCount > 0
-                                ? 'bg-success-subtle text-success'
-                                : 'bg-danger-subtle text-danger'
-                            }`}
+                            className={`badge text-xs ${availableCount > 0
+                              ? 'bg-success-subtle text-success'
+                              : 'bg-danger-subtle text-danger'
+                              }`}
                           >
                             {availableCount > 0 ? 'AVAILABLE' : 'SOLD OUT'}
                           </span>
@@ -368,15 +367,15 @@ export default function HotelDetailPage() {
                                   existingGallery.length >= 2
                                     ? existingGallery
                                     : [
-                                        ...existingGallery,
-                                        {
-                                          imageUrl:
-                                            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop&q=80',
-                                          displayOrder: existingGallery.length,
-                                          isPrimary: false,
-                                          caption: 'Room interior view',
-                                        },
-                                      ],
+                                      ...existingGallery,
+                                      {
+                                        imageUrl:
+                                          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop&q=80',
+                                        displayOrder: existingGallery.length,
+                                        isPrimary: false,
+                                        caption: 'Room interior view',
+                                      },
+                                    ],
                               });
                             }}
                           >

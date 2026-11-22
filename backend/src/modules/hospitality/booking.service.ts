@@ -320,11 +320,11 @@ export class HospitalityBookingService {
         },
         ...(includeAirportTransfer
           ? [
-              {
-                label: `Airport Transfer (${airportTransferInfo?.origin || 'GDQ'})`,
-                amount: Number(transferSubtotalDecimal.toFixed(2)),
-              },
-            ]
+            {
+              label: `Airport Transfer (${airportTransferInfo?.origin || 'GDQ'})`,
+              amount: Number(transferSubtotalDecimal.toFixed(2)),
+            },
+          ]
           : []),
       ],
       validUntil: quoteExpiration,
@@ -590,14 +590,14 @@ export class HospitalityBookingService {
         ],
         transferBooking: quote.airportTransfer?.selected
           ? {
-              pickupLocation: quote.airportTransfer.origin || 'Atse Tewodros Airport (GDQ), Gondar',
-              pickupDate: checkInDate,
-              pickupTime: dto.pickupTime || dto.airportTransfer?.pickupTime || '12:00',
-              flightNumber: dto.flightNumber || dto.airportTransfer?.flightNumber,
-              fixedFareSnapshot: quote.airportTransfer.fixedPrice,
-              transferStatus: TransferStatus.REQUESTED,
-              vehicleCategory: quote.airportTransfer.vehicleType,
-            }
+            pickupLocation: quote.airportTransfer.origin || 'Atse Tewodros Airport (GDQ), Gondar',
+            pickupDate: checkInDate,
+            pickupTime: dto.pickupTime || dto.airportTransfer?.pickupTime || '12:00',
+            flightNumber: dto.flightNumber || dto.airportTransfer?.flightNumber,
+            fixedFareSnapshot: quote.airportTransfer.fixedPrice,
+            transferStatus: TransferStatus.REQUESTED,
+            vehicleCategory: quote.airportTransfer.vehicleType,
+          }
           : null,
         createdAt: new Date(),
         confirmedAt: new Date(),
@@ -666,13 +666,13 @@ export class HospitalityBookingService {
         roomName: b.bookingRooms[0]?.roomType?.name || 'Standard Room',
         airportTransfer: b.transferBooking
           ? {
-              pickupLocation: b.transferBooking.pickupLocation,
-              pickupDate: formatCalendarDate(b.transferBooking.pickupDate),
-              pickupTime: b.transferBooking.pickupTime,
-              flightNumber: b.transferBooking.flightNumber,
-              fixedFare: Number(b.transferBooking.fixedFareSnapshot),
-              transferStatus: b.transferBooking.transferStatus,
-            }
+            pickupLocation: b.transferBooking.pickupLocation,
+            pickupDate: formatCalendarDate(b.transferBooking.pickupDate),
+            pickupTime: b.transferBooking.pickupTime,
+            flightNumber: b.transferBooking.flightNumber,
+            fixedFare: Number(b.transferBooking.fixedFareSnapshot),
+            transferStatus: b.transferBooking.transferStatus,
+          }
           : null,
         createdAt: b.createdAt.toISOString(),
       }));
@@ -720,13 +720,13 @@ export class HospitalityBookingService {
             roomName: b.bookingRooms?.[0]?.roomType?.name || 'Standard Room',
             airportTransfer: b.transferBooking
               ? {
-                  pickupLocation: b.transferBooking.pickupLocation,
-                  pickupDate: formatCalendarDate(b.transferBooking.pickupDate),
-                  pickupTime: b.transferBooking.pickupTime,
-                  flightNumber: b.transferBooking.flightNumber,
-                  fixedFare: Number(b.transferBooking.fixedFareSnapshot || 0),
-                  transferStatus: b.transferBooking.transferStatus,
-                }
+                pickupLocation: b.transferBooking.pickupLocation,
+                pickupDate: formatCalendarDate(b.transferBooking.pickupDate),
+                pickupTime: b.transferBooking.pickupTime,
+                flightNumber: b.transferBooking.flightNumber,
+                fixedFare: Number(b.transferBooking.fixedFareSnapshot || 0),
+                transferStatus: b.transferBooking.transferStatus,
+              }
               : null,
             createdAt: b.createdAt instanceof Date ? b.createdAt.toISOString() : String(b.createdAt),
           })),
@@ -803,16 +803,16 @@ export class HospitalityBookingService {
         })),
         transferBooking: booking.transferBooking
           ? {
-              ...booking.transferBooking,
-              pickupDate: formatCalendarDate(booking.transferBooking.pickupDate),
-              fixedFareSnapshot: Number(booking.transferBooking.fixedFareSnapshot),
-            }
+            ...booking.transferBooking,
+            pickupDate: formatCalendarDate(booking.transferBooking.pickupDate),
+            fixedFareSnapshot: Number(booking.transferBooking.fixedFareSnapshot),
+          }
           : null,
         payment: booking.payment
           ? {
-              ...booking.payment,
-              amount: Number(booking.payment.amount),
-            }
+            ...booking.payment,
+            amount: Number(booking.payment.amount),
+          }
           : null,
       };
     } catch (err: any) {
