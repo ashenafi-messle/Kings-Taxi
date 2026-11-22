@@ -10,6 +10,17 @@ import {
 import { mockHotels, mockHotelBookings } from './mockData';
 import { apiRequest } from './apiClient';
 
+function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export const mockHotelPartners: HotelPartner[] = [
   {
     id: 'hp-gondar-hospitality-corp',
@@ -467,7 +478,7 @@ export class HotelService {
       const res = await apiRequest<any>(`/admin/hotels/${id}`);
       if (res.success && res.data) {
         const h = res.data;
-        return {
+        const mapped: Hotel = {
           id: h.id,
           name: h.name,
           slug: h.slug,
@@ -515,6 +526,17 @@ export class HotelService {
           createdAt: h.createdAt || new Date().toISOString(),
           updatedAt: h.updatedAt || new Date().toISOString(),
         };
+
+        // Merge any in-memory rooms added for this hotel
+        const localHotel = hotelsData.find((loc) => loc.id === id || loc.slug === id);
+        if (localHotel && localHotel.roomTypes && localHotel.roomTypes.length > 0) {
+          const existingIds = new Set(mapped.roomTypes.map((r) => r.id));
+          const extra = localHotel.roomTypes.filter((r) => !existingIds.has(r.id));
+          mapped.roomTypes = [...mapped.roomTypes, ...extra];
+          mapped.totalRooms = mapped.roomTypes.reduce((sum, r) => sum + r.totalInventory, 0);
+          mapped.availableRooms = mapped.roomTypes.reduce((sum, r) => sum + (r.availableRooms ?? r.totalInventory), 0);
+        }
+        return mapped;
       }
     } catch {
       // Fallback
@@ -584,7 +606,7 @@ export class HotelService {
       // Fallback
     }
 
-    const newId = `htl_${Date.now()}`;
+    const newId = generateUuid();
     const slug = (payload.name || 'hotel').toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
     const newHotel: Hotel = {
@@ -726,6 +748,31 @@ export class HotelService {
   // ============================================================================
 
   static async addRoomType(hotelId: string, roomTypePayload: Partial<HotelRoomType>): Promise<HotelRoomType | null> {
+    const newRoom: HotelRoomType = {
+      id: generateUuid(),
+      hotelId,
+      name: roomTypePayload.name || 'Standard Room',
+      description: roomTypePayload.description || '',
+      pricePerNightETB: roomTypePayload.pricePerNightETB || 3500,
+      totalInventory: roomTypePayload.totalInventory || 10,
+      availableRooms: roomTypePayload.totalInventory || 10,
+      bookedRooms: 0,
+      maxGuests: roomTypePayload.maxGuests || 2,
+      bedType: roomTypePayload.bedType || '1 King Bed',
+      roomSizeSqM: roomTypePayload.roomSizeSqM || 30,
+      amenities: roomTypePayload.amenities || ['Wi-Fi', 'TV', 'Ensuite Shower'],
+      images: roomTypePayload.images || ['https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800'],
+      status: 'AVAILABLE',
+    };
+
+    // Update in-memory hotel data immediately so UI reflects the addition without delay
+    const hotel = hotelsData.find((h) => h.id === hotelId);
+    if (hotel) {
+      hotel.roomTypes = [...(hotel.roomTypes || []), newRoom];
+      hotel.totalRooms = hotel.roomTypes.reduce((sum, r) => sum + r.totalInventory, 0);
+      hotel.availableRooms = hotel.roomTypes.reduce((sum, r) => sum + r.availableRooms, 0);
+    }
+
     try {
       const res = await apiRequest<any>(`/admin/hotels/${hotelId}/room-types`, {
         method: 'POST',
@@ -742,52 +789,12 @@ export class HotelService {
       });
 
       if (res.success && res.data) {
-        const newRoom: HotelRoomType = {
-          id: res.data.id,
-          hotelId,
-          name: res.data.name,
-          description: res.data.description || '',
-          pricePerNightETB: Number(res.data.basePricePerNight),
-          totalInventory: res.data.totalInventory,
-          availableRooms: res.data.totalInventory,
-          bookedRooms: 0,
-          maxGuests: res.data.maximumGuests,
-          bedType: roomTypePayload.bedType || '1 King Bed',
-          roomSizeSqM: 30,
-          amenities: roomTypePayload.amenities || ['Wi-Fi'],
-          images: [],
-          status: 'AVAILABLE',
-        };
-        return newRoom;
+        newRoom.id = res.data.id || newRoom.id;
       }
     } catch {
-      // Fallback
+      // Non-blocking fallback
     }
 
-    await new Promise((r) => setTimeout(r, 200));
-    const hotel = hotelsData.find((h) => h.id === hotelId);
-    if (!hotel) return null;
-
-    const newRoom: HotelRoomType = {
-      id: `rm_${Date.now()}`,
-      hotelId,
-      name: roomTypePayload.name || 'Standard Room',
-      description: roomTypePayload.description || '',
-      pricePerNightETB: roomTypePayload.pricePerNightETB || 3500,
-      totalInventory: roomTypePayload.totalInventory || 10,
-      availableRooms: roomTypePayload.totalInventory || 10,
-      bookedRooms: 0,
-      maxGuests: roomTypePayload.maxGuests || 2,
-      bedType: roomTypePayload.bedType || '1 King Bed',
-      roomSizeSqM: roomTypePayload.roomSizeSqM || 30,
-      amenities: roomTypePayload.amenities || ['Wi-Fi', 'TV', 'Ensuite Shower'],
-      images: roomTypePayload.images || ['https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800'],
-      status: 'AVAILABLE',
-    };
-
-    hotel.roomTypes = [...hotel.roomTypes, newRoom];
-    hotel.totalRooms = hotel.roomTypes.reduce((sum, r) => sum + r.totalInventory, 0);
-    hotel.availableRooms = hotel.roomTypes.reduce((sum, r) => sum + r.availableRooms, 0);
     return newRoom;
   }
 

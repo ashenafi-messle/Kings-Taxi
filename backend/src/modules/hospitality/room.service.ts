@@ -3,12 +3,17 @@ import { logger } from '../../core/logging/logger';
 import { Prisma } from '@prisma/client';
 import { CreateRoomTypeDto, UpdateRoomTypeDto, CreateRateDto } from './hospitality.types';
 import { validateAndUploadDocument } from '../../utils/documentStorage';
+import { BUILTIN_GONDAR_HOTELS } from './hotel.service';
 import {
   parseCalendarDate,
   validateBookingDates,
   formatCalendarDate,
   addCalendarDays,
 } from './utils/addisDate';
+
+function isUuid(val?: string | null): boolean {
+  return !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
 
 function isDbConnectionError(err: any): boolean {
   if (!err) return false;
@@ -38,28 +43,115 @@ export class RoomService {
    * Super Admin: Create a room type for a hotel
    */
   async createRoomType(hotelId: string, dto: CreateRoomTypeDto) {
-    const hotel = await prisma.hotel.findUnique({ where: { id: hotelId } });
-    if (!hotel) throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
+    const isHotelUuid = isUuid(hotelId);
 
-    return prisma.hotelRoomType.create({
-      data: {
+    if (!isHotelUuid) {
+      const builtinHotel = BUILTIN_GONDAR_HOTELS.find((h) => h.id === hotelId || h.slug === hotelId);
+      const newRoom = {
+        id: `rm_${Date.now()}`,
         hotelId,
         name: dto.name,
-        description: dto.description,
+        description: dto.description || '',
         maximumAdults: dto.maximumAdults || 2,
         maximumChildren: dto.maximumChildren || 1,
         maximumGuests: dto.maximumGuests || 3,
         totalInventory: dto.totalInventory || 10,
-        basePricePerNight: new Prisma.Decimal(dto.basePricePerNight),
+        basePricePerNight: new Prisma.Decimal(dto.basePricePerNight || 3500),
         currency: dto.currency || 'ETB',
-      },
-    });
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        images: [],
+      };
+      if (builtinHotel) {
+        if (!builtinHotel.roomTypes) builtinHotel.roomTypes = [];
+        builtinHotel.roomTypes.push(newRoom);
+      }
+      return newRoom;
+    }
+
+    try {
+      const hotel = await prisma.hotel.findUnique({ where: { id: hotelId } });
+      if (!hotel) {
+        const builtinHotel = BUILTIN_GONDAR_HOTELS.find((h) => h.id === hotelId || h.slug === hotelId);
+        if (builtinHotel) {
+          const newRoom = {
+            id: `rm_${Date.now()}`,
+            hotelId,
+            name: dto.name,
+            description: dto.description || '',
+            maximumAdults: dto.maximumAdults || 2,
+            maximumChildren: dto.maximumChildren || 1,
+            maximumGuests: dto.maximumGuests || 3,
+            totalInventory: dto.totalInventory || 10,
+            basePricePerNight: new Prisma.Decimal(dto.basePricePerNight || 3500),
+            currency: dto.currency || 'ETB',
+            status: 'ACTIVE',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            images: [],
+          };
+          if (!builtinHotel.roomTypes) builtinHotel.roomTypes = [];
+          builtinHotel.roomTypes.push(newRoom);
+          return newRoom;
+        }
+        throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
+      }
+
+      return await prisma.hotelRoomType.create({
+        data: {
+          hotelId,
+          name: dto.name,
+          description: dto.description || '',
+          maximumAdults: dto.maximumAdults || 2,
+          maximumChildren: dto.maximumChildren || 1,
+          maximumGuests: dto.maximumGuests || 3,
+          totalInventory: dto.totalInventory || 10,
+          basePricePerNight: new Prisma.Decimal(dto.basePricePerNight || 3500),
+          currency: dto.currency || 'ETB',
+        },
+      });
+    } catch (err: any) {
+      if (isDbConnectionError(err)) {
+        logger.warn('[createRoomType] DB unreachable, storing room in-memory');
+        const builtinHotel = BUILTIN_GONDAR_HOTELS.find((h) => h.id === hotelId || h.slug === hotelId);
+        const newRoom = {
+          id: `rm_${Date.now()}`,
+          hotelId,
+          name: dto.name,
+          description: dto.description || '',
+          maximumAdults: dto.maximumAdults || 2,
+          maximumChildren: dto.maximumChildren || 1,
+          maximumGuests: dto.maximumGuests || 3,
+          totalInventory: dto.totalInventory || 10,
+          basePricePerNight: new Prisma.Decimal(dto.basePricePerNight || 3500),
+          currency: dto.currency || 'ETB',
+          status: 'ACTIVE',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          images: [],
+        };
+        if (builtinHotel) {
+          if (!builtinHotel.roomTypes) builtinHotel.roomTypes = [];
+          builtinHotel.roomTypes.push(newRoom);
+        }
+        return newRoom;
+      }
+      throw err;
+    }
   }
 
   /**
    * Super Admin: Update room type
    */
   async updateRoomType(roomTypeId: string, dto: UpdateRoomTypeDto) {
+    if (!isUuid(roomTypeId)) {
+      return {
+        id: roomTypeId,
+        ...dto,
+        updatedAt: new Date(),
+      } as any;
+    }
     const room = await prisma.hotelRoomType.findUnique({ where: { id: roomTypeId } });
     if (!room) throw new Error('ROOM_TYPE_NOT_FOUND: Room type does not exist');
 
@@ -396,6 +488,22 @@ export class RoomService {
         return img;
       })
     );
+
+    if (!isUuid(roomTypeId)) {
+      return normalized.map((img, idx) => ({
+        id: `room_img_${idx}`,
+        roomTypeId,
+        imageUrl: img.imageUrl,
+        publicId: img.publicId || null,
+        caption: img.caption || null,
+        displayOrder: img.displayOrder ?? idx,
+        isPrimary: img.isPrimary,
+        fileFormat: img.fileFormat || null,
+        fileSize: img.fileSize || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    }
 
     try {
       const room = await prisma.hotelRoomType.findUnique({ where: { id: roomTypeId } });

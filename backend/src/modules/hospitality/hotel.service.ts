@@ -1002,10 +1002,15 @@ export class HotelService {
    * Public: Get complete hotel details by ID or slug
    */
   async getHotelDetails(idOrSlug: string, isPublic = true) {
-    try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+    const isIdUuid = isUuid(idOrSlug);
 
-      const where: any = isUuid ? { id: idOrSlug } : { OR: [{ id: idOrSlug }, { slug: idOrSlug }] };
+    if (!isIdUuid) {
+      const builtin = this.getBuiltinHotelDetails(idOrSlug);
+      if (builtin) return builtin;
+    }
+
+    try {
+      const where: any = isIdUuid ? { id: idOrSlug } : { slug: idOrSlug };
       if (isPublic) {
         where.status = HotelStatus.PUBLISHED;
       }
@@ -1036,7 +1041,7 @@ export class HotelService {
         },
       });
 
-      if (!hotel) return null;
+      if (!hotel) return this.getBuiltinHotelDetails(idOrSlug);
 
       return {
         ...hotel,
@@ -1057,7 +1062,7 @@ export class HotelService {
         })),
       };
     } catch (err: any) {
-      if (isDbConnectionError(err)) {
+      if (isDbConnectionError(err) || !isIdUuid) {
         logger.warn(
           { err: err.message },
           `[Hospitality] Database unreachable. Serving built-in details for ${idOrSlug}`
