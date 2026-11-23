@@ -28,6 +28,7 @@ import {
   AlertCircle,
   ArrowLeft,
   RefreshCw,
+  Camera,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import {
@@ -46,9 +47,7 @@ export default function HotelDetailScreen() {
   const { id } = useLocalSearchParams();
   const { t } = useTranslation(['hotels', 'common', 'navigation']);
 
-  const [hotel, setHotel] = useState<Hotel | null>(
-    () => mockHotels.find((h) => h.id === id) || null
-  );
+  const [hotel, setHotel] = useState<Hotel | null>(null);
   const [transferRates, setTransferRates] = useState<AirportTransferRateDto[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
@@ -284,10 +283,10 @@ export default function HotelDetailScreen() {
                     {rate.vehicleCategory === 'SEDAN'
                       ? 'Standard Sedan'
                       : rate.vehicleCategory === 'SUV'
-                      ? 'Executive SUV'
-                      : rate.vehicleCategory === 'VAN'
-                      ? 'Passenger Van'
-                      : rate.vehicleCategory}
+                        ? 'Executive SUV'
+                        : rate.vehicleCategory === 'VAN'
+                          ? 'Passenger Van'
+                          : rate.vehicleCategory}
                   </Text>
                 </View>
                 <Text style={styles.transferPriceTag}>
@@ -329,6 +328,7 @@ export default function HotelDetailScreen() {
           <Text style={styles.sectionTitle}>{t('availableRooms')}</Text>
           {hotel.rooms.map((room) => {
             const isSelected = room.id === selectedRoomId;
+            const primaryPhoto = room.photos && room.photos.length > 0 ? room.photos[0] : hotel.heroImage;
             return (
               <TouchableOpacity
                 key={room.id}
@@ -339,15 +339,19 @@ export default function HotelDetailScreen() {
                   isSelected && styles.roomCardSelected,
                 ]}
               >
-                <Image
-                  source={{
-                    uri:
-                      room.photos && room.photos.length > 0
-                        ? room.photos[0]
-                        : hotel.heroImage,
-                  }}
-                  style={styles.roomImage}
-                />
+                <View style={styles.roomImageContainer}>
+                  <Image
+                    source={{ uri: primaryPhoto }}
+                    style={styles.roomImage}
+                  />
+                  {room.photos && room.photos.length > 1 && (
+                    <View style={styles.photoCountBadge}>
+                      <Camera size={11} color="#FFF" />
+                      <Text style={styles.photoCountText}>{room.photos.length} photos</Text>
+                    </View>
+                  )}
+                </View>
+
                 <View style={styles.roomDetails}>
                   <View style={styles.roomHeaderRow}>
                     <Text style={styles.roomTitle}>{room.title}</Text>
@@ -370,6 +374,33 @@ export default function HotelDetailScreen() {
                       </Text>
                     </View>
                   </View>
+
+                  {/* Independent room gallery thumbnails for selected room */}
+                  {isSelected && room.photos && room.photos.length > 1 && (
+                    <View style={styles.roomGalleryContainer}>
+                      <Text style={styles.roomGalleryLabel}>Room Photo Gallery ({room.photos.length} photos):</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.roomGalleryScroll}
+                      >
+                        {room.photos.map((photoUri, pIdx) => (
+                          <View key={pIdx} style={styles.roomGalleryThumbWrap}>
+                            <Image
+                              source={{ uri: photoUri }}
+                              style={styles.roomGalleryThumb}
+                            />
+                            {pIdx === 0 && (
+                              <View style={styles.primaryPhotoBadge}>
+                                <Text style={styles.primaryPhotoText}>Primary</Text>
+                              </View>
+                            )}
+                          </View>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
                   <View style={styles.roomPriceRow}>
                     <Text style={styles.roomPrice}>
                       {formatETB(room.pricePerNight)}
@@ -669,6 +700,69 @@ const styles = StyleSheet.create({
   roomCardSelected: {
     borderColor: theme.colors.brightGold,
     backgroundColor: theme.colors.paleGold,
+  },
+  roomImageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 140,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  photoCountBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(15, 23, 42, 0.82)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.borderRadius.full,
+  },
+  photoCountText: {
+    ...theme.typography.captionBold,
+    color: '#FFF',
+    fontSize: 10,
+  },
+  roomGalleryContainer: {
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderGold,
+  },
+  roomGalleryLabel: {
+    ...theme.typography.captionBold,
+    color: theme.colors.textSecondary,
+    marginBottom: 6,
+  },
+  roomGalleryScroll: {
+    gap: 8,
+  },
+  roomGalleryThumbWrap: {
+    position: 'relative',
+    borderRadius: theme.borderRadius.sm,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
+  },
+  roomGalleryThumb: {
+    width: 64,
+    height: 48,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  primaryPhotoBadge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingVertical: 1,
+  },
+  primaryPhotoText: {
+    ...theme.typography.captionBold,
+    color: '#FBBF24',
+    fontSize: 8,
+    textAlign: 'center',
   },
   roomImage: {
     width: '100%',

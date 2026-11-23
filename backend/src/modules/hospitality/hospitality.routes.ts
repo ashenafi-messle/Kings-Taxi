@@ -62,6 +62,9 @@ hospitalityRouter.post('/admin/hotels/:id/publish', adminAuth, (req: Request, re
 hospitalityRouter.post('/admin/hotels/:id/unpublish', adminAuth, (req: Request, res: Response) =>
   hospitalityController.adminUnpublishHotel(req, res)
 );
+hospitalityRouter.post('/admin/hotels/:id/cover-image', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminUploadCoverImage(req, res)
+);
 hospitalityRouter.post('/admin/hotels/:id/images', adminAuth, (req: Request, res: Response) => hospitalityController.adminAddHotelImage(req, res));
 hospitalityRouter.delete('/admin/hotels/:id/images/:imageId', adminAuth, (req: Request, res: Response) =>
   hospitalityController.adminDeleteHotelImage(req, res)
@@ -82,6 +85,15 @@ hospitalityRouter.get('/admin/hotels/:id/room-types/:roomTypeId/images', adminAu
 );
 hospitalityRouter.put('/admin/hotels/:id/room-types/:roomTypeId/images', adminAuth, (req: Request, res: Response) =>
   hospitalityController.adminSetRoomImages(req, res)
+);
+hospitalityRouter.post('/admin/hotels/:id/room-types/:roomTypeId/images', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminAddRoomImage(req, res)
+);
+hospitalityRouter.delete('/admin/hotels/:id/room-types/:roomTypeId/images/:imageId', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminDeleteRoomImage(req, res)
+);
+hospitalityRouter.delete('/admin/hotels/:id/room-types/:roomTypeId', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminDeleteRoomType(req, res)
 );
 hospitalityRouter.get('/admin/hotels/:id/room-types/:roomTypeId/images/upload-signature', adminAuth, (req: Request, res: Response) =>
   hospitalityController.adminGetRoomImageUploadSignature(req, res)

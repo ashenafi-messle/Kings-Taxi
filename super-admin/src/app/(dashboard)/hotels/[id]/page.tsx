@@ -25,6 +25,7 @@ import {
 import { PageHeader } from '../../../../components/common/PageHeader';
 import { StatusBadge } from '../../../../components/common/StatusBadge';
 import { ImageUploadGallery, GalleryImageItem } from '../../../../components/common/ImageUploadGallery';
+import { ImageUploadSingle } from '../../../../components/common/ImageUploadSingle';
 import { HotelService } from '../../../../services/hotelService';
 import { Hotel, HotelRoomType } from '../../../../types';
 import { formatETB } from '../../../../utils/formatters';
@@ -36,20 +37,11 @@ export default function HotelDetailPage() {
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
-  const [newRoomImages, setNewRoomImages] = useState<GalleryImageItem[]>([
-    {
-      imageUrl: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800&auto=format&fit=crop&q=80',
-      displayOrder: 0,
-      isPrimary: true,
-      caption: 'Master Bedroom King Bed',
-    },
-    {
-      imageUrl: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop&q=80',
-      displayOrder: 1,
-      isPrimary: false,
-      caption: 'Private Balcony & Panoramic View',
-    },
-  ]);
+  const [newRoomImages, setNewRoomImages] = useState<GalleryImageItem[]>([]);
+  const [isEditingCover, setIsEditingCover] = useState(false);
+  const [coverImagePayload, setCoverImagePayload] = useState('');
+  const [isSavingCover, setIsSavingCover] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
   const [roomImageError, setRoomImageError] = useState<string | null>(null);
   const [editingRoomGallery, setEditingRoomGallery] = useState<{
     roomId: string;
@@ -93,12 +85,28 @@ export default function HotelDetailPage() {
     }
   };
 
+  const handleSaveCoverImage = async () => {
+    if (!hotel || !coverImagePayload) return;
+    setIsSavingCover(true);
+    setCoverError(null);
+    try {
+      await HotelService.uploadHotelCover(hotel.id, coverImagePayload);
+      setIsEditingCover(false);
+      setCoverImagePayload('');
+      loadHotel();
+    } catch (err: any) {
+      setCoverError(err.message || 'Failed to update hotel cover image.');
+    } finally {
+      setIsSavingCover(false);
+    }
+  };
+
   const handleCreateRoomType = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hotel || !newRoomForm.name.trim()) return;
 
-    if (newRoomImages.length < 2 || newRoomImages.length > 4) {
-      setRoomImageError('A room type must have between 2 and 4 gallery images.');
+    if (newRoomImages.length < 1 || newRoomImages.length > 8) {
+      setRoomImageError('A room type must have between 1 and 8 gallery images.');
       return;
     }
     setRoomImageError(null);
@@ -110,6 +118,7 @@ export default function HotelDetailPage() {
         galleryImages: newRoomImages,
       } as any);
       setIsAddingRoom(false);
+      setNewRoomImages([]);
       setNewRoomForm({
         name: '',
         pricePerNightETB: 4500,
@@ -127,8 +136,8 @@ export default function HotelDetailPage() {
 
   const handleSaveRoomGallery = async () => {
     if (!hotel || !editingRoomGallery) return;
-    if (editingRoomGallery.images.length < 2 || editingRoomGallery.images.length > 4) {
-      setRoomImageError('A room type must have between 2 and 4 images.');
+    if (editingRoomGallery.images.length < 1 || editingRoomGallery.images.length > 8) {
+      setRoomImageError('A room type must have between 1 and 8 images.');
       return;
     }
 
@@ -221,6 +230,27 @@ export default function HotelDetailPage() {
         <div className="col-12 col-lg-4">
           <div className="card shadow-sm border-0 rounded-3 mb-4">
             <div className="card-body p-4">
+              {/* Hotel Cover Image Preview with Change Trigger */}
+              <div className="position-relative rounded-3 overflow-hidden mb-3 border shadow-sm" style={{ height: 180, backgroundColor: '#0F172A' }}>
+                <img
+                  src={hotel.heroImage}
+                  alt={hotel.name}
+                  className="w-100 h-100 object-fit-cover"
+                />
+                <button
+                  type="button"
+                  className="btn btn-dark btn-sm position-absolute bottom-0 end-0 m-2 py-1 px-2.5 text-xs bg-opacity-75 d-flex align-items-center gap-1 shadow-none"
+                  onClick={() => {
+                    setCoverImagePayload('');
+                    setCoverError(null);
+                    setIsEditingCover(true);
+                  }}
+                >
+                  <Camera size={13} />
+                  <span>Change Cover</span>
+                </button>
+              </div>
+
               <div className="d-flex align-items-center justify-content-between mb-3">
                 <StatusBadge status={hotel.status} />
                 <div className="d-flex align-items-center gap-1 text-gold fw-bold small">
@@ -569,13 +599,13 @@ export default function HotelDetailPage() {
                     />
                   </div>
 
-                  {/* Multiple Room Image Upload to Cloudinary (2–4 images) */}
+                  {/* Multiple Room Image Upload to Cloudinary (1–6 images) */}
                   <ImageUploadGallery
-                    label="Room Gallery Images (2 to 4 Images Required)"
-                    helperText="Upload between 2 and 4 photos showcasing bedroom, bath, balcony, or panoramic views. Set one image as the primary cover."
+                    label="Room Gallery Images (1 to 6 Images)"
+                    helperText="Upload photos showcasing bedroom, bath, balcony, or panoramic views from your device. Set one image as the primary cover."
                     entityLabel="Room Type"
-                    minImages={2}
-                    maxImages={4}
+                    minImages={1}
+                    maxImages={6}
                     images={newRoomImages}
                     onChange={setNewRoomImages}
                   />
@@ -592,7 +622,7 @@ export default function HotelDetailPage() {
                   <button
                     type="submit"
                     className="btn btn-gold btn-sm px-4 fw-semibold"
-                    disabled={newRoomImages.length < 2 || newRoomImages.length > 4}
+                    disabled={newRoomImages.length < 1 || newRoomImages.length > 6}
                   >
                     Add Room Type
                   </button>
@@ -625,11 +655,11 @@ export default function HotelDetailPage() {
 
               <div className="modal-body py-3">
                 <ImageUploadGallery
-                  label="Room Gallery Images (2 to 4 Images Required)"
+                  label="Room Gallery Images (1 to 6 Images)"
                   helperText="Upload, reorder, replace, or set the primary cover photo for this room type."
                   entityLabel="Room Type"
-                  minImages={2}
-                  maxImages={4}
+                  minImages={1}
+                  maxImages={6}
                   images={editingRoomGallery.images}
                   onChange={(imgs) =>
                     setEditingRoomGallery({
@@ -652,12 +682,70 @@ export default function HotelDetailPage() {
                   type="button"
                   className="btn btn-gold btn-sm px-4 fw-semibold"
                   disabled={
-                    editingRoomGallery.images.length < 2 ||
-                    editingRoomGallery.images.length > 4
+                    editingRoomGallery.images.length < 1 ||
+                    editingRoomGallery.images.length > 6
                   }
                   onClick={handleSaveRoomGallery}
                 >
                   Save Gallery Photos
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Change Hotel Cover Image */}
+      {isEditingCover && (
+        <div
+          className="modal fade show d-block"
+          tabIndex={-1}
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.65)', zIndex: 1060 }}
+        >
+          <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: 540 }}>
+            <div className="modal-content shadow-lg border-0 rounded-3">
+              <div className="modal-header border-bottom border-light">
+                <h5 className="modal-title fw-bold text-obsidian">Change Hotel Cover Image</h5>
+                <button
+                  type="button"
+                  className="btn-close shadow-none"
+                  onClick={() => setIsEditingCover(false)}
+                />
+              </div>
+              <div className="modal-body py-3">
+                {coverError && (
+                  <div className="alert alert-danger py-2 px-3 small mb-3">
+                    {coverError}
+                  </div>
+                )}
+                <ImageUploadSingle
+                  label="Select New Cover Image"
+                  helperText="Choose a high-resolution photo from your device. This will upload to Cloudinary and update on passenger mobile hotel cards."
+                  value={coverImagePayload}
+                  onChange={(uri) => setCoverImagePayload(uri)}
+                  onRemove={() => setCoverImagePayload('')}
+                />
+              </div>
+              <div className="modal-footer border-top border-light">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={() => setIsEditingCover(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-gold btn-sm px-4 fw-semibold d-flex align-items-center gap-1.5"
+                  disabled={!coverImagePayload || isSavingCover}
+                  onClick={handleSaveCoverImage}
+                >
+                  {isSavingCover ? (
+                    <span className="spinner-border spinner-border-sm" role="status" />
+                  ) : (
+                    <Save size={14} />
+                  )}
+                  <span>Save Cover Image</span>
                 </button>
               </div>
             </div>

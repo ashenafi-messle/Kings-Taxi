@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Building2, ArrowLeft, Save, AlertCircle } from 'lucide-react';
 import { PageHeader } from '../../../../components/common/PageHeader';
+import { ImageUploadSingle } from '../../../../components/common/ImageUploadSingle';
 import { HotelService } from '../../../../services/hotelService';
 
 export default function NewHotelPage() {
@@ -198,20 +199,13 @@ export default function NewHotelPage() {
                   </div>
 
                   <div className="col-12">
-                    <label className="form-label text-sm fw-medium text-obsidian mb-1">
-                      Cover Image URL
-                    </label>
-                    <input
-                      type="url"
-                      name="heroImage"
+                    <ImageUploadSingle
+                      label="Hotel Cover Image"
+                      helperText="Select or drag a JPEG, JPG, PNG or WebP image from your computer (up to 8MB). Uploads to Cloudinary and displays as the hotel cover on mobile cards and headers."
                       value={formData.heroImage}
-                      onChange={handleChange}
-                      placeholder="https://images.unsplash.com/... or Cloudinary URL"
-                      className="form-control form-control-sm py-2 shadow-none font-monospace text-xs"
+                      onChange={(imageUri) => setFormData((prev) => ({ ...prev, heroImage: imageUri }))}
+                      onRemove={() => setFormData((prev) => ({ ...prev, heroImage: '' }))}
                     />
-                    <div className="text-muted text-xs mt-1">
-                      Main hero photo displayed to passengers on mobile hotel cards and booking headers.
-                    </div>
                   </div>
 
                   <div className="col-12">

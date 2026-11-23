@@ -496,6 +496,22 @@ export class HospitalityController {
     }
   }
 
+  async adminUploadCoverImage(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub;
+      const fileData = req.body.fileData || req.body.coverImageUrl || req.body.imageData;
+      if (!fileData) {
+        ApiResponse.badRequest(res, 'fileData or coverImageUrl is required');
+        return;
+      }
+      const updated = await hotelService.uploadCoverImage(req.params.id, fileData, adminId);
+      ApiResponse.success(res, updated, 'Hotel cover image uploaded successfully to Cloudinary');
+    } catch (err: any) {
+      logger.error({ err }, 'Error uploading hotel cover image');
+      ApiResponse.badRequest(res, err.message || 'Unable to upload cover image');
+    }
+  }
+
   async adminAddHotelImage(req: Request, res: Response) {
     try {
       const image = await hotelService.addImage(req.params.id, req.body);
@@ -557,6 +573,33 @@ export class HospitalityController {
       ApiResponse.success(res, updated, 'Room gallery images updated successfully');
     } catch (err: any) {
       ApiResponse.badRequest(res, err.message || 'Unable to update room images');
+    }
+  }
+
+  async adminAddRoomImage(req: Request, res: Response) {
+    try {
+      const image = await roomService.addRoomImage(req.params.roomTypeId, req.body);
+      ApiResponse.created(res, image, 'Room image added successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to add room image');
+    }
+  }
+
+  async adminDeleteRoomImage(req: Request, res: Response) {
+    try {
+      await roomService.deleteRoomImage(req.params.roomTypeId, req.params.imageId);
+      ApiResponse.success(res, { deleted: true }, 'Room image deleted successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to delete room image');
+    }
+  }
+
+  async adminDeleteRoomType(req: Request, res: Response) {
+    try {
+      await roomService.deleteRoomType(req.params.roomTypeId);
+      ApiResponse.success(res, { deleted: true }, 'Room type and images deleted successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to delete room type');
     }
   }
 

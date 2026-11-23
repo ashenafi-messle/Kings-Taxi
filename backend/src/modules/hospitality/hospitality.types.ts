@@ -14,6 +14,8 @@ export interface CreateHotelDto {
   partnerId?: string;
   category?: HotelCategory;
   coverImageUrl?: string;
+  coverImagePublicId?: string;
+  coverImageData?: string;
   description: string;
   shortDescription?: string;
   address: string;
@@ -41,6 +43,8 @@ export interface UpdateHotelDto {
   partnerId?: string;
   category?: HotelCategory;
   coverImageUrl?: string;
+  coverImagePublicId?: string;
+  coverImageData?: string;
   description?: string;
   shortDescription?: string;
   address?: string;
@@ -65,6 +69,8 @@ export interface UpdateHotelDto {
 
 export interface CreateHotelImageDto {
   imageUrl: string;
+  fileData?: string;
+  publicId?: string;
   altText?: string;
   displayOrder?: number;
   isCover?: boolean;
@@ -79,8 +85,8 @@ export interface CreateRoomTypeDto {
   totalInventory?: number;
   basePricePerNight: number;
   currency?: string;
-  images?: (string | { imageUrl: string; caption?: string; displayOrder?: number; isPrimary?: boolean })[];
-  galleryImages?: (string | { imageUrl: string; caption?: string; displayOrder?: number; isPrimary?: boolean })[];
+  images?: (string | { imageUrl?: string; fileData?: string; publicId?: string; caption?: string; displayOrder?: number; isPrimary?: boolean; fileFormat?: string; fileSize?: number })[];
+  galleryImages?: (string | { imageUrl?: string; fileData?: string; publicId?: string; caption?: string; displayOrder?: number; isPrimary?: boolean; fileFormat?: string; fileSize?: number })[];
 }
 
 export interface UpdateRoomTypeDto {

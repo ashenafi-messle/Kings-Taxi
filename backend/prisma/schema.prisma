@@ -1212,6 +1212,7 @@ model Hotel {
   verificationStatus HotelVerificationStatus @default(PENDING) @map("verification_status")
   publicationStatus  HotelPublicationStatus  @default(DRAFT) @map("publication_status")
   coverImageUrl      String?                 @map("cover_image_url") @db.VarChar(512)
+  coverImagePublicId String?                 @map("cover_image_public_id") @db.VarChar(255)
   rejectionReason    String?                 @map("rejection_reason") @db.Text
   verifiedAt         DateTime?               @map("verified_at") @db.Timestamptz(6)
   verifiedByAdminId  String?                 @map("verified_by_admin_id") @db.Uuid

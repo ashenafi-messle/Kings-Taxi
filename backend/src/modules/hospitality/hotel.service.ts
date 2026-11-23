@@ -2,7 +2,7 @@ import { prisma } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
 import { HotelStatus, HotelCategory, HotelPublicationStatus, HotelVerificationStatus } from '@prisma/client';
 import { CreateHotelDto, UpdateHotelDto, CreateHotelImageDto } from './hospitality.types';
-import { validateAndUploadDocument } from '../../utils/documentStorage';
+import { HospitalityImageService } from './hospitalityImage.service';
 
 function isUuid(val?: string | null): boolean {
   return !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
@@ -484,11 +484,31 @@ export class HotelService {
    */
   async createHotel(dto: CreateHotelDto, adminId?: string) {
     const slug = dto.slug || this.generateSlug(dto.name);
+    let finalCoverPublicId: string | null = dto.coverImagePublicId || null;
 
     try {
       // Verify slug uniqueness
       const existing = await prisma.hotel.findUnique({ where: { slug } });
       const finalSlug = existing ? `${slug}-${Date.now().toString(36)}` : slug;
+
+      // Process cover image upload to Cloudinary if provided as Data URI or Base64
+      let finalCoverUrl = dto.coverImageUrl || null;
+      const rawCover = dto.coverImageData || dto.coverImageUrl;
+
+      if (rawCover && (rawCover.startsWith('data:') || rawCover.length > 500)) {
+        try {
+          const uploadRes = await HospitalityImageService.processImage(rawCover, {
+            folder: `kings-taxi/hotels/hotel-${finalSlug}/cover`,
+            publicIdPrefix: `cover_${finalSlug.slice(0, 12)}`,
+            isPrimary: true,
+          });
+          finalCoverUrl = uploadRes.imageUrl;
+          finalCoverPublicId = uploadRes.publicId || null;
+        } catch (uploadErr: any) {
+          logger.warn({ error: uploadErr.message }, '[createHotel] Cloudinary upload fallback for cover image');
+          if (!finalCoverUrl) finalCoverUrl = rawCover.startsWith('http') ? rawCover : null;
+        }
+      }
 
       return await prisma.$transaction(async (tx) => {
         const isExplicitlyPublished = dto.status === HotelStatus.PUBLISHED || dto.publishImmediately === true || dto.publish === true;
@@ -502,7 +522,8 @@ export class HotelService {
           data: {
             partnerId: isUuid(dto.partnerId) ? dto.partnerId : null,
             category: dto.category || HotelCategory.BOUTIQUE_HERITAGE,
-            coverImageUrl: dto.coverImageUrl || null,
+            coverImageUrl: finalCoverUrl,
+            coverImagePublicId: finalCoverPublicId,
             name: dto.name,
             slug: finalSlug,
             description: dto.description || 'Quality lodging partner in Ethiopia',
@@ -549,6 +570,9 @@ export class HotelService {
         return hotel;
       });
     } catch (err: any) {
+      if (finalCoverPublicId) {
+        await HospitalityImageService.safeDelete(finalCoverPublicId);
+      }
       if (isDbConnectionError(err)) {
         logger.warn('[createHotel] DB unreachable, creating in-memory fallback hotel');
         const fallbackHotel = {
@@ -556,6 +580,7 @@ export class HotelService {
           partnerId: null,
           category: dto.category || HotelCategory.BOUTIQUE_HERITAGE,
           coverImageUrl: dto.coverImageUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+          coverImagePublicId: finalCoverPublicId || undefined,
           name: dto.name,
           slug,
           description: dto.description || 'Quality lodging partner in Ethiopia',
@@ -598,13 +623,32 @@ export class HotelService {
       throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
     }
 
-    return prisma.$transaction(async (tx) => {
-      const updated = await tx.hotel.update({
+    let updatedCoverUrl = dto.coverImageUrl !== undefined ? dto.coverImageUrl : undefined;
+    let updatedCoverPublicId = dto.coverImagePublicId !== undefined ? dto.coverImagePublicId : undefined;
+    const rawCover = dto.coverImageData || (dto.coverImageUrl && (dto.coverImageUrl.startsWith('data:') || dto.coverImageUrl.length > 500) ? dto.coverImageUrl : null);
+    let oldPublicIdToDelete: string | null = null;
+
+    if (rawCover && rawCover.startsWith('data:')) {
+      const uploadRes = await HospitalityImageService.processImage(rawCover, {
+        folder: `kings-taxi/hotels/hotel-${hotel.id}/cover`,
+        publicIdPrefix: `cover_${hotel.id.slice(0, 8)}`,
+        isPrimary: true,
+      });
+      updatedCoverUrl = uploadRes.imageUrl;
+      updatedCoverPublicId = uploadRes.publicId || undefined;
+      if (hotel.coverImagePublicId && hotel.coverImagePublicId !== uploadRes.publicId) {
+        oldPublicIdToDelete = hotel.coverImagePublicId;
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.hotel.update({
         where: { id },
         data: {
           partnerId: dto.partnerId !== undefined ? dto.partnerId : undefined,
           category: dto.category !== undefined ? dto.category : undefined,
-          coverImageUrl: dto.coverImageUrl !== undefined ? dto.coverImageUrl : undefined,
+          coverImageUrl: updatedCoverUrl,
+          coverImagePublicId: updatedCoverPublicId,
           verificationStatus: dto.verificationStatus !== undefined ? dto.verificationStatus : undefined,
           publicationStatus: dto.publicationStatus !== undefined ? dto.publicationStatus : undefined,
           rejectionReason: dto.rejectionReason !== undefined ? dto.rejectionReason : undefined,
@@ -647,8 +691,43 @@ export class HotelService {
         }
       }
 
-      return updated;
+      return saved;
     });
+
+    if (oldPublicIdToDelete) {
+      await HospitalityImageService.safeDelete(oldPublicIdToDelete);
+    }
+
+    return updated;
+  }
+
+  /**
+   * Super Admin: Direct cover image upload and replacement for a hotel
+   */
+  async uploadCoverImage(id: string, fileData: string, adminId?: string) {
+    const hotel = await prisma.hotel.findUnique({ where: { id } });
+    if (!hotel) throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
+
+    const uploadRes = await HospitalityImageService.processImage(fileData, {
+      folder: `kings-taxi/hotels/hotel-${hotel.id}/cover`,
+      publicIdPrefix: `cover_${hotel.id.slice(0, 8)}`,
+      isPrimary: true,
+    });
+
+    const updated = await prisma.hotel.update({
+      where: { id },
+      data: {
+        coverImageUrl: uploadRes.imageUrl,
+        coverImagePublicId: uploadRes.publicId || null,
+        updatedByAdminId: isUuid(adminId) ? adminId : undefined,
+      },
+    });
+
+    if (hotel.coverImagePublicId && hotel.coverImagePublicId !== uploadRes.publicId) {
+      await HospitalityImageService.safeDelete(hotel.coverImagePublicId);
+    }
+
+    return updated;
   }
 
   /**
@@ -745,6 +824,28 @@ export class HotelService {
       });
     }
 
+    const hotel = await prisma.hotel.findUnique({
+      where: { id },
+      include: {
+        images: true,
+        roomTypes: { include: { images: true } },
+      },
+    });
+
+    if (hotel) {
+      if (hotel.coverImagePublicId) {
+        await HospitalityImageService.safeDelete(hotel.coverImagePublicId);
+      }
+      for (const img of hotel.images) {
+        if (img.publicId) await HospitalityImageService.safeDelete(img.publicId);
+      }
+      for (const rt of hotel.roomTypes) {
+        for (const rImg of rt.images) {
+          if (rImg.publicId) await HospitalityImageService.safeDelete(rImg.publicId);
+        }
+      }
+    }
+
     return prisma.hotel.delete({ where: { id } });
   }
 
@@ -756,16 +857,17 @@ export class HotelService {
     if (!hotel) throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
 
     let finalImageUrl = dto.imageUrl;
-    let publicId: string | undefined = undefined;
+    let publicId: string | undefined = dto.publicId;
 
-    // Resilient Base64 / Cloudinary upload integration
-    if (dto.imageUrl && (dto.imageUrl.startsWith('data:') || dto.imageUrl.length > 500)) {
+    const raw = dto.fileData || dto.imageUrl;
+    if (raw && (raw.startsWith('data:') || raw.length > 500)) {
       try {
-        const uploadRes = await validateAndUploadDocument(dto.imageUrl, {
-          folder: 'kings-taxi/hotels',
-          publicIdPrefix: `htl_img_${hotelId.slice(0, 8)}`,
+        const uploadRes = await HospitalityImageService.processImage(raw, {
+          folder: `kings-taxi/hotels/hotel-${hotelId}/gallery`,
+          publicIdPrefix: `gallery_${hotelId.slice(0, 8)}`,
+          isPrimary: dto.isCover,
         });
-        finalImageUrl = uploadRes.fileUrl;
+        finalImageUrl = uploadRes.imageUrl;
         publicId = uploadRes.publicId;
       } catch (uploadErr: any) {
         logger.warn({ error: uploadErr.message }, '[addImage] Cloudinary upload fallback, storing direct payload');
@@ -773,6 +875,7 @@ export class HotelService {
     }
 
     if (dto.isCover) {
+      const oldCoverPublicId = hotel.coverImagePublicId;
       // Remove isCover flag from existing images and set as hotel cover
       await prisma.hotelImage.updateMany({
         where: { hotelId },
@@ -780,8 +883,14 @@ export class HotelService {
       });
       await prisma.hotel.update({
         where: { id: hotelId },
-        data: { coverImageUrl: finalImageUrl },
+        data: {
+          coverImageUrl: finalImageUrl,
+          coverImagePublicId: publicId || null,
+        },
       });
+      if (oldCoverPublicId && oldCoverPublicId !== publicId) {
+        await HospitalityImageService.safeDelete(oldCoverPublicId);
+      }
     }
 
     return prisma.hotelImage.create({
@@ -800,6 +909,10 @@ export class HotelService {
    * Super Admin: Remove hotel image
    */
   async deleteImage(imageId: string) {
+    const img = await prisma.hotelImage.findUnique({ where: { id: imageId } });
+    if (img?.publicId) {
+      await HospitalityImageService.safeDelete(img.publicId);
+    }
     return prisma.hotelImage.delete({ where: { id: imageId } });
   }
 
@@ -860,6 +973,7 @@ export class HotelService {
             shortDescription: true,
             category: true,
             coverImageUrl: true,
+            coverImagePublicId: true,
             contactPhone: true,
             contactEmail: true,
             address: true,

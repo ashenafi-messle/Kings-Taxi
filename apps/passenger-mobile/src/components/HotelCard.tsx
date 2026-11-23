@@ -26,6 +26,12 @@ export const HotelCard: React.FC<HotelCardProps> = ({
   style,
 }) => {
   const { t } = useTranslation(['hotels', 'common']);
+  const defaultFallback = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800';
+  const [imageUri, setImageUri] = React.useState(hotel.heroImage || defaultFallback);
+
+  React.useEffect(() => {
+    setImageUri(hotel.heroImage || defaultFallback);
+  }, [hotel.heroImage]);
 
   return (
     <TouchableOpacity
@@ -33,7 +39,11 @@ export const HotelCard: React.FC<HotelCardProps> = ({
       onPress={onPress}
       style={[styles.card, style]}
     >
-      <Image source={{ uri: hotel.heroImage }} style={styles.image} />
+      <Image
+        source={{ uri: imageUri }}
+        onError={() => setImageUri(defaultFallback)}
+        style={styles.image}
+      />
       <View style={styles.content}>
         <View style={styles.headerRow}>
           <Text style={styles.name} numberOfLines={1}>{hotel.name}</Text>

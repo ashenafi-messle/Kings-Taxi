@@ -42,6 +42,25 @@ vi.mock('../../src/core/database/prisma', () => ({
   isDbConnectionError: vi.fn(() => false),
 }));
 
+vi.mock('../../src/integrations/cloudinary/cloudinary.service', () => ({
+  CloudinaryService: {
+    initialize: vi.fn(),
+    uploadAsset: vi.fn().mockImplementation(async (fileData: string, options: any) => {
+      const folder = options?.folder || 'kings-taxi/misc';
+      const pid = options?.publicId || `asset_${Date.now()}`;
+      return {
+        url: `https://res.cloudinary.com/kings-taxi/image/upload/v1/${folder}/${pid}.jpg`,
+        secureUrl: `https://res.cloudinary.com/kings-taxi/image/upload/v1/${folder}/${pid}.jpg`,
+        publicId: `${folder}/${pid}`,
+        format: 'jpg',
+        bytes: 10240,
+        resourceType: 'image',
+      };
+    }),
+    deleteAsset: vi.fn().mockResolvedValue(true),
+  },
+}));
+
 vi.mock('../../src/utils/documentStorage', () => ({
   validateAndUploadDocument: vi.fn().mockResolvedValue({
     fileUrl: 'https://res.cloudinary.com/kings-taxi/image/upload/v1/mock-room.jpg',
@@ -54,6 +73,8 @@ vi.mock('../../src/utils/documentStorage', () => ({
 
 import { hotelService } from '../../src/modules/hospitality/hotel.service';
 import { roomService } from '../../src/modules/hospitality/room.service';
+import { HospitalityImageService, MAX_IMAGE_SIZE_BYTES } from '../../src/modules/hospitality/hospitalityImage.service';
+import { CloudinaryService } from '../../src/integrations/cloudinary/cloudinary.service';
 import { HotelStatus, HotelPublicationStatus, HotelVerificationStatus, HotelCategory, Prisma } from '@prisma/client';
 
 describe('Hotel & Lodge Integration Test Suite', () => {
@@ -329,6 +350,193 @@ describe('Hotel & Lodge Integration Test Suite', () => {
         })
       );
       expect(unpublished.status).toBe(HotelStatus.UNPUBLISHED);
+    });
+  });
+
+  describe('7. HospitalityImageService Validation & Cloudinary Processing', () => {
+    it('successfully processes and uploads a valid PNG data URI', async () => {
+      const validPngDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const result = await HospitalityImageService.processImage(validPngDataUri, {
+        folder: 'kings-taxi/hotels/hotel-123/cover',
+        publicIdPrefix: 'cover',
+      });
+
+      expect(CloudinaryService.uploadAsset).toHaveBeenCalledWith(
+        validPngDataUri,
+        expect.objectContaining({
+          folder: 'kings-taxi/hotels/hotel-123/cover',
+        })
+      );
+      expect(result.imageUrl).toContain('kings-taxi/hotels/hotel-123/cover');
+      expect(result.publicId).toBeDefined();
+    });
+
+    it('rejects unsupported file formats like GIF or PDF', async () => {
+      const gifDataUri = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      await expect(
+        HospitalityImageService.processImage(gifDataUri, {
+          folder: 'kings-taxi/hotels/hotel-123/cover',
+          publicIdPrefix: 'cover',
+        })
+      ).rejects.toThrow(/Invalid image format 'image\/gif'/);
+    });
+
+    it('rejects image payloads exceeding the 8MB limit', async () => {
+      const hugeBase64 = 'data:image/jpeg;base64,' + 'A'.repeat(12 * 1024 * 1024);
+      await expect(
+        HospitalityImageService.processImage(hugeBase64, {
+          folder: 'kings-taxi/hotels/hotel-123/cover',
+          publicIdPrefix: 'cover',
+        })
+      ).rejects.toThrow(/exceeds the 8MB maximum limit/);
+    });
+
+    it('preserves remote HTTP/HTTPS image URLs without re-uploading', async () => {
+      const remoteUrl = 'https://images.unsplash.com/photo-1566073771259-6a8506099945';
+      const result = await HospitalityImageService.processImage(remoteUrl, {
+        folder: 'kings-taxi/hotels/hotel-123/cover',
+        publicIdPrefix: 'cover',
+      });
+
+      expect(result.imageUrl).toBe(remoteUrl);
+      expect(result.publicId).toBeUndefined();
+    });
+
+    it('safely handles Cloudinary asset deletion without throwing', async () => {
+      const success = await HospitalityImageService.safeDelete('kings-taxi/hotels/hotel-123/cover/img_123');
+      expect(success).toBe(true);
+      expect(CloudinaryService.deleteAsset).toHaveBeenCalledWith(
+        'kings-taxi/hotels/hotel-123/cover/img_123',
+        'image'
+      );
+    });
+  });
+
+  describe('8. Hotel Cover Image Upload & Replacement Workflows', () => {
+    it('uploads cover image and persists coverImagePublicId on hotel creation', async () => {
+      const validJpegDataUri = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+      mockPrismaClient.hotel.findUnique.mockResolvedValue(null);
+      mockPrismaClient.hotel.create.mockResolvedValue({
+        ...mockDbHotel,
+        coverImageUrl: 'https://res.cloudinary.com/kings-taxi/image/upload/v1/kings-taxi/hotels/hotel-new/cover/cover_123.jpg',
+        coverImagePublicId: 'kings-taxi/hotels/hotel-new/cover/cover_123',
+      });
+
+      await hotelService.createHotel(
+        {
+          name: 'Lalibela Eco Rock Hotel',
+          address: 'Bet Giyorgis Road',
+          city: 'Lalibela',
+          coverImageData: validJpegDataUri,
+        },
+        adminUuid
+      );
+
+      expect(CloudinaryService.uploadAsset).toHaveBeenCalled();
+      expect(mockPrismaClient.hotel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            coverImageUrl: expect.stringContaining('cloudinary.com'),
+            coverImagePublicId: expect.any(String),
+          }),
+        })
+      );
+    });
+
+    it('deletes old Cloudinary asset when replacing hotel cover image', async () => {
+      const oldPublicId = 'kings-taxi/hotels/hotel-123/cover/old_cover_111';
+      mockPrismaClient.hotel.findUnique.mockResolvedValue({
+        ...mockDbHotel,
+        coverImagePublicId: oldPublicId,
+      });
+      mockPrismaClient.hotel.update.mockResolvedValue({
+        ...mockDbHotel,
+        coverImageUrl: 'https://res.cloudinary.com/kings-taxi/image/upload/v1/kings-taxi/hotels/hotel-123/cover/new_cover_222.jpg',
+        coverImagePublicId: 'kings-taxi/hotels/hotel-123/cover/new_cover_222',
+      });
+
+      const newJpegDataUri = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+      await hotelService.uploadCoverImage(validHotelUuid, newJpegDataUri, adminUuid);
+
+      expect(CloudinaryService.uploadAsset).toHaveBeenCalled();
+      expect(mockPrismaClient.hotel.update).toHaveBeenCalled();
+      expect(CloudinaryService.deleteAsset).toHaveBeenCalledWith(oldPublicId, 'image');
+    });
+  });
+
+  describe('9. Room Type Image Isolation & Cloudinary Management', () => {
+    it('uploads room images to room-specific folder and associates them with room type', async () => {
+      const roomPngDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+      mockPrismaClient.hotel.findUnique.mockResolvedValue(mockDbHotel);
+      mockPrismaClient.hotelRoomType.create.mockResolvedValue({
+        id: validRoomUuid,
+        hotelId: validHotelUuid,
+        name: 'Deluxe Suite',
+      });
+      mockPrismaClient.roomImage.create.mockResolvedValue({ id: 'room-img-1' });
+      mockPrismaClient.hotelRoomType.findUnique.mockResolvedValue({
+        id: validRoomUuid,
+        hotelId: validHotelUuid,
+        name: 'Deluxe Suite',
+        images: [{ id: 'room-img-1', imageUrl: 'https://res.cloudinary.com/kings-taxi/image/upload/v1/kings-taxi/hotels/hotel-1/rooms/room-1/img.png' }],
+        rates: [],
+      });
+
+      await roomService.createRoomType(validHotelUuid, {
+        name: 'Deluxe Suite',
+        maximumAdults: 2,
+        maximumGuests: 2,
+        totalInventory: 5,
+        basePricePerNight: 3500,
+        currency: 'ETB',
+        images: [
+          { imageUrl: roomPngDataUri, isPrimary: true, caption: 'Master Bed' },
+        ],
+      });
+
+      expect(CloudinaryService.uploadAsset).toHaveBeenCalledWith(
+        roomPngDataUri,
+        expect.objectContaining({
+          folder: expect.stringMatching(/kings-taxi\/hotels\/hotel-.*\/rooms\/room-.*/),
+        })
+      );
+      expect(mockPrismaClient.roomImage.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            roomTypeId: validRoomUuid,
+            isPrimary: true,
+            caption: 'Master Bed',
+          }),
+        })
+      );
+    });
+
+    it('safely deletes removed room images from Cloudinary on room image update', async () => {
+      const removedPublicId = 'kings-taxi/hotels/hotel-1/rooms/room-1/old_photo_1';
+      mockPrismaClient.hotelRoomType.findUnique.mockResolvedValue({
+        id: validRoomUuid,
+        hotelId: validHotelUuid,
+        images: [
+          { id: 'img-to-keep', imageUrl: 'https://res.cloudinary.com/kings-taxi/keep.jpg', publicId: 'keep_pid' },
+          { id: 'img-to-remove', imageUrl: 'https://res.cloudinary.com/kings-taxi/remove.jpg', publicId: removedPublicId },
+        ],
+      });
+      mockPrismaClient.roomImage.findMany.mockResolvedValue([
+        { id: 'img-to-keep', roomTypeId: validRoomUuid, imageUrl: 'https://res.cloudinary.com/kings-taxi/keep.jpg', publicId: 'keep_pid' },
+        { id: 'img-to-remove', roomTypeId: validRoomUuid, imageUrl: 'https://res.cloudinary.com/kings-taxi/remove.jpg', publicId: removedPublicId },
+      ]);
+
+      mockPrismaClient.roomImage.deleteMany.mockResolvedValue({ count: 1 });
+      mockPrismaClient.roomImage.create.mockResolvedValue({ id: 'img-new' });
+
+      await roomService.setRoomImages(validRoomUuid, [
+        { imageUrl: 'https://res.cloudinary.com/kings-taxi/keep.jpg', publicId: 'keep_pid', displayOrder: 0, isPrimary: true },
+      ]);
+
+      expect(mockPrismaClient.roomImage.deleteMany).toHaveBeenCalled();
+      expect(CloudinaryService.deleteAsset).toHaveBeenCalledWith(removedPublicId, 'image');
     });
   });
 });

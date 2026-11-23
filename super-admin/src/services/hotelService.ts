@@ -762,6 +762,30 @@ export class HotelService {
     }
   }
 
+  static async uploadHotelCover(hotelId: string, fileData: string): Promise<Hotel | null> {
+    try {
+      const res = await apiRequest<any>(`/admin/hotels/${hotelId}/cover-image`, {
+        method: 'POST',
+        body: JSON.stringify({ fileData }),
+      });
+      if (res.success && res.data) {
+        const hotel = hotelsData.find((h) => h.id === hotelId);
+        if (hotel) {
+          hotel.heroImage = res.data.coverImageUrl;
+        }
+        return res.data;
+      }
+    } catch {
+      // Fallback
+    }
+
+    const hotel = hotelsData.find((h) => h.id === hotelId);
+    if (hotel) {
+      hotel.heroImage = fileData;
+    }
+    return hotel || null;
+  }
+
   static async addHotelImage(hotelId: string, imagePayload: { imageUrl: string; isCover?: boolean; altText?: string }) {
     try {
       const res = await apiRequest(`/admin/hotels/${hotelId}/images`, {

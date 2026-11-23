@@ -2,7 +2,7 @@ import { prisma } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
 import { Prisma, HotelStatus, HotelPublicationStatus } from '@prisma/client';
 import { CreateRoomTypeDto, UpdateRoomTypeDto, CreateRateDto } from './hospitality.types';
-import { validateAndUploadDocument } from '../../utils/documentStorage';
+import { HospitalityImageService } from './hospitalityImage.service';
 import { BUILTIN_GONDAR_HOTELS } from './hotel.service';
 import {
   parseCalendarDate,
@@ -121,25 +121,71 @@ export class RoomService {
               caption: null,
               displayOrder: idx,
               isPrimary: idx === 0,
+              publicId: undefined,
+              fileFormat: undefined,
+              fileSize: undefined,
             };
           }
           return {
-            imageUrl: img.imageUrl,
+            imageUrl: img.imageUrl || img.fileData || '',
             caption: img.caption || null,
             displayOrder: img.displayOrder !== undefined ? img.displayOrder : idx,
             isPrimary: img.isPrimary !== undefined ? img.isPrimary : idx === 0,
+            publicId: img.publicId,
+            fileFormat: img.fileFormat,
+            fileSize: img.fileSize,
           };
         });
 
+        const processed = await Promise.all(
+          normalized.map(async (img, idx) => {
+            const raw = img.imageUrl;
+            if (raw && (raw.startsWith('data:') || raw.length > 500)) {
+              try {
+                const uploaded = await HospitalityImageService.processImage(raw, {
+                  folder: `kings-taxi/hotels/hotel-${hotel.id}/rooms/room-${room.id}`,
+                  publicIdPrefix: `room_${room.id.slice(0, 8)}`,
+                  caption: img.caption,
+                  displayOrder: img.displayOrder ?? idx,
+                  isPrimary: img.isPrimary,
+                });
+                return {
+                  imageUrl: uploaded.imageUrl,
+                  publicId: uploaded.publicId || null,
+                  caption: img.caption,
+                  displayOrder: img.displayOrder ?? idx,
+                  isPrimary: img.isPrimary,
+                  fileFormat: uploaded.fileFormat || null,
+                  fileSize: uploaded.fileSize || null,
+                };
+              } catch (err: any) {
+                logger.warn({ error: err.message }, '[createRoomType] Cloudinary room image upload error');
+              }
+            }
+            return {
+              imageUrl: img.imageUrl,
+              publicId: img.publicId || null,
+              caption: img.caption,
+              displayOrder: img.displayOrder ?? idx,
+              isPrimary: img.isPrimary,
+              fileFormat: img.fileFormat || null,
+              fileSize: img.fileSize || null,
+            };
+          })
+        );
+
         await Promise.all(
-          normalized.map((img) =>
+          processed.map((img) =>
             prisma.roomImage.create({
               data: {
                 roomTypeId: room.id,
                 imageUrl: img.imageUrl,
+                publicId: img.publicId,
                 caption: img.caption,
                 displayOrder: img.displayOrder,
                 isPrimary: img.isPrimary,
+                fileFormat: img.fileFormat,
+                fileSize: img.fileSize,
               },
             })
           )
@@ -558,8 +604,8 @@ export class RoomService {
       fileSize?: number;
     }[]
   ) {
-    if (!images || images.length < 2 || images.length > 4) {
-      throw new Error('A room type must have between 2 and 4 images.');
+    if (!images || images.length < 1 || images.length > 8) {
+      throw new Error('A room type must have between 1 and 8 images.');
     }
 
     const hasPrimary = images.some((img) => img.isPrimary);
@@ -568,30 +614,6 @@ export class RoomService {
       displayOrder: img.displayOrder !== undefined ? img.displayOrder : idx,
       isPrimary: hasPrimary ? !!img.isPrimary : idx === 0,
     }));
-
-    // Resilient Base64 upload to Cloudinary if image data URIs are supplied
-    const processedImages = await Promise.all(
-      normalized.map(async (img) => {
-        if (img.imageUrl && (img.imageUrl.startsWith('data:') || img.imageUrl.length > 500)) {
-          try {
-            const uploadRes = await validateAndUploadDocument(img.imageUrl, {
-              folder: `kings-taxi/hotel-rooms/${roomTypeId.slice(0, 8)}`,
-              publicIdPrefix: `room_img_${roomTypeId.slice(0, 8)}`,
-            });
-            return {
-              ...img,
-              imageUrl: uploadRes.fileUrl,
-              publicId: uploadRes.publicId || img.publicId,
-              fileFormat: uploadRes.fileFormat || img.fileFormat,
-              fileSize: uploadRes.fileSize || img.fileSize,
-            };
-          } catch {
-            return img;
-          }
-        }
-        return img;
-      })
-    );
 
     if (!isUuid(roomTypeId)) {
       return normalized.map((img, idx) => ({
@@ -613,10 +635,40 @@ export class RoomService {
       const room = await prisma.hotelRoomType.findUnique({ where: { id: roomTypeId } });
       if (!room) throw new Error('ROOM_TYPE_NOT_FOUND: Room type does not exist');
 
-      return await prisma.$transaction(async (tx) => {
+      const existingImages = (await prisma.roomImage.findMany({ where: { roomTypeId } })) || [];
+
+      // Resilient Base64 upload to Cloudinary if image data URIs are supplied
+      const processedImages = await Promise.all(
+        normalized.map(async (img, idx) => {
+          if (img.imageUrl && (img.imageUrl.startsWith('data:') || img.imageUrl.length > 500)) {
+            try {
+              const uploadRes = await HospitalityImageService.processImage(img.imageUrl, {
+                folder: `kings-taxi/hotels/hotel-${room.hotelId}/rooms/room-${roomTypeId}`,
+                publicIdPrefix: `room_${roomTypeId.slice(0, 8)}`,
+                caption: img.caption,
+                displayOrder: img.displayOrder ?? idx,
+                isPrimary: img.isPrimary,
+              });
+              return {
+                ...img,
+                imageUrl: uploadRes.imageUrl,
+                publicId: uploadRes.publicId || img.publicId,
+                fileFormat: uploadRes.fileFormat || img.fileFormat,
+                fileSize: uploadRes.fileSize || img.fileSize,
+              };
+            } catch (err: any) {
+              logger.warn({ error: err.message }, '[setRoomImages] Cloudinary room image upload error');
+              return img;
+            }
+          }
+          return img;
+        })
+      );
+
+      const created = await prisma.$transaction(async (tx) => {
         await tx.roomImage.deleteMany({ where: { roomTypeId } });
 
-        const created = await Promise.all(
+        return Promise.all(
           processedImages.map((img, idx) =>
             tx.roomImage.create({
               data: {
@@ -632,9 +684,17 @@ export class RoomService {
             })
           )
         );
-
-        return created;
       });
+
+      // Cleanup removed Cloudinary assets safely after DB commit
+      const newPublicIds = new Set(processedImages.map((p) => p.publicId).filter(Boolean));
+      for (const oldImg of existingImages) {
+        if (oldImg.publicId && !newPublicIds.has(oldImg.publicId)) {
+          await HospitalityImageService.safeDelete(oldImg.publicId);
+        }
+      }
+
+      return created;
     } catch (err: any) {
       if (isDbConnectionError(err)) {
         return normalized.map((img, idx) => ({
@@ -653,6 +713,91 @@ export class RoomService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Super Admin: Add single room image
+   */
+  async addRoomImage(
+    roomTypeId: string,
+    imageDto: { imageUrl: string; fileData?: string; caption?: string; isPrimary?: boolean; displayOrder?: number }
+  ) {
+    const room = await prisma.hotelRoomType.findUnique({ where: { id: roomTypeId } });
+    if (!room) throw new Error('ROOM_TYPE_NOT_FOUND: Room type does not exist');
+
+    let finalImageUrl = imageDto.imageUrl;
+    let publicId: string | null = null;
+    let fileFormat: string | null = null;
+    let fileSize: number | null = null;
+
+    const raw = imageDto.fileData || imageDto.imageUrl;
+    if (raw && (raw.startsWith('data:') || raw.length > 500)) {
+      const uploadRes = await HospitalityImageService.processImage(raw, {
+        folder: `kings-taxi/hotels/hotel-${room.hotelId}/rooms/room-${roomTypeId}`,
+        publicIdPrefix: `room_${roomTypeId.slice(0, 8)}`,
+        caption: imageDto.caption,
+        isPrimary: imageDto.isPrimary,
+      });
+      finalImageUrl = uploadRes.imageUrl;
+      publicId = uploadRes.publicId || null;
+      fileFormat = uploadRes.fileFormat || null;
+      fileSize = uploadRes.fileSize || null;
+    }
+
+    if (imageDto.isPrimary) {
+      await prisma.roomImage.updateMany({
+        where: { roomTypeId },
+        data: { isPrimary: false },
+      });
+    }
+
+    return prisma.roomImage.create({
+      data: {
+        roomTypeId,
+        imageUrl: finalImageUrl,
+        publicId,
+        caption: imageDto.caption || null,
+        displayOrder: imageDto.displayOrder || 0,
+        isPrimary: imageDto.isPrimary || false,
+        fileFormat,
+        fileSize,
+      },
+    });
+  }
+
+  /**
+   * Super Admin: Delete single room image
+   */
+  async deleteRoomImage(roomTypeId: string, imageId: string) {
+    const image = await prisma.roomImage.findFirst({
+      where: { id: imageId, roomTypeId },
+    });
+    if (!image) throw new Error('IMAGE_NOT_FOUND: Room image does not exist');
+
+    if (image.publicId) {
+      await HospitalityImageService.safeDelete(image.publicId);
+    }
+
+    return prisma.roomImage.delete({ where: { id: imageId } });
+  }
+
+  /**
+   * Super Admin: Delete room type and its associated images safely
+   */
+  async deleteRoomType(roomTypeId: string) {
+    const room = await prisma.hotelRoomType.findUnique({
+      where: { id: roomTypeId },
+      include: { images: true },
+    });
+    if (!room) throw new Error('ROOM_TYPE_NOT_FOUND: Room type does not exist');
+
+    for (const img of room.images) {
+      if (img.publicId) {
+        await HospitalityImageService.safeDelete(img.publicId);
+      }
+    }
+
+    return prisma.hotelRoomType.delete({ where: { id: roomTypeId } });
   }
 }
 

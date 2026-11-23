@@ -60,11 +60,20 @@ export const ImageUploadGallery: React.FC<ImageUploadGalleryProps> = ({
       return;
     }
 
+    const validMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+
     const filesToProcess = Array.from(fileList).slice(0, availableSlots);
     const newItems: GalleryImageItem[] = [];
 
     let processedCount = 0;
     filesToProcess.forEach((file, index) => {
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      if (!validMimes.includes(file.type) && !validExtensions.includes(ext)) {
+        setErrorMessage(`File ${file.name} is not supported. Only JPEG, JPG, PNG, and WebP are allowed.`);
+        return;
+      }
+
       if (file.size > 8 * 1024 * 1024) {
         setErrorMessage(`File ${file.name} exceeds 8MB.`);
         return;
@@ -76,7 +85,7 @@ export const ImageUploadGallery: React.FC<ImageUploadGalleryProps> = ({
           imageUrl: reader.result as string,
           displayOrder: images.length + index,
           isPrimary: images.length === 0 && index === 0,
-          fileFormat: file.type.split('/')[1] || 'jpg',
+          fileFormat: file.type.split('/')[1] || ext || 'jpg',
           fileSize: file.size,
           caption: file.name.replace(/\.[^/.]+$/, ''),
         });
@@ -95,13 +104,27 @@ export const ImageUploadGallery: React.FC<ImageUploadGalleryProps> = ({
     if (replacingIndex === null) return;
     setErrorMessage(null);
 
+    const validMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+
+    if (!validMimes.includes(file.type) && !validExtensions.includes(ext)) {
+      setErrorMessage(`File ${file.name} is not supported. Only JPEG, JPG, PNG, and WebP are allowed.`);
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMessage(`File ${file.name} exceeds 8MB.`);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const updated = [...images];
       updated[replacingIndex] = {
         ...updated[replacingIndex],
         imageUrl: reader.result as string,
-        fileFormat: file.type.split('/')[1] || 'jpg',
+        fileFormat: file.type.split('/')[1] || ext || 'jpg',
         fileSize: file.size,
       };
       onChange(normalizeImages(updated));

@@ -22,32 +22,36 @@ async function requestWithAuth<T>(
 }
 
 function mapBackendHotelToMobile(h: any): Hotel {
-  const rooms: HotelRoom[] = (h.roomTypes || []).map((r: any) => ({
-    id: r.id,
-    title: r.name,
-    description: r.description || '',
-    pricePerNight: Number(r.basePricePerNight ?? r.basePriceETB ?? 0),
-    capacityAdults: r.capacityAdults || r.maximumAdults || 2,
-    capacityChildren: r.capacityChildren || r.maximumChildren || 1,
-    bedType: r.bedType || 'King Bed',
-    amenities: r.amenities || ['Free Wi-Fi', 'Room Service'],
-    photos: (r.images && r.images.length > 0)
-      ? r.images.map((img: any) => typeof img === 'string' ? img : img.imageUrl)
-      : (r.photos && r.photos.length > 0)
-      ? r.photos
-      : [h.coverImageUrl || h.coverImage || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'],
-    availableCount: r.availableInventory ?? r.availableRooms ?? r.totalInventory ?? 5,
-  }));
-
-  const amenities = (h.amenities || []).map((a: any) =>
-    typeof a === 'string' ? a : a.amenity?.name || a.name || 'Amenity'
-  );
-
   const heroImage =
     h.coverImageUrl ||
     h.coverImage ||
     (h.images && h.images[0]?.imageUrl) ||
     'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800';
+
+  const rooms: HotelRoom[] = (h.roomTypes || []).map((r: any) => {
+    const roomPhotos = (r.images && Array.isArray(r.images) && r.images.length > 0)
+      ? r.images.map((img: any) => typeof img === 'string' ? img : img.imageUrl)
+      : (r.photos && Array.isArray(r.photos) && r.photos.length > 0)
+      ? r.photos
+      : [heroImage];
+
+    return {
+      id: r.id,
+      title: r.name,
+      description: r.description || '',
+      pricePerNight: Number(r.basePricePerNight ?? r.basePriceETB ?? 0),
+      capacityAdults: r.capacityAdults || r.maximumAdults || 2,
+      capacityChildren: r.capacityChildren || r.maximumChildren || 1,
+      bedType: r.bedType || 'King Bed',
+      amenities: r.amenities || ['Free Wi-Fi', 'Room Service'],
+      photos: roomPhotos,
+      availableCount: r.availableInventory ?? r.availableRooms ?? r.totalInventory ?? 5,
+    };
+  });
+
+  const amenities = (h.amenities || []).map((a: any) =>
+    typeof a === 'string' ? a : a.amenity?.name || a.name || 'Amenity'
+  );
 
   const photos = (h.images || []).map((img: any) => (typeof img === 'string' ? img : img.imageUrl || img));
 
