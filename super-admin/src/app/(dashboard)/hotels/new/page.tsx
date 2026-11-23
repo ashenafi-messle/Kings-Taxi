@@ -17,6 +17,8 @@ export default function NewHotelPage() {
     phone: '+251 58 ',
     email: '',
     description: '',
+    heroImage: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+    publishImmediately: true,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -193,6 +195,48 @@ export default function NewHotelPage() {
                       placeholder="Describe the hotel location, view of the castles or mountains..."
                       className="form-control form-control-sm shadow-none"
                     />
+                  </div>
+
+                  <div className="col-12">
+                    <label className="form-label text-sm fw-medium text-obsidian mb-1">
+                      Cover Image URL
+                    </label>
+                    <input
+                      type="url"
+                      name="heroImage"
+                      value={formData.heroImage}
+                      onChange={handleChange}
+                      placeholder="https://images.unsplash.com/... or Cloudinary URL"
+                      className="form-control form-control-sm py-2 shadow-none font-monospace text-xs"
+                    />
+                    <div className="text-muted text-xs mt-1">
+                      Main hero photo displayed to passengers on mobile hotel cards and booking headers.
+                    </div>
+                  </div>
+
+                  <div className="col-12">
+                    <div className="form-check form-switch p-3 bg-light rounded-3 border">
+                      <input
+                        className="form-check-input ms-0 me-2"
+                        type="checkbox"
+                        role="switch"
+                        id="publishImmediately"
+                        name="publishImmediately"
+                        checked={formData.publishImmediately}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            publishImmediately: e.target.checked,
+                          }))
+                        }
+                      />
+                      <label className="form-check-label fw-semibold text-obsidian small" htmlFor="publishImmediately">
+                        Publish immediately to Kings Taxi mobile app
+                      </label>
+                      <div className="text-muted text-xs mt-1">
+                        When enabled, this hotel will be approved and immediately visible to passengers in the mobile app.
+                      </div>
+                    </div>
                   </div>
                 </div>
 

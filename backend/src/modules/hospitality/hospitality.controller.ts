@@ -99,6 +99,24 @@ export class HospitalityController {
   }
 
   /**
+   * GET /api/v1/hotels/:id/rooms
+   */
+  async getHotelRooms(req: Request, res: Response) {
+    try {
+      const hotelIdOrSlug = req.params.id || req.params.hotelId || req.params.slugOrId;
+      const rooms = await roomService.getRoomsByHotel(hotelIdOrSlug, true);
+      ApiResponse.success(res, rooms, 'Hotel room types retrieved successfully');
+    } catch (err: any) {
+      if (err.message?.includes('HOTEL_NOT_FOUND')) {
+        ApiResponse.notFound(res, err.message);
+        return;
+      }
+      logger.error({ err }, 'Error retrieving hotel rooms');
+      handleHospitalityError(res, err, 'Unable to retrieve hotel rooms');
+    }
+  }
+
+  /**
    * GET /api/v1/hotels/:hotelId/availability
    */
   async checkAvailability(req: Request, res: Response) {

@@ -491,6 +491,13 @@ export class HotelService {
       const finalSlug = existing ? `${slug}-${Date.now().toString(36)}` : slug;
 
       return await prisma.$transaction(async (tx) => {
+        const isExplicitlyPublished = dto.status === HotelStatus.PUBLISHED || dto.publishImmediately === true || dto.publish === true;
+        const isExplicitlyDraft = dto.status === HotelStatus.DRAFT || dto.publicationStatus === HotelPublicationStatus.DRAFT;
+        const shouldPublish = isExplicitlyPublished || (!isExplicitlyDraft);
+        const initialStatus = shouldPublish ? HotelStatus.PUBLISHED : HotelStatus.DRAFT;
+        const initialPubStatus = shouldPublish ? HotelPublicationStatus.PUBLISHED : HotelPublicationStatus.DRAFT;
+        const initialVerifStatus = shouldPublish ? HotelVerificationStatus.APPROVED : HotelVerificationStatus.PENDING;
+
         const hotel = await tx.hotel.create({
           data: {
             partnerId: isUuid(dto.partnerId) ? dto.partnerId : null,
@@ -512,9 +519,12 @@ export class HotelService {
             checkInTime: dto.checkInTime || '14:00',
             checkOutTime: dto.checkOutTime || '11:00',
             timezone: dto.timezone || 'Africa/Addis_Ababa',
-            status: HotelStatus.PUBLISHED,
-            verificationStatus: HotelVerificationStatus.APPROVED,
-            publicationStatus: HotelPublicationStatus.PUBLISHED,
+            status: initialStatus,
+            verificationStatus: initialVerifStatus,
+            publicationStatus: initialPubStatus,
+            publishedAt: shouldPublish ? new Date() : null,
+            verifiedAt: shouldPublish ? new Date() : null,
+            verifiedByAdminId: shouldPublish && isUuid(adminId) ? adminId : null,
             featured: dto.featured ?? false,
             createdByAdminId: isUuid(adminId) ? adminId : null,
           },
@@ -645,6 +655,17 @@ export class HotelService {
    * Super Admin: Publish hotel (makes visible to passenger mobile app)
    */
   async publishHotel(id: string, adminId?: string) {
+    if (!isUuid(id)) {
+      const builtin = BUILTIN_GONDAR_HOTELS.find((h) => h.id === id || h.slug === id);
+      if (builtin) {
+        builtin.status = HotelStatus.PUBLISHED;
+        builtin.publicationStatus = HotelPublicationStatus.PUBLISHED;
+        builtin.verificationStatus = HotelVerificationStatus.APPROVED;
+        return builtin;
+      }
+      throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
+    }
+
     const hotel = await prisma.hotel.findUnique({ where: { id } });
     if (!hotel) throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
 
@@ -653,8 +674,9 @@ export class HotelService {
       data: {
         status: HotelStatus.PUBLISHED,
         publicationStatus: HotelPublicationStatus.PUBLISHED,
+        verificationStatus: HotelVerificationStatus.APPROVED,
         publishedAt: new Date(),
-        updatedByAdminId: adminId,
+        updatedByAdminId: isUuid(adminId) ? adminId : null,
       },
     });
   }
@@ -663,6 +685,16 @@ export class HotelService {
    * Super Admin: Unpublish hotel
    */
   async unpublishHotel(id: string, adminId?: string) {
+    if (!isUuid(id)) {
+      const builtin = BUILTIN_GONDAR_HOTELS.find((h) => h.id === id || h.slug === id);
+      if (builtin) {
+        builtin.status = HotelStatus.UNPUBLISHED;
+        builtin.publicationStatus = HotelPublicationStatus.UNPUBLISHED;
+        return builtin;
+      }
+      throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
+    }
+
     const hotel = await prisma.hotel.findUnique({ where: { id } });
     if (!hotel) throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
 
@@ -671,7 +703,7 @@ export class HotelService {
       data: {
         status: HotelStatus.UNPUBLISHED,
         publicationStatus: HotelPublicationStatus.UNPUBLISHED,
-        updatedByAdminId: adminId,
+        updatedByAdminId: isUuid(adminId) ? adminId : null,
       },
     });
   }
@@ -788,7 +820,11 @@ export class HotelService {
       const skip = (page - 1) * limit;
 
       const where: any = {
-        status: HotelStatus.PUBLISHED,
+        OR: [
+          { status: HotelStatus.PUBLISHED },
+          { publicationStatus: HotelPublicationStatus.PUBLISHED },
+        ],
+        status: { not: HotelStatus.ARCHIVED },
       };
 
       if (params.city && params.city !== 'ALL') {
@@ -820,7 +856,12 @@ export class HotelService {
             id: true,
             name: true,
             slug: true,
+            description: true,
             shortDescription: true,
+            category: true,
+            coverImageUrl: true,
+            contactPhone: true,
+            contactEmail: true,
             address: true,
             city: true,
             subCity: true,
@@ -860,6 +901,7 @@ export class HotelService {
                 basePricePerNight: true,
                 currency: true,
                 maximumGuests: true,
+                totalInventory: true,
               },
               orderBy: { basePricePerNight: 'asc' },
             },
@@ -886,7 +928,7 @@ export class HotelService {
 
       // Format formatted response with starting price
       const formatted = hotels.map((h) => {
-        const coverImage = h.images.find((img) => img.isCover)?.imageUrl || h.images[0]?.imageUrl || '';
+        const coverImage = h.coverImageUrl || h.images.find((img) => img.isCover)?.imageUrl || h.images[0]?.imageUrl || '';
         const startingPrice = h.roomTypes[0] ? Number(h.roomTypes[0].basePricePerNight) : 0;
         const currency = h.roomTypes[0]?.currency || 'ETB';
         const airportTransferRate = h.transferRates[0]
@@ -904,20 +946,30 @@ export class HotelService {
           id: h.id,
           name: h.name,
           slug: h.slug,
+          description: h.description || h.shortDescription || '',
           shortDescription: h.shortDescription,
+          category: h.category,
           address: h.address,
           city: h.city,
           subCity: h.subCity,
           latitude: h.latitude,
           longitude: h.longitude,
+          contactPhone: h.contactPhone,
+          contactEmail: h.contactEmail,
           starRating: h.starRating,
           featured: h.featured,
           checkInTime: h.checkInTime,
           checkOutTime: h.checkOutTime,
           coverImage,
+          coverImageUrl: coverImage,
           images: h.images,
           amenities: h.amenities.map((a) => a.amenity),
+          roomTypes: h.roomTypes.map((r) => ({
+            ...r,
+            basePricePerNight: Number(r.basePricePerNight),
+          })),
           startingPrice,
+          startingPriceETB: startingPrice,
           currency,
           airportTransferAvailable: Boolean(airportTransferRate),
           airportTransferRate,
@@ -1004,15 +1056,14 @@ export class HotelService {
   async getHotelDetails(idOrSlug: string, isPublic = true) {
     const isIdUuid = isUuid(idOrSlug);
 
-    if (!isIdUuid) {
-      const builtin = this.getBuiltinHotelDetails(idOrSlug);
-      if (builtin) return builtin;
-    }
-
     try {
       const where: any = isIdUuid ? { id: idOrSlug } : { slug: idOrSlug };
       if (isPublic) {
-        where.status = HotelStatus.PUBLISHED;
+        where.OR = [
+          { status: HotelStatus.PUBLISHED },
+          { publicationStatus: HotelPublicationStatus.PUBLISHED },
+        ];
+        where.status = { not: HotelStatus.ARCHIVED };
       }
 
       const hotel = await prisma.hotel.findFirst({
@@ -1027,6 +1078,9 @@ export class HotelService {
           roomTypes: {
             where: isPublic ? { status: 'ACTIVE' } : undefined,
             include: {
+              images: {
+                orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+              },
               rates: {
                 where: { status: 'ACTIVE' },
                 orderBy: { startDate: 'asc' },
@@ -1041,16 +1095,29 @@ export class HotelService {
         },
       });
 
-      if (!hotel) return this.getBuiltinHotelDetails(idOrSlug);
+      if (!hotel) {
+        if (!isIdUuid) {
+          return this.getBuiltinHotelDetails(idOrSlug);
+        }
+        return null;
+      }
+
+      const coverImage = hotel.coverImageUrl || hotel.images.find((img) => img.isCover)?.imageUrl || hotel.images[0]?.imageUrl || '';
 
       return {
         ...hotel,
+        coverImage,
+        coverImageUrl: coverImage,
         startingPrice: hotel.roomTypes[0] ? Number(hotel.roomTypes[0].basePricePerNight) : 0,
+        startingPriceETB: hotel.roomTypes[0] ? Number(hotel.roomTypes[0].basePricePerNight) : 0,
         currency: hotel.roomTypes[0]?.currency || 'ETB',
         amenities: hotel.amenities.map((a) => a.amenity),
         roomTypes: hotel.roomTypes.map((r) => ({
           ...r,
           basePricePerNight: Number(r.basePricePerNight),
+          photos: (r.images && r.images.length > 0)
+            ? r.images.map((img) => img.imageUrl)
+            : (coverImage ? [coverImage] : []),
           rates: r.rates.map((rt) => ({
             ...rt,
             pricePerNight: Number(rt.pricePerNight),

@@ -181,7 +181,7 @@ export default function HotelDetailPage() {
               <ArrowLeft size={14} className="me-1" />
               <span>Back</span>
             </Link>
-            {hotel.status === 'PUBLISHED' || hotel.status === 'ACTIVE' ? (
+            {hotel.status === 'PUBLISHED' ? (
               <button
                 type="button"
                 className="btn btn-outline-warning btn-sm"
@@ -195,7 +195,7 @@ export default function HotelDetailPage() {
             ) : (
               <button
                 type="button"
-                className="btn btn-outline-success btn-sm"
+                className="btn btn-gold btn-sm fw-semibold"
                 onClick={async () => {
                   await HotelService.publishHotel(hotel.id);
                   loadHotel();

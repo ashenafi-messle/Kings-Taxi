@@ -31,13 +31,25 @@ function mapBackendHotelToMobile(h: any): Hotel {
     capacityChildren: r.capacityChildren || r.maximumChildren || 1,
     bedType: r.bedType || 'King Bed',
     amenities: r.amenities || ['Free Wi-Fi', 'Room Service'],
-    photos: r.images || [h.coverImage || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'],
-    availableCount: r.inventoryCount || r.totalInventory || 5,
+    photos: (r.images && r.images.length > 0)
+      ? r.images.map((img: any) => typeof img === 'string' ? img : img.imageUrl)
+      : (r.photos && r.photos.length > 0)
+      ? r.photos
+      : [h.coverImageUrl || h.coverImage || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'],
+    availableCount: r.availableInventory ?? r.availableRooms ?? r.totalInventory ?? 5,
   }));
 
   const amenities = (h.amenities || []).map((a: any) =>
     typeof a === 'string' ? a : a.amenity?.name || a.name || 'Amenity'
   );
+
+  const heroImage =
+    h.coverImageUrl ||
+    h.coverImage ||
+    (h.images && h.images[0]?.imageUrl) ||
+    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800';
+
+  const photos = (h.images || []).map((img: any) => (typeof img === 'string' ? img : img.imageUrl || img));
 
   return {
     id: h.id,
@@ -45,7 +57,7 @@ function mapBackendHotelToMobile(h: any): Hotel {
     slug: h.slug,
     city: h.city || 'Gondar',
     category: (h.category?.toLowerCase() as any) || 'luxury',
-    starRating: h.starRating || 5,
+    starRating: h.starRating || 4,
     reviewScore: Number(h.reviewScore || 4.8),
     reviewCount: h.reviewCount || 120,
     address: h.address || 'Gondar, Ethiopia',
@@ -59,8 +71,8 @@ function mapBackendHotelToMobile(h: any): Hotel {
         longitude: Number(h.longitude || 37.4589),
       },
     },
-    heroImage: h.coverImage || (h.images && h.images[0]?.imageUrl) || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    photos: (h.images || []).map((img: any) => img.imageUrl || img),
+    heroImage,
+    photos: photos.length > 0 ? photos : [heroImage],
     description: h.description || '',
     amenities: amenities.length > 0 ? amenities : ['Wi-Fi', 'Free Parking', 'Airport Transfer', 'Breakfast Included'],
     policies: {
@@ -81,7 +93,7 @@ function mapBackendHotelToMobile(h: any): Hotel {
         capacityChildren: 1,
         bedType: '1 King Bed',
         amenities: ['Free Wi-Fi', 'Balcony', 'Breakfast', 'Ensuite Bath'],
-        photos: [h.coverImage || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'],
+        photos: [heroImage],
         availableCount: 4,
       },
     ],
@@ -91,7 +103,7 @@ function mapBackendHotelToMobile(h: any): Hotel {
 
 export class HotelService {
   /**
-   * Search hotels from backend, falling back to mock hotels if backend is offline.
+   * Search hotels from backend.
    */
   static async searchHotels(query?: string, city?: string): Promise<ApiResponse<Hotel[]>> {
     const params = new URLSearchParams();
@@ -106,26 +118,34 @@ export class HotelService {
       ? res.data.hotels
       : null;
 
-    if (res.success && rawList && rawList.length > 0) {
+    if (res.success && rawList !== null) {
       const mapped = rawList.map(mapBackendHotelToMobile);
       return { success: true, data: mapped };
     }
 
-    // Fallback filter over mockHotels
-    let list = [...mockHotels];
-    if (city && city !== 'ALL') {
-      list = list.filter((h) => h.city.toLowerCase() === city.toLowerCase());
+    // In development only, if network request failed completely, fallback gracefully
+    if (process.env.NODE_ENV !== 'production' && !res.success) {
+      let list = [...mockHotels];
+      if (city && city !== 'ALL') {
+        list = list.filter((h) => h.city.toLowerCase() === city.toLowerCase());
+      }
+      if (query) {
+        list = list.filter(
+          (h) =>
+            h.name.toLowerCase().includes(query.toLowerCase()) ||
+            h.city.toLowerCase().includes(query.toLowerCase())
+        );
+      }
+      return {
+        success: true,
+        data: list,
+      };
     }
-    if (query) {
-      list = list.filter(
-        (h) =>
-          h.name.toLowerCase().includes(query.toLowerCase()) ||
-          h.city.toLowerCase().includes(query.toLowerCase())
-      );
-    }
+
     return {
-      success: true,
-      data: list,
+      success: res.success,
+      data: [],
+      error: res.error || 'Failed to retrieve hotels',
     };
   }
 
@@ -161,16 +181,52 @@ export class HotelService {
       };
     }
 
-    const clean = (s: string) => (s || '').toLowerCase().replace(/^(htl_|h_)/, '').replace(/[-_]/g, '');
-    const target = clean(idOrSlug);
-    const fallback =
-      mockHotels.find(
-        (h) => h.id === idOrSlug || (h as any).slug === idOrSlug || clean(h.id) === target
-      ) || null;
+    // In development fallback if backend is offline
+    if (process.env.NODE_ENV !== 'production' && !res.success) {
+      const clean = (s: string) => (s || '').toLowerCase().replace(/^(htl_|h_)/, '').replace(/[-_]/g, '');
+      const target = clean(idOrSlug);
+      const fallback =
+        mockHotels.find(
+          (h) => h.id === idOrSlug || (h as any).slug === idOrSlug || clean(h.id) === target
+        ) || null;
+      if (fallback) {
+        return {
+          success: true,
+          data: fallback,
+        };
+      }
+    }
+
     return {
-      success: Boolean(fallback),
-      data: fallback,
+      success: false,
+      data: null,
+      error: res.error || 'Hotel property not found',
     };
+  }
+
+  /**
+   * Retrieve active room types directly for a hotel.
+   */
+  static async getHotelRooms(hotelId: string): Promise<ApiResponse<HotelRoom[]>> {
+    const res = await requestWithAuth<any>(`/hotels/${hotelId}/rooms`);
+    if (res.success && Array.isArray(res.data)) {
+      const rooms: HotelRoom[] = res.data.map((r: any) => ({
+        id: r.id,
+        title: r.name,
+        description: r.description || '',
+        pricePerNight: Number(r.basePricePerNight ?? r.basePriceETB ?? 0),
+        capacityAdults: r.maximumAdults || 2,
+        capacityChildren: r.maximumChildren || 1,
+        bedType: r.bedType || 'King Bed',
+        amenities: r.amenities || ['Free Wi-Fi', 'Room Service'],
+        photos: (r.images && r.images.length > 0)
+          ? r.images.map((img: any) => typeof img === 'string' ? img : img.imageUrl)
+          : (r.photos || []),
+        availableCount: r.availableInventory ?? r.availableRooms ?? r.totalInventory ?? 5,
+      }));
+      return { success: true, data: rooms };
+    }
+    return { success: false, data: [], error: res.error || 'Failed to retrieve room types' };
   }
 
   /**

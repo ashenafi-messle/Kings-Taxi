@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -17,6 +18,8 @@ import {
   Clock,
   Users,
   Sparkles,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../src/theme';
@@ -50,43 +53,54 @@ export default function HotelsTabScreen() {
   const [selectedCityId, setSelectedCityId] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [lounges, setLounges] = useState<Lounge[]>([]);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadData() {
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setIsRefreshing(true);
+    } else {
       setIsLoading(true);
-      try {
-        if (activeCategory === 'HOTELS') {
-          const res = await HotelService.searchHotels(searchQuery, selectedCityId);
-          if (isMounted && res.success && res.data) {
-            setHotels(res.data);
-          }
-        } else {
-          const res = await HotelService.listLounges(selectedCityId);
-          if (isMounted && res.success && res.data) {
-            let list = res.data;
-            if (searchQuery) {
-              list = list.filter(
-                (l) =>
-                  l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  l.address.toLowerCase().includes(searchQuery.toLowerCase())
-              );
-            }
-            setLounges(list);
-          }
-        }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
     }
-    loadData();
-    return () => {
-      isMounted = false;
-    };
+    setErrorMessage(null);
+    try {
+      if (activeCategory === 'HOTELS') {
+        const res = await HotelService.searchHotels(searchQuery, selectedCityId);
+        if (res.success && res.data) {
+          setHotels(res.data);
+        } else {
+          setErrorMessage(res.error || 'Unable to retrieve partner hotels at this time.');
+        }
+      } else {
+        const res = await HotelService.listLounges(selectedCityId);
+        if (res.success && res.data) {
+          let list = res.data;
+          if (searchQuery) {
+            list = list.filter(
+              (l) =>
+                l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                l.address.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+          }
+          setLounges(list);
+        } else {
+          setErrorMessage(res.error || 'Unable to retrieve VIP lounges at this time.');
+        }
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Network connection issue. Please check your internet connection.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
   }, [activeCategory, selectedCityId, searchQuery]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -191,8 +205,30 @@ export default function HotelsTabScreen() {
           { paddingBottom: theme.layout.tabBarContentPadding + insets.bottom + 20 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => loadData(true)}
+            colors={[theme.colors.antiqueGold]}
+            tintColor={theme.colors.antiqueGold}
+          />
+        }
       >
-        {isLoading ? (
+        {errorMessage ? (
+          <View style={styles.errorContainer}>
+            <AlertCircle size={28} color="#D32F2F" />
+            <Text style={styles.errorTitle}>Connection Problem</Text>
+            <Text style={styles.errorMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => loadData(false)}
+              activeOpacity={0.8}
+            >
+              <RefreshCw size={14} color="#FFF" />
+              <Text style={styles.retryButtonText}>Retry Loading</Text>
+            </TouchableOpacity>
+          </View>
+        ) : isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primaryDark} />
             <Text style={styles.loadingText}>Loading curated hospitality destinations...</Text>
@@ -570,5 +606,46 @@ const styles = StyleSheet.create({
     ...theme.typography.captionBold,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    marginHorizontal: 16,
+    marginVertical: 24,
+    backgroundColor: '#FFF5F5',
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+  },
+  errorTitle: {
+    ...theme.typography.h3,
+    color: '#C62828',
+    marginTop: 12,
+    marginBottom: 6,
+    fontWeight: '700',
+  },
+  errorMessage: {
+    ...theme.typography.body,
+    color: '#5D4037',
+    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.antiqueGold,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.md,
+  },
+  retryButtonText: {
+    ...theme.typography.captionBold,
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

@@ -119,7 +119,16 @@ export default function HotelsPage() {
       key: 'status',
       header: 'Status',
       sortable: true,
-      render: (h) => <StatusBadge status={h.status || 'ACTIVE'} size="sm" />,
+      render: (h) => (
+        <div className="d-flex align-items-center gap-1.5">
+          <StatusBadge status={h.status || (h.publicationStatus === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT')} size="sm" />
+          {h.status === 'PUBLISHED' ? (
+            <span className="badge bg-success-subtle text-success text-xs">Live on App</span>
+          ) : (
+            <span className="badge bg-warning-subtle text-warning text-xs">Draft</span>
+          )}
+        </div>
+      ),
     },
     {
       key: 'actions',
@@ -127,6 +136,31 @@ export default function HotelsPage() {
       align: 'right',
       render: (h) => (
         <div className="d-flex align-items-center justify-content-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {h.status === 'PUBLISHED' ? (
+            <button
+              type="button"
+              className="btn btn-outline-warning btn-sm py-1 px-2 text-xs"
+              title="Unpublish from passenger mobile app"
+              onClick={async () => {
+                await HotelService.unpublishHotel(h.id);
+                fetchHotels();
+              }}
+            >
+              Unpublish
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-gold btn-sm py-1 px-2 text-xs fw-semibold"
+              title="Publish to passenger mobile app"
+              onClick={async () => {
+                await HotelService.publishHotel(h.id);
+                fetchHotels();
+              }}
+            >
+              Publish
+            </button>
+          )}
           <Link
             href={`/hotels/${h.id}`}
             className="btn btn-light btn-sm p-1.5 text-secondary hover-gold border-0"

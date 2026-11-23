@@ -1,6 +1,6 @@
 import { prisma } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
-import { Prisma } from '@prisma/client';
+import { Prisma, HotelStatus, HotelPublicationStatus } from '@prisma/client';
 import { CreateRoomTypeDto, UpdateRoomTypeDto, CreateRateDto } from './hospitality.types';
 import { validateAndUploadDocument } from '../../utils/documentStorage';
 import { BUILTIN_GONDAR_HOTELS } from './hotel.service';
@@ -98,7 +98,7 @@ export class RoomService {
         throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
       }
 
-      return await prisma.hotelRoomType.create({
+      const room = await prisma.hotelRoomType.create({
         data: {
           hotelId,
           name: dto.name,
@@ -109,6 +109,50 @@ export class RoomService {
           totalInventory: dto.totalInventory || 10,
           basePricePerNight: new Prisma.Decimal(dto.basePricePerNight || 3500),
           currency: dto.currency || 'ETB',
+        },
+      });
+
+      const rawImages = (dto.galleryImages || dto.images || []);
+      if (Array.isArray(rawImages) && rawImages.length > 0) {
+        const normalized = rawImages.map((img: any, idx: number) => {
+          if (typeof img === 'string') {
+            return {
+              imageUrl: img,
+              caption: null,
+              displayOrder: idx,
+              isPrimary: idx === 0,
+            };
+          }
+          return {
+            imageUrl: img.imageUrl,
+            caption: img.caption || null,
+            displayOrder: img.displayOrder !== undefined ? img.displayOrder : idx,
+            isPrimary: img.isPrimary !== undefined ? img.isPrimary : idx === 0,
+          };
+        });
+
+        await Promise.all(
+          normalized.map((img) =>
+            prisma.roomImage.create({
+              data: {
+                roomTypeId: room.id,
+                imageUrl: img.imageUrl,
+                caption: img.caption,
+                displayOrder: img.displayOrder,
+                isPrimary: img.isPrimary,
+              },
+            })
+          )
+        );
+      }
+
+      return await prisma.hotelRoomType.findUnique({
+        where: { id: room.id },
+        include: {
+          images: {
+            orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+          },
+          rates: true,
         },
       });
     } catch (err: any) {
@@ -169,6 +213,66 @@ export class RoomService {
         status: dto.status,
       },
     });
+  }
+
+  /**
+   * Retrieve active room types for a specific hotel (public or admin)
+   */
+  async getRoomsByHotel(hotelIdOrSlug: string, isPublic = true) {
+    const isIdUuid = isUuid(hotelIdOrSlug);
+
+    let hotel: any = null;
+    if (isIdUuid) {
+      hotel = await prisma.hotel.findUnique({ where: { id: hotelIdOrSlug } });
+    } else {
+      hotel = await prisma.hotel.findUnique({ where: { slug: hotelIdOrSlug } });
+    }
+
+    if (!hotel) {
+      const builtin = BUILTIN_GONDAR_HOTELS.find((h) => h.id === hotelIdOrSlug || h.slug === hotelIdOrSlug);
+      if (builtin) {
+        return (builtin.roomTypes || []).filter((r: any) => !isPublic || r.status === 'ACTIVE');
+      }
+      throw new Error('HOTEL_NOT_FOUND: Hotel does not exist');
+    }
+
+    if (isPublic) {
+      const isPublished =
+        hotel.status === HotelStatus.PUBLISHED ||
+        hotel.publicationStatus === HotelPublicationStatus.PUBLISHED;
+      if (!isPublished || hotel.status === HotelStatus.ARCHIVED) {
+        throw new Error('HOTEL_NOT_FOUND: Hotel is not currently published');
+      }
+    }
+
+    const rooms = await prisma.hotelRoomType.findMany({
+      where: {
+        hotelId: hotel.id,
+        status: isPublic ? 'ACTIVE' : undefined,
+      },
+      include: {
+        images: {
+          orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+        },
+        rates: {
+          where: { status: 'ACTIVE' },
+          orderBy: { startDate: 'asc' },
+        },
+      },
+      orderBy: { basePricePerNight: 'asc' },
+    });
+
+    return rooms.map((r) => ({
+      ...r,
+      basePricePerNight: Number(r.basePricePerNight),
+      photos: (r.images && r.images.length > 0)
+        ? r.images.map((img) => img.imageUrl)
+        : (hotel.coverImageUrl ? [hotel.coverImageUrl] : []),
+      rates: r.rates.map((rt) => ({
+        ...rt,
+        pricePerNight: Number(rt.pricePerNight),
+      })),
+    }));
   }
 
   /**

@@ -29,6 +29,10 @@ export interface CreateHotelDto {
   checkOutTime?: string;
   timezone?: string;
   featured?: boolean;
+  status?: HotelStatus;
+  publicationStatus?: HotelPublicationStatus;
+  publishImmediately?: boolean;
+  publish?: boolean;
   amenitySlugs?: string[];
 }
 
@@ -75,6 +79,8 @@ export interface CreateRoomTypeDto {
   totalInventory?: number;
   basePricePerNight: number;
   currency?: string;
+  images?: (string | { imageUrl: string; caption?: string; displayOrder?: number; isPrimary?: boolean })[];
+  galleryImages?: (string | { imageUrl: string; caption?: string; displayOrder?: number; isPrimary?: boolean })[];
 }
 
 export interface UpdateRoomTypeDto {

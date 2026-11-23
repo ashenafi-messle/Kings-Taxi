@@ -395,11 +395,11 @@ export class HotelService {
           galleryImages: (h.images || []).map((i: any) => i.imageUrl),
           totalRooms: (h.roomTypes || []).reduce((sum: number, r: any) => sum + (r.totalInventory || 0), 0) || 20,
           availableRooms: (h.roomTypes || []).reduce((sum: number, r: any) => sum + (r.totalInventory || 0), 0) || 20,
-          status: (h.status === 'PUBLISHED' ? 'ACTIVE' : (h.status || 'ACTIVE')) as any,
+          status: (h.status || (h.publicationStatus === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT')) as any,
           partnerId: h.partnerId,
           partner: h.partner,
-          verificationStatus: h.verificationStatus,
-          publicationStatus: h.publicationStatus,
+          verificationStatus: h.verificationStatus || 'APPROVED',
+          publicationStatus: h.publicationStatus || (h.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'),
           rejectionReason: h.rejectionReason,
           roomTypes: (h.roomTypes || []).map((r: any) => ({
             id: r.id,
@@ -500,11 +500,11 @@ export class HotelService {
           galleryImages: (h.images || []).map((i: any) => i.imageUrl),
           totalRooms: (h.roomTypes || []).reduce((sum: number, r: any) => sum + (r.totalInventory || 0), 0) || 20,
           availableRooms: (h.roomTypes || []).reduce((sum: number, r: any) => sum + (r.totalInventory || 0), 0) || 20,
-          status: (h.status === 'PUBLISHED' ? 'ACTIVE' : (h.status || 'ACTIVE')) as any,
+          status: (h.status || (h.publicationStatus === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT')) as any,
           partnerId: h.partnerId,
           partner: h.partner,
-          verificationStatus: h.verificationStatus,
-          publicationStatus: h.publicationStatus,
+          verificationStatus: h.verificationStatus || 'APPROVED',
+          publicationStatus: h.publicationStatus || (h.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'),
           rejectionReason: h.rejectionReason,
           roomTypes: (h.roomTypes || []).map((r: any) => ({
             id: r.id,
@@ -546,7 +546,10 @@ export class HotelService {
     return hotelsData.find((h) => h.id === id || h.slug === id) || null;
   }
 
-  static async createHotel(payload: Partial<Hotel>): Promise<Hotel> {
+  static async createHotel(payload: Partial<Hotel> & { publishImmediately?: boolean }): Promise<Hotel> {
+    const shouldPublish = payload.publishImmediately !== false && (payload.status === 'PUBLISHED' || payload.status === undefined || payload.status === 'ACTIVE');
+    const targetStatus = shouldPublish ? 'PUBLISHED' : (payload.status || 'DRAFT');
+
     try {
       const res = await apiRequest<any>('/admin/hotels', {
         method: 'POST',
@@ -567,6 +570,9 @@ export class HotelService {
           starRating: payload.starRating || 4,
           checkInTime: payload.checkInTime || '14:00',
           checkOutTime: payload.checkOutTime || '11:00',
+          status: targetStatus,
+          publicationStatus: shouldPublish ? 'PUBLISHED' : 'DRAFT',
+          publishImmediately: shouldPublish,
         }),
       });
 
@@ -594,7 +600,9 @@ export class HotelService {
           galleryImages: [],
           totalRooms: 10,
           availableRooms: 10,
-          status: 'ACTIVE',
+          status: (res.data.status || (shouldPublish ? 'PUBLISHED' : 'DRAFT')) as any,
+          publicationStatus: res.data.publicationStatus || (shouldPublish ? 'PUBLISHED' : 'DRAFT'),
+          verificationStatus: res.data.verificationStatus || 'APPROVED',
           roomTypes: [],
           createdAt: res.data.createdAt || new Date().toISOString(),
           updatedAt: res.data.updatedAt || new Date().toISOString(),
@@ -631,7 +639,9 @@ export class HotelService {
       galleryImages: payload.galleryImages || [],
       totalRooms: payload.totalRooms || 20,
       availableRooms: payload.availableRooms || 20,
-      status: 'ACTIVE',
+      status: targetStatus as any,
+      publicationStatus: shouldPublish ? 'PUBLISHED' : 'DRAFT',
+      verificationStatus: 'APPROVED',
       partnerId: undefined,
       roomTypes: payload.roomTypes || [],
       createdAt: new Date().toISOString(),
@@ -704,8 +714,19 @@ export class HotelService {
   static async publishHotel(id: string): Promise<boolean> {
     try {
       const res = await apiRequest(`/admin/hotels/${id}/publish`, { method: 'POST' });
+      const h = hotelsData.find((item) => item.id === id);
+      if (h) {
+        h.status = 'PUBLISHED';
+        h.publicationStatus = 'PUBLISHED';
+        h.verificationStatus = 'APPROVED';
+      }
       return res.success;
     } catch {
+      const h = hotelsData.find((item) => item.id === id);
+      if (h) {
+        h.status = 'PUBLISHED';
+        h.publicationStatus = 'PUBLISHED';
+      }
       return true;
     }
   }
@@ -713,8 +734,18 @@ export class HotelService {
   static async unpublishHotel(id: string): Promise<boolean> {
     try {
       const res = await apiRequest(`/admin/hotels/${id}/unpublish`, { method: 'POST' });
+      const h = hotelsData.find((item) => item.id === id);
+      if (h) {
+        h.status = 'UNPUBLISHED';
+        h.publicationStatus = 'UNPUBLISHED';
+      }
       return res.success;
     } catch {
+      const h = hotelsData.find((item) => item.id === id);
+      if (h) {
+        h.status = 'UNPUBLISHED';
+        h.publicationStatus = 'UNPUBLISHED';
+      }
       return true;
     }
   }
@@ -785,6 +816,11 @@ export class HotelService {
           totalInventory: roomTypePayload.totalInventory || 10,
           basePricePerNight: roomTypePayload.pricePerNightETB || 3500,
           currency: 'ETB',
+          images: (roomTypePayload.galleryImages || roomTypePayload.images || []).map((img: any, idx: number) =>
+            typeof img === 'string'
+              ? { imageUrl: img, displayOrder: idx, isPrimary: idx === 0 }
+              : { imageUrl: img.imageUrl, caption: img.caption, displayOrder: img.displayOrder ?? idx, isPrimary: img.isPrimary ?? idx === 0 }
+          ),
         }),
       });
 

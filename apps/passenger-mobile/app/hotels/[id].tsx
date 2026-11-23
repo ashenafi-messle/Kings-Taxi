@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,9 @@ import {
   Car,
   ChevronRight,
   Sparkles,
+  AlertCircle,
+  ArrowLeft,
+  RefreshCw,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import {
@@ -43,47 +46,102 @@ export default function HotelDetailScreen() {
   const { id } = useLocalSearchParams();
   const { t } = useTranslation(['hotels', 'common', 'navigation']);
 
-  const [hotel, setHotel] = useState<Hotel>(
-    () => mockHotels.find((h) => h.id === id) || mockHotels[0]
+  const [hotel, setHotel] = useState<Hotel | null>(
+    () => mockHotels.find((h) => h.id === id) || null
   );
   const [transferRates, setTransferRates] = useState<AirportTransferRateDto[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const hotelId = (id as string) || hotel.id;
+  const hotelId = (id as string) || (hotel ? hotel.id : '');
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadHotel() {
-      setIsLoading(true);
-      try {
-        const [hotelRes, ratesRes] = await Promise.all([
-          HotelService.getHotelById(hotelId),
-          HotelService.getTransferRates(hotelId),
-        ]);
+  const loadHotel = useCallback(async () => {
+    if (!hotelId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [hotelRes, ratesRes] = await Promise.all([
+        HotelService.getHotelById(hotelId),
+        HotelService.getTransferRates(hotelId),
+      ]);
 
-        if (isMounted) {
-          if (hotelRes.success && hotelRes.data) {
-            setHotel(hotelRes.data);
-            if (hotelRes.data.rooms.length > 0) {
-              setSelectedRoomId(hotelRes.data.rooms[0].id);
-            }
-          }
-          if (ratesRes.success && ratesRes.data) {
-            setTransferRates(ratesRes.data);
+      if (hotelRes.success && hotelRes.data) {
+        let loadedHotel = hotelRes.data;
+        // If rooms array is empty, fetch rooms explicitly
+        if (!loadedHotel.rooms || loadedHotel.rooms.length === 0) {
+          const roomsRes = await HotelService.getHotelRooms(hotelId);
+          if (roomsRes.success && roomsRes.data.length > 0) {
+            loadedHotel = { ...loadedHotel, rooms: roomsRes.data };
           }
         }
-      } finally {
-        if (isMounted) setIsLoading(false);
+        setHotel(loadedHotel);
+        if (loadedHotel.rooms.length > 0) {
+          setSelectedRoomId(loadedHotel.rooms[0].id);
+        }
+      } else {
+        setError(hotelRes.error || 'Hotel property not found.');
       }
-    }
 
-    loadHotel();
-    return () => {
-      isMounted = false;
-    };
+      if (ratesRes.success && ratesRes.data) {
+        setTransferRates(ratesRes.data);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load hotel details.');
+    } finally {
+      setIsLoading(false);
+    }
   }, [hotelId]);
+
+  useEffect(() => {
+    loadHotel();
+  }, [loadHotel]);
+
+  if (isLoading && !hotel) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <AppHeader title="Hotel Details" showBack />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.antiqueGold} />
+          <Text style={styles.loadingText}>Loading hotel and room inventory...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && !hotel) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <AppHeader title="Hotel Not Found" showBack />
+        <View style={styles.errorFullContainer}>
+          <AlertCircle size={40} color="#D32F2F" />
+          <Text style={styles.errorTitle}>Hotel Unavailable</Text>
+          <Text style={styles.errorMessage}>{error}</Text>
+          <View style={styles.errorActionsRow}>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={loadHotel}
+              activeOpacity={0.8}
+            >
+              <RefreshCw size={14} color="#FFF" />
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => router.back()}
+              activeOpacity={0.8}
+            >
+              <ArrowLeft size={14} color={theme.colors.text} />
+              <Text style={styles.backBtnText}>Return to Hotels</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!hotel) return null;
 
   const selectedRoom =
     hotel.rooms.find((r) => r.id === selectedRoomId) || hotel.rooms[0];
@@ -695,5 +753,75 @@ const styles = StyleSheet.create({
   },
   reserveBtn: {
     margin: theme.spacing.md,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  loadingText: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    marginTop: 12,
+  },
+  errorFullContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    marginHorizontal: 16,
+  },
+  errorTitle: {
+    ...theme.typography.h3,
+    color: '#C62828',
+    marginTop: 16,
+    marginBottom: 8,
+    fontWeight: '700',
+  },
+  errorMessage: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  errorActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.antiqueGold,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.md,
+  },
+  retryBtnText: {
+    ...theme.typography.captionBold,
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.md,
+  },
+  backBtnText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: '500',
   },
 });

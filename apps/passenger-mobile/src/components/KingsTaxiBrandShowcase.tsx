@@ -10,6 +10,7 @@ import {
   AccessibilityInfo,
   ViewStyle,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { theme } from '../theme';
 
@@ -42,6 +43,8 @@ export const KingsTaxiBrandShowcase: React.FC<KingsTaxiBrandShowcaseProps> = ({
   const sweepLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
+  const isNativeDriverSupported = Platform.OS !== 'web';
+
   const startAnimations = () => {
     try {
       // 1. Continuous modern brand color transition loop
@@ -63,13 +66,13 @@ export const KingsTaxiBrandShowcase: React.FC<KingsTaxiBrandShowcaseProps> = ({
             toValue: 260,
             duration: 2200,
             easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
+            useNativeDriver: isNativeDriverSupported,
           }),
           Animated.delay(2600),
           Animated.timing(sweepAnim, {
             toValue: -160,
             duration: 1,
-            useNativeDriver: true,
+            useNativeDriver: isNativeDriverSupported,
           }),
         ])
       );
@@ -83,13 +86,13 @@ export const KingsTaxiBrandShowcase: React.FC<KingsTaxiBrandShowcaseProps> = ({
               toValue: 1.05,
               duration: 2400,
               easing: Easing.inOut(Easing.quad),
-              useNativeDriver: true,
+              useNativeDriver: isNativeDriverSupported,
             }),
             Animated.timing(pulseAnim, {
               toValue: 1.0,
               duration: 2400,
               easing: Easing.inOut(Easing.quad),
-              useNativeDriver: true,
+              useNativeDriver: isNativeDriverSupported,
             }),
           ]),
           Animated.sequence([
@@ -97,13 +100,13 @@ export const KingsTaxiBrandShowcase: React.FC<KingsTaxiBrandShowcaseProps> = ({
               toValue: 0.85,
               duration: 2400,
               easing: Easing.inOut(Easing.quad),
-              useNativeDriver: true,
+              useNativeDriver: isNativeDriverSupported,
             }),
             Animated.timing(glowAnim, {
               toValue: 0.4,
               duration: 2400,
               easing: Easing.inOut(Easing.quad),
-              useNativeDriver: true,
+              useNativeDriver: isNativeDriverSupported,
             }),
           ]),
         ])
@@ -236,9 +239,10 @@ export const KingsTaxiBrandShowcase: React.FC<KingsTaxiBrandShowcaseProps> = ({
       {/* Diagonal Light Sweep Highlight */}
       {!isReduceMotion && (
         <Animated.View
-          pointerEvents="none"
+          pointerEvents={Platform.OS === 'web' ? undefined : 'none'}
           style={[
             styles.lightSweepBar,
+            Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : null,
             {
               transform: [{ rotate: '25deg' }, { translateX: sweepAnim }],
             },
@@ -358,11 +362,18 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: theme.colors.antiqueGold,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.20,
-    shadowRadius: 8,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.antiqueGold,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.20,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+      default: {},
+    }),
   },
   logoImage: {
     width: 122,

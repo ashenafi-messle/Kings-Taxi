@@ -10,6 +10,7 @@ export const hospitalityRouter = Router();
 
 hospitalityRouter.get('/hotels', (req: Request, res: Response) => hospitalityController.listHotels(req, res));
 hospitalityRouter.get('/hotels/featured', (req: Request, res: Response) => hospitalityController.getFeaturedHotels(req, res));
+hospitalityRouter.get('/hotels/:id/rooms', (req: Request, res: Response) => hospitalityController.getHotelRooms(req, res));
 hospitalityRouter.get('/hotels/:slugOrId', (req: Request, res: Response) => hospitalityController.getHotelDetails(req, res));
 hospitalityRouter.get('/hotels/:hotelId/availability', (req: Request, res: Response) => hospitalityController.checkAvailability(req, res));
 hospitalityRouter.get('/hotels/:hotelId/transfer-rates', (req: Request, res: Response) => hospitalityController.getTransferRates(req, res));
