@@ -27,5 +27,4 @@ export * from './authentication/PasswordInput';
 export * from './authentication/TelegramAuthButton';
 export * from './authentication/RememberEmailCheckbox';
 export * from './KingsTaxiBrandShowcase';
-export * from './RoomImageGallery';
-export * from './FullScreenImageModal';
+export * from './RoomImageCarousel';
