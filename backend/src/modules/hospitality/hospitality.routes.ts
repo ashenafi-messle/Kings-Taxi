@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { hospitalityController } from './hospitality.controller';
 import { authenticateToken, requireRole } from '../../core/middleware/auth.middleware';
 
@@ -128,6 +128,31 @@ hospitalityRouter.post('/admin/hotel-bookings/:id/decline', adminAuth, (req: Req
 );
 hospitalityRouter.patch('/admin/hotel-bookings/:id/status', adminAuth, (req: Request, res: Response) =>
   hospitalityController.adminUpdateBookingStatus(req, res)
+);
+
+// Inventory Synchronization & Real-Time SSE Admin
+hospitalityRouter.get(
+  '/admin/hotels/inventory/events',
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.headers.authorization && typeof req.query.token === 'string' && req.query.token.trim()) {
+      req.headers.authorization = `Bearer ${req.query.token.trim()}`;
+    }
+    next();
+  },
+  adminAuth,
+  (req: Request, res: Response) => hospitalityController.adminGetInventoryEvents(req, res)
+);
+hospitalityRouter.post('/admin/hotels/inventory/expire-holds', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminExpireInventoryHolds(req, res)
+);
+hospitalityRouter.get('/admin/hotels/:id/inventory', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminGetHotelInventory(req, res)
+);
+hospitalityRouter.patch('/admin/hotels/:id/room-types/:roomTypeId/inventory', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminAdjustRoomInventory(req, res)
+);
+hospitalityRouter.post('/admin/hotels/:id/room-types/:roomTypeId/block', adminAuth, (req: Request, res: Response) =>
+  hospitalityController.adminBlockRoomInventory(req, res)
 );
 
 // Lounges Admin

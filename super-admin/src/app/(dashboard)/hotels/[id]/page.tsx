@@ -36,6 +36,24 @@ export default function HotelDetailPage() {
 
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [inventorySummary, setInventorySummary] = useState<any>(null);
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
+  const [sseConnected, setSseConnected] = useState(false);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [blockModal, setBlockModal] = useState<{
+    roomId: string;
+    roomName: string;
+    action: 'BLOCK' | 'UNBLOCK';
+    startDate: string;
+    endDate: string;
+    quantity: number;
+    note: string;
+  } | null>(null);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [newRoomImages, setNewRoomImages] = useState<GalleryImageItem[]>([]);
   const [isEditingCover, setIsEditingCover] = useState(false);
@@ -70,18 +88,76 @@ export default function HotelDetailPage() {
     }
   };
 
+  const loadInventorySummary = async (sDate = startDate, eDate = endDate) => {
+    if (!id) return;
+    try {
+      const summary = await HotelService.getHotelInventorySummary(id, sDate, eDate);
+      setInventorySummary(summary);
+      setInventoryError(null);
+    } catch (err: any) {
+      console.warn('Inventory summary unavailable:', err?.message || err);
+    }
+  };
+
   useEffect(() => {
     if (id) loadHotel();
   }, [id]);
 
+  useEffect(() => {
+    if (!id) return;
+    loadInventorySummary(startDate, endDate);
+  }, [id, startDate, endDate]);
+
+  useEffect(() => {
+    if (!id) return;
+    const unsubscribe = HotelService.subscribeInventoryEvents(
+      id,
+      () => {
+        loadHotel();
+        loadInventorySummary(startDate, endDate);
+      },
+      (connected) => setSseConnected(connected)
+    );
+    return unsubscribe;
+  }, [id, startDate, endDate]);
+
+  useEffect(() => {
+    if (!id || sseConnected) return;
+    const fallbackTimer = setInterval(() => {
+      loadInventorySummary(startDate, endDate);
+    }, 30000);
+    return () => clearInterval(fallbackTimer);
+  }, [id, sseConnected, startDate, endDate]);
+
   const handleAdjustInventory = async (roomId: string, currentTotal: number, delta: number) => {
     if (!hotel) return;
     const newTotal = Math.max(1, currentTotal + delta);
+    setInventoryError(null);
     try {
-      await HotelService.updateRoomInventory(hotel.id, roomId, newTotal);
-      loadHotel();
-    } catch (err) {
+      await HotelService.adjustRoomInventory(hotel.id, roomId, newTotal);
+      await Promise.all([loadHotel(), loadInventorySummary(startDate, endDate)]);
+    } catch (err: any) {
       console.error('Failed to update inventory:', err);
+      setInventoryError(err?.message || 'Failed to update room inventory.');
+    }
+  };
+
+  const handleSubmitBlockRooms = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hotel || !blockModal) return;
+    setInventoryError(null);
+    try {
+      await HotelService.blockRoomInventory(hotel.id, blockModal.roomId, {
+        startDate: blockModal.startDate,
+        endDate: blockModal.endDate,
+        quantity: blockModal.quantity,
+        action: blockModal.action,
+        note: blockModal.note,
+      });
+      setBlockModal(null);
+      await Promise.all([loadHotel(), loadInventorySummary(startDate, endDate)]);
+    } catch (err: any) {
+      setInventoryError(err?.message || 'Failed to update blocked rooms.');
     }
   };
 
@@ -312,21 +388,54 @@ export default function HotelDetailPage() {
         {/* Right Column: Dynamic Room Types & Inventory Management */}
         <div className="col-12 col-lg-8">
           <div className="card shadow-sm border-0 rounded-3 mb-4">
-            <div className="card-header bg-white border-bottom border-light p-3 d-flex align-items-center justify-content-between">
+            <div className="card-header bg-white border-bottom border-light p-3 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
               <div>
                 <h3 className="h6 fw-bold text-obsidian mb-0">Dynamic Room Inventory Management</h3>
                 <p className="text-muted small mb-0">
-                  Update live inventory counts, night tariffs in ETB, and occupancy thresholds
+                  Real-time date-based availability, reserved holds, confirmed bookings, and maintenance blocks
                 </p>
               </div>
-              <span className="badge bg-gold-subtle text-gold">Live Synced</span>
+              <div className="d-flex flex-wrap align-items-center gap-2">
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  style={{ width: 138 }}
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  aria-label="Inventory Start Date"
+                />
+                <span className="text-muted small">to</span>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  style={{ width: 138 }}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  aria-label="Inventory End Date"
+                />
+                <span className={`badge ${sseConnected ? 'bg-success-subtle text-success' : 'bg-gold-subtle text-gold'}`}>
+                  {sseConnected ? '● SSE Live Sync' : 'Polling Fallback'}
+                </span>
+              </div>
             </div>
+
+            {inventoryError && (
+              <div className="alert alert-danger m-3 mb-0 py-2 px-3 small" role="alert">
+                {inventoryError}
+              </div>
+            )}
 
             <div className="card-body p-3">
               <div className="d-flex flex-column gap-3">
                 {hotel.roomTypes.map((room) => {
-                  const availableCount = room.availableInventory ?? room.availableRooms ?? 0;
-                  const bookedCount = room.totalInventory - availableCount;
+                  const roomSummary = (inventorySummary?.roomTypes || []).find(
+                    (r: any) => r.roomTypeId === room.id
+                  );
+                  const availableCount = roomSummary?.availableRooms ?? room.availableInventory ?? room.availableRooms ?? 0;
+                  const reservedCount = roomSummary?.reservedRooms ?? 0;
+                  const confirmedCount = roomSummary?.confirmedRooms ?? 0;
+                  const blockedCount = roomSummary?.blockedRooms ?? 0;
+                  const occupancyRate = roomSummary?.occupancyPercent ?? 0;
                   return (
                     <div
                       key={room.id}
@@ -352,6 +461,109 @@ export default function HotelDetailPage() {
                           <span>•</span>
                           <span>Size: {room.roomSizeSqM} m²</span>
                         </div>
+
+                        {/* Date-Based Inventory Breakdown */}
+                        <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
+                          <span className="badge bg-white text-dark border">Total: {room.totalInventory}</span>
+                          <span className="badge bg-success-subtle text-success">Avail: {availableCount}</span>
+                          <span className="badge bg-warning-subtle text-warning-emphasis">Reserved: {reservedCount}</span>
+                          <span className="badge bg-primary-subtle text-primary">Confirmed: {confirmedCount}</span>
+                          <span className="badge bg-secondary-subtle text-secondary">Blocked: {blockedCount}</span>
+                          <span className="badge bg-light text-muted border">Occ: {occupancyRate}%</span>
+                          <button
+                            type="button"
+                            className="btn btn-outline-warning btn-sm py-0 px-2 text-xs"
+                            onClick={() =>
+                              setBlockModal({
+                                roomId: room.id,
+                                roomName: room.name,
+                                action: 'BLOCK',
+                                startDate,
+                                endDate,
+                                quantity: 1,
+                                note: 'Maintenance block',
+                              })
+                            }
+                          >
+                            Block Rooms
+                          </button>
+                          {blockedCount > 0 && (
+                            <button
+                              type="button"
+                              className="btn btn-outline-success btn-sm py-0 px-2 text-xs"
+                              onClick={() =>
+                                setBlockModal({
+                                  roomId: room.id,
+                                  roomName: room.name,
+                                  action: 'UNBLOCK',
+                                  startDate,
+                                  endDate,
+                                  quantity: blockedCount,
+                                  note: 'Maintenance complete',
+                                })
+                              }
+                            >
+                              Unblock
+                            </button>
+                          )}
+                        </div>
+
+                        {blockModal && blockModal.roomId === room.id && (
+                          <form onSubmit={handleSubmitBlockRooms} className="mt-2 p-2.5 bg-white rounded border">
+                            <div className="d-flex flex-wrap align-items-end gap-2">
+                              <div>
+                                <label className="form-label text-xs mb-1">Start Date</label>
+                                <input
+                                  type="date"
+                                  className="form-control form-control-sm"
+                                  value={blockModal.startDate}
+                                  onChange={(e) => setBlockModal({ ...blockModal, startDate: e.target.value })}
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="form-label text-xs mb-1">End Date</label>
+                                <input
+                                  type="date"
+                                  className="form-control form-control-sm"
+                                  value={blockModal.endDate}
+                                  onChange={(e) => setBlockModal({ ...blockModal, endDate: e.target.value })}
+                                  required
+                                />
+                              </div>
+                              <div style={{ width: 90 }}>
+                                <label className="form-label text-xs mb-1">Rooms</label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  className="form-control form-control-sm"
+                                  value={blockModal.quantity}
+                                  onChange={(e) => setBlockModal({ ...blockModal, quantity: Math.max(1, Number(e.target.value) || 1) })}
+                                  required
+                                />
+                              </div>
+                              <div className="flex-grow-1">
+                                <label className="form-label text-xs mb-1">Note</label>
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  value={blockModal.note}
+                                  onChange={(e) => setBlockModal({ ...blockModal, note: e.target.value })}
+                                />
+                              </div>
+                              <button type="submit" className="btn btn-sm btn-primary">
+                                {blockModal.action === 'BLOCK' ? 'Confirm Block' : 'Confirm Unblock'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-secondary"
+                                onClick={() => setBlockModal(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        )}
 
                         {/* Room Photos Preview & Manage Button */}
                         <div className="d-flex align-items-center gap-2 mt-2 pt-2 border-top border-light">

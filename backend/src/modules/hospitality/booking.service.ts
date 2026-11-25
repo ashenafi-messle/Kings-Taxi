@@ -6,6 +6,7 @@ import { HotelQuoteRequestDto, HotelQuoteResponseDto, CreateHotelBookingDto } fr
 import { BUILTIN_GONDAR_HOTELS } from './hotel.service';
 import { notificationService } from '../notifications/notification.service';
 import { auditService } from '../../core/audit/audit.service';
+import { inventoryService } from './inventory.service';
 import {
   validateBookingDates,
   parseCalendarDate,
@@ -381,7 +382,7 @@ export class HospitalityBookingService {
 
     // 2. Atomic Database Transaction with resilient fallback when database is offline or unseeded
     try {
-      const dbBooking = await prisma.$transaction(async (tx) => {
+      const txResult = await prisma.$transaction(async (tx) => {
         // Find or verify room type in database
         let roomType: any = null;
         try {
@@ -395,36 +396,21 @@ export class HospitalityBookingService {
           if (!isDbConnectionError(e)) throw e;
         }
 
-        // Check current overlapping booked inventory if roomType exists in DB
-        if (roomType) {
-          const overlappingBookings = await tx.hotelBooking.findMany({
-            where: {
-              hotelId: quote.hotel.id,
-              bookingStatus: { in: [HotelBookingStatus.CONFIRMED, HotelBookingStatus.PENDING] },
-              checkInDate: { lt: checkOutDate },
-              checkOutDate: { gt: checkInDate },
-            },
-            include: {
-              bookingRooms: {
-                where: { roomTypeId: roomType.id },
-              },
-            },
+        // Create Hotel Booking in PENDING status with 15-minute inventory hold
+        const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+        if (roomType && !tx.hotelRoomInventory) {
+          await inventoryService.reserveForBooking(tx, {
+            bookingId,
+            hotelId: quote.hotel.id,
+            roomTypeId: roomType.id,
+            checkInDate,
+            checkOutDate,
+            quantity: quote.numberOfRooms,
+            expiresAt: holdExpiresAt,
+            actorId: passengerId,
           });
-
-          const alreadyBooked = overlappingBookings.reduce(
-            (sum, b) => sum + b.bookingRooms.reduce((rSum, br) => rSum + br.quantity, 0),
-            0
-          );
-
-          const availableInventory = roomType.totalInventory - alreadyBooked;
-          if (availableInventory < quote.numberOfRooms) {
-            throw new Error(
-              `INSUFFICIENT_INVENTORY: Only ${availableInventory} room(s) available for the selected dates. Requested: ${quote.numberOfRooms}.`
-            );
-          }
         }
 
-        // Create Hotel Booking
         const booking = await tx.hotelBooking.create({
           data: {
             id: bookingId,
@@ -442,16 +428,16 @@ export class HospitalityBookingService {
             additionalFees: new Prisma.Decimal(quote.additionalFees || 0),
             discountAmount: new Prisma.Decimal(quote.discount || 0),
             grandTotal: new Prisma.Decimal(quote.grandTotal),
-            bookingStatus: HotelBookingStatus.CONFIRMED,
+            bookingStatus: HotelBookingStatus.PENDING,
             paymentStatus: PaymentStatus.PENDING,
-            holdExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            holdExpiresAt,
             specialRequests: dto.specialRequests || null,
             priceSnapshot: quote as any,
-            confirmedAt: new Date(),
           },
         });
 
-        // Create Booking Room Item if roomType exists in DB
+        // Create Booking Room Item and atomically reserve date-based inventory
+        let reservedDates: string[] = [];
         if (roomType) {
           await tx.hotelBookingRoom.create({
             data: {
@@ -463,6 +449,20 @@ export class HospitalityBookingService {
               subtotal: new Prisma.Decimal(quote.roomSubtotal),
             },
           });
+
+          if (tx.hotelRoomInventory) {
+            const reservationResult = await inventoryService.reserveForBooking(tx, {
+              bookingId: booking.id,
+              hotelId: quote.hotel.id,
+              roomTypeId: roomType.id,
+              checkInDate,
+              checkOutDate,
+              quantity: quote.numberOfRooms,
+              expiresAt: holdExpiresAt,
+              actorId: passengerId,
+            });
+            reservedDates = reservationResult.dates;
+          }
         }
 
         // Create Airport Transfer Booking if selected
@@ -504,10 +504,18 @@ export class HospitalityBookingService {
           },
         });
 
-        return booking;
+        return { booking, reservedDates, roomTypeId: roomType?.id ?? null };
       });
 
-      return dbBooking;
+      if (txResult.roomTypeId && txResult.reservedDates.length > 0) {
+        inventoryService.emitSyncEvents(
+          'INVENTORY_RESERVED',
+          [{ hotelId: quote.hotel.id, roomTypeId: txResult.roomTypeId, dates: txResult.reservedDates }],
+          txResult.booking.id
+        );
+      }
+
+      return txResult.booking;
     } catch (err: any) {
       const msg = String(err.message || '');
       if (
@@ -860,13 +868,31 @@ export class HospitalityBookingService {
       throw new Error('CANNOT_CANCEL: Completed stay cannot be cancelled');
     }
 
-    return prisma.hotelBooking.update({
-      where: { bookingReference },
-      data: {
-        bookingStatus: HotelBookingStatus.CANCELLED,
-        cancelledAt: new Date(),
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const releasedItems = await inventoryService.releaseReservation(
+        tx,
+        booking.id,
+        'CANCELLED',
+        passengerId,
+        'Cancelled by passenger'
+      );
+
+      const cancelledBooking = await tx.hotelBooking.update({
+        where: { bookingReference },
+        data: {
+          bookingStatus: HotelBookingStatus.CANCELLED,
+          cancelledAt: new Date(),
+        },
+      });
+
+      return { cancelledBooking, releasedItems };
     });
+
+    if (result.releasedItems.length > 0) {
+      inventoryService.emitSyncEvents('INVENTORY_CANCELLED', result.releasedItems, booking.id);
+    }
+
+    return result.cancelledBooking;
   }
 
   /**
@@ -1011,7 +1037,7 @@ export class HospitalityBookingService {
   async adminAcceptBooking(id: string, adminId: string, adminNote?: string) {
     try {
       // Execute atomically in a database transaction
-      const updated = await prisma.$transaction(async (tx) => {
+      const txResult = await prisma.$transaction(async (tx) => {
         const booking = await tx.hotelBooking.findUnique({
           where: { id },
           include: {
@@ -1037,30 +1063,8 @@ export class HospitalityBookingService {
           throw new Error(`Cannot accept booking in ${booking.bookingStatus} state without reinstatement.`);
         }
 
-        // Verify room availability atomically across stay dates
-        for (const lineItem of booking.bookingRooms) {
-          const roomType = lineItem.roomType;
-          if (roomType) {
-            const overlapping = await tx.hotelBookingRoom.findMany({
-              where: {
-                roomTypeId: roomType.id,
-                booking: {
-                  bookingStatus: HotelBookingStatus.CONFIRMED,
-                  checkInDate: { lt: booking.checkOutDate },
-                  checkOutDate: { gt: booking.checkInDate },
-                },
-              },
-              select: { quantity: true },
-            });
-            const currentlyBooked = (overlapping || []).reduce((sum: number, item: any) => sum + item.quantity, 0);
-            const available = roomType.totalInventory - currentlyBooked;
-            if (available < lineItem.quantity) {
-              throw new Error(
-                `Requested room inventory for '${roomType.name}' is no longer available. (Available: ${available}, Requested: ${lineItem.quantity})`
-              );
-            }
-          }
-        }
+        // Confirm inventory reservation atomically across stay dates (rejects expired holds)
+        const confirmedItems = await inventoryService.confirmReservation(tx, id, adminId);
 
         // Update booking to CONFIRMED
         const now = new Date();
@@ -1092,8 +1096,14 @@ export class HospitalityBookingService {
           },
         });
 
-        return confirmedBooking;
+        return { confirmedBooking, confirmedItems };
       });
+
+      const updated = txResult.confirmedBooking;
+
+      if (txResult.confirmedItems.length > 0) {
+        inventoryService.emitSyncEvents('INVENTORY_CONFIRMED', txResult.confirmedItems, id);
+      }
 
       // Audit log and notification
       await auditService.record({
@@ -1154,7 +1164,7 @@ export class HospitalityBookingService {
     }
 
     try {
-      const updated = await prisma.$transaction(async (tx) => {
+      const txResult = await prisma.$transaction(async (tx) => {
         const booking = await tx.hotelBooking.findUnique({
           where: { id },
           include: {
@@ -1167,6 +1177,14 @@ export class HospitalityBookingService {
         if (!booking) {
           throw new Error('Hotel booking not found.');
         }
+
+        const releasedItems = await inventoryService.releaseReservation(
+          tx,
+          id,
+          'CANCELLED',
+          adminId,
+          `Declined: ${declineReason.trim()}`
+        );
 
         const now = new Date();
         const declined = await tx.hotelBooking.update({
@@ -1197,8 +1215,14 @@ export class HospitalityBookingService {
           },
         });
 
-        return declined;
+        return { declined, releasedItems };
       });
+
+      const updated = txResult.declined;
+
+      if (txResult.releasedItems.length > 0) {
+        inventoryService.emitSyncEvents('INVENTORY_CANCELLED', txResult.releasedItems, id);
+      }
 
       await auditService.record({
         actorId: adminId,

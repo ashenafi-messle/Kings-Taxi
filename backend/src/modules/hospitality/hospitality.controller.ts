@@ -4,6 +4,9 @@ import { roomService } from './room.service';
 import { transferRateService } from './transferRate.service';
 import { hospitalityBookingService } from './booking.service';
 import { loungeService } from './lounge.service';
+import { inventoryService } from './inventory.service';
+import { subscribeAdminInventoryEvents } from './inventoryEvents';
+import { reservationExpirationWorker } from './expirationWorker';
 import { ApiResponse } from '../../core/response/apiResponse';
 import { logger } from '../../core/logging/logger';
 import { CloudinaryService } from '../../integrations/cloudinary/cloudinary.service';
@@ -805,6 +808,75 @@ export class HospitalityController {
       ApiResponse.success(res, unpublished, 'Lounge unpublished successfully');
     } catch (err: any) {
       ApiResponse.badRequest(res, err.message || 'Unable to unpublish lounge');
+    }
+  }
+
+  adminGetInventoryEvents(req: Request, res: Response) {
+    subscribeAdminInventoryEvents(req, res);
+  }
+
+  async adminGetHotelInventory(req: Request, res: Response) {
+    try {
+      const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+      const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+      const summary = await inventoryService.getHotelInventorySummary(req.params.id, startDate, endDate);
+      ApiResponse.success(res, summary, 'Hotel room inventory summary retrieved');
+    } catch (err: any) {
+      if (err.message?.startsWith('HOTEL_NOT_FOUND') || err.message?.startsWith('INVALID_DATE')) {
+        ApiResponse.badRequest(res, err.message);
+        return;
+      }
+      handleHospitalityError(res, err, 'Unable to load hotel inventory summary');
+    }
+  }
+
+  async adminAdjustRoomInventory(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub || 'adm_system';
+      const newTotalRooms = Number(req.body.totalInventory ?? req.body.newTotalRooms);
+      const updated = await inventoryService.adjustTotalInventory({
+        hotelId: req.params.id,
+        roomTypeId: req.params.roomTypeId,
+        newTotalRooms,
+        adminId,
+        note: req.body.note,
+      });
+      ApiResponse.success(res, updated, 'Room inventory updated successfully');
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to adjust room inventory');
+    }
+  }
+
+  async adminBlockRoomInventory(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub || 'adm_system';
+      const { startDate, endDate, quantity, action, note } = req.body;
+      const result = await inventoryService.setBlockedRooms({
+        hotelId: req.params.id,
+        roomTypeId: req.params.roomTypeId,
+        startDateStr: startDate,
+        endDateStr: endDate,
+        quantity: Number(quantity),
+        action: action === 'UNBLOCK' ? 'UNBLOCK' : 'BLOCK',
+        adminId,
+        note,
+      });
+      ApiResponse.success(
+        res,
+        result,
+        action === 'UNBLOCK' ? 'Rooms unblocked successfully' : 'Rooms blocked successfully'
+      );
+    } catch (err: any) {
+      ApiResponse.badRequest(res, err.message || 'Unable to update blocked room inventory');
+    }
+  }
+
+  async adminExpireInventoryHolds(_req: Request, res: Response) {
+    try {
+      const expiredCount = await reservationExpirationWorker.processExpiredReservations();
+      ApiResponse.success(res, { expiredCount }, 'Expired inventory holds processed');
+    } catch (err: any) {
+      handleHospitalityError(res, err, 'Unable to process expired inventory holds');
     }
   }
 }

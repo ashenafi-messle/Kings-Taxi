@@ -1223,12 +1223,14 @@ model Hotel {
   createdByAdminId   String?                 @map("created_by_admin_id") @db.Uuid
   updatedByAdminId   String?                 @map("updated_by_admin_id") @db.Uuid
 
-  partner       HotelPartner?          @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  partner       HotelPartner?               @relation(fields: [partnerId], references: [id], onDelete: SetNull)
   images        HotelImage[]
   amenities     HotelAmenityRelation[]
   roomTypes     HotelRoomType[]
   transferRates AirportTransferRate[]
   hotelBookings HotelBooking[]
+  inventories   HotelRoomInventory[]
+  inventoryReservations HotelInventoryReservation[]
 
   @@index([partnerId])
   @@index([city, status])
@@ -1309,10 +1311,12 @@ model HotelRoomType {
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  hotel        Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  rates        HotelRate[]
-  bookingRooms HotelBookingRoom[]
-  images       RoomImage[]
+  hotel                 Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  rates                 HotelRate[]
+  bookingRooms          HotelBookingRoom[]
+  images                RoomImage[]
+  inventories           HotelRoomInventory[]
+  inventoryReservations HotelInventoryReservation[]
 
   @@index([hotelId, status])
   @@map("hotel_room_types")
@@ -1404,12 +1408,13 @@ model HotelBooking {
   declineReason       String?            @map("decline_reason") @db.Text
   adminReviewNote     String?            @map("admin_review_note") @db.Text
 
-  passenger       Passenger                   @relation(fields: [passengerId], references: [id], onDelete: Restrict)
-  hotel           Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Restrict)
-  bookingRooms    HotelBookingRoom[]
-  transferBooking HotelTransferBooking?
-  payment         Payment?
-  statusHistory   HotelBookingStatusHistory[]
+  passenger             Passenger                   @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  hotel                 Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  bookingRooms          HotelBookingRoom[]
+  transferBooking       HotelTransferBooking?
+  payment               Payment?
+  statusHistory         HotelBookingStatusHistory[]
+  inventoryReservations HotelInventoryReservation[]
 
   @@index([passengerId, bookingStatus])
   @@index([hotelId, checkInDate, checkOutDate])
@@ -1957,6 +1962,93 @@ model RoomImage {
 
   @@index([roomTypeId, displayOrder])
   @@map("room_images")
+}
+
+// ==============================================================================
+// 45. Date-Based Room Inventory Synchronization Models
+// ==============================================================================
+
+enum InventoryReservationStatus {
+  RESERVED
+  CONFIRMED
+  RELEASED
+  EXPIRED
+  CANCELLED
+}
+
+enum InventoryTransactionType {
+  RESERVE
+  CONFIRM
+  RELEASE
+  EXPIRE
+  CANCEL
+  BLOCK
+  UNBLOCK
+  ADJUST_TOTAL
+}
+
+model HotelRoomInventory {
+  id             String   @id @default(uuid()) @db.Uuid
+  hotelId        String   @map("hotel_id") @db.Uuid
+  roomTypeId     String   @map("room_type_id") @db.Uuid
+  inventoryDate  DateTime @map("inventory_date") @db.Date
+  totalRooms     Int      @map("total_rooms")
+  reservedRooms  Int      @default(0) @map("reserved_rooms")
+  confirmedRooms Int      @default(0) @map("confirmed_rooms")
+  blockedRooms   Int      @default(0) @map("blocked_rooms")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  hotel    Hotel         @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomType HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([roomTypeId, inventoryDate])
+  @@index([hotelId, inventoryDate])
+  @@index([roomTypeId, inventoryDate])
+  @@map("hotel_room_inventories")
+}
+
+model HotelInventoryReservation {
+  id                String                     @id @default(uuid()) @db.Uuid
+  bookingId         String                     @map("booking_id") @db.Uuid
+  hotelId           String                     @map("hotel_id") @db.Uuid
+  roomTypeId        String                     @map("room_type_id") @db.Uuid
+  checkInDate       DateTime                   @map("check_in_date") @db.Date
+  checkOutDate      DateTime                   @map("check_out_date") @db.Date
+  quantity          Int
+  reservationStatus InventoryReservationStatus @default(RESERVED) @map("reservation_status")
+  expiresAt         DateTime                   @map("expires_at") @db.Timestamptz(6)
+  releasedAt        DateTime?                  @map("released_at") @db.Timestamptz(6)
+  confirmedAt       DateTime?                  @map("confirmed_at") @db.Timestamptz(6)
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking  HotelBooking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  hotel    Hotel         @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomType HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, roomTypeId])
+  @@index([reservationStatus, expiresAt])
+  @@index([hotelId, roomTypeId])
+  @@map("hotel_inventory_reservations")
+}
+
+model HotelInventoryTransaction {
+  id              String                   @id @default(uuid()) @db.Uuid
+  hotelId         String                   @map("hotel_id") @db.Uuid
+  roomTypeId      String                   @map("room_type_id") @db.Uuid
+  bookingId       String?                  @map("booking_id") @db.Uuid
+  inventoryDate   DateTime                 @map("inventory_date") @db.Date
+  transactionType InventoryTransactionType @map("transaction_type")
+  quantity        Int
+  idempotencyKey  String                   @unique @map("idempotency_key") @db.VarChar(128)
+  actorId         String?                  @map("actor_id") @db.VarChar(128)
+  note            String?                  @db.Text
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([hotelId, roomTypeId, inventoryDate])
+  @@index([bookingId])
+  @@map("hotel_inventory_transactions")
 }
 
 // ==============================================================================

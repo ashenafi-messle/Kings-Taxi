@@ -158,7 +158,45 @@ export default function HotelReserveScreen() {
     }
   }, [checkInDate, checkOutDate]);
 
-  // Fetch authoritative quote whenever booking parameters change
+  // Fetch authoritative quote and live date-based availability whenever booking parameters change
+  const [liveAvailability, setLiveAvailability] = useState<Record<string, number>>({});
+  const effectiveAvailableCount =
+    liveAvailability[activeRoom.id] ?? activeRoom.availableCount ?? 0;
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchLiveAvailability() {
+      if (!hotel.id || !checkInDate || !checkOutDate) return;
+      try {
+        const res = await HotelService.checkAvailability(
+          hotel.id,
+          checkInDate,
+          checkOutDate,
+          adults + children,
+          roomQuantity
+        );
+        if (isMounted && res.success && Array.isArray(res.data?.roomTypes)) {
+          const nextMap: Record<string, number> = {};
+          for (const rt of res.data.roomTypes) {
+            const avail = Number(rt.availableInventory ?? rt.remainingInventory ?? 0);
+            nextMap[rt.id] = avail;
+          }
+          setLiveAvailability(nextMap);
+          const currentRoomAvail = nextMap[activeRoom.id];
+          if (typeof currentRoomAvail === 'number' && currentRoomAvail > 0 && roomQuantity > currentRoomAvail) {
+            setRoomQuantity(currentRoomAvail);
+          }
+        }
+      } catch {
+        // Keep previous availability on transient network error
+      }
+    }
+    fetchLiveAvailability();
+    return () => {
+      isMounted = false;
+    };
+  }, [hotel.id, activeRoom.id, checkInDate, checkOutDate, adults, children, roomQuantity]);
+
   useEffect(() => {
     let isMounted = true;
     async function fetchAuthoritativeQuote() {
@@ -275,6 +313,13 @@ export default function HotelReserveScreen() {
 
   // Submit final reservation
   const handleConfirmReservation = async () => {
+    if (effectiveAvailableCount < roomQuantity) {
+      Alert.alert(
+        'Room Unavailable',
+        `Only ${effectiveAvailableCount} room(s) available for the selected dates.`
+      );
+      return;
+    }
     setIsSubmitting(true);
     try {
       const payload = {
@@ -313,10 +358,25 @@ export default function HotelReserveScreen() {
 
       const res = await HotelService.createBooking(payload);
 
-      let bookingRef = `KT-HTL-${Math.floor(1000 + Math.random() * 9000)}`;
-      if (res.success && res.data) {
-        bookingRef = res.data.bookingReference || res.data.id || bookingRef;
+      if (!res.success || !res.data) {
+        const availRes = await HotelService.checkAvailability(
+          hotel.id,
+          checkInDate,
+          checkOutDate,
+          adults + children,
+          roomQuantity
+        );
+        if (availRes.success && Array.isArray(availRes.data?.roomTypes)) {
+          const nextMap: Record<string, number> = {};
+          for (const rt of availRes.data.roomTypes) {
+            nextMap[rt.id] = Number(rt.availableInventory ?? rt.remainingInventory ?? 0);
+          }
+          setLiveAvailability(nextMap);
+        }
+        throw new Error(res.error || 'Selected room is no longer available for these dates.');
       }
+
+      const bookingRef = res.data.bookingReference || res.data.id || `KT-HTL-${Math.floor(1000 + Math.random() * 9000)}`;
 
       // Add to local persistent store for instant synchronization
       const totalETB = quote?.totalAmount || activeRoom.pricePerNight * nights;
@@ -332,7 +392,7 @@ export default function HotelReserveScreen() {
         nightsCount: nights,
         guestsCount: adults + children,
         totalPriceETB: totalETB,
-        status: 'CONFIRMED',
+        status: res.data.bookingStatus || 'PENDING',
         hasAirportTransfer: includeTransfer,
         airportTransferStatus: includeTransfer ? 'SCHEDULED' : undefined,
         airportTransferVehicle: includeTransfer ? selectedVehicleCategory : undefined,
@@ -610,7 +670,9 @@ export default function HotelReserveScreen() {
               <View style={[styles.counterRow, { borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: 10 }]}>
                 <View>
                   <Text style={styles.counterLabel}>Number of Rooms</Text>
-                  <Text style={styles.counterSub}>{activeRoom.title}</Text>
+                  <Text style={styles.counterSub}>
+                    {activeRoom.title} • {effectiveAvailableCount > 0 ? `${effectiveAvailableCount} available` : 'Sold out for selected dates'}
+                  </Text>
                 </View>
                 <View style={styles.stepperWrap}>
                   <TouchableOpacity
@@ -621,8 +683,9 @@ export default function HotelReserveScreen() {
                   </TouchableOpacity>
                   <Text style={styles.stepValue}>{roomQuantity}</Text>
                   <TouchableOpacity
-                    style={styles.stepBtn}
-                    onPress={() => setRoomQuantity(Math.min(activeRoom.availableCount || 4, roomQuantity + 1))}
+                    style={[styles.stepBtn, roomQuantity >= effectiveAvailableCount && { opacity: 0.4 }]}
+                    disabled={roomQuantity >= effectiveAvailableCount}
+                    onPress={() => setRoomQuantity(Math.min(Math.max(1, effectiveAvailableCount), roomQuantity + 1))}
                   >
                     <Plus size={16} color={theme.colors.text} />
                   </TouchableOpacity>

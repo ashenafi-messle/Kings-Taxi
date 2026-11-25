@@ -187,6 +187,25 @@ export class HotelService {
   }
 
   /**
+   * Check real-time date-based room availability for a hotel.
+   */
+  static async checkAvailability(
+    hotelId: string,
+    checkInDate: string,
+    checkOutDate: string,
+    guests = 2,
+    rooms = 1
+  ): Promise<ApiResponse<any>> {
+    const params = new URLSearchParams({
+      checkInDate,
+      checkOutDate,
+      guests: String(guests),
+      rooms: String(rooms),
+    });
+    return requestWithAuth<any>(`/hotels/${hotelId}/availability?${params.toString()}`);
+  }
+
+  /**
    * Get airport transfer rates configured for a hotel (GDQ Airport -> Hotel).
    */
   static async getTransferRates(hotelId: string): Promise<ApiResponse<AirportTransferRateDto[]>> {

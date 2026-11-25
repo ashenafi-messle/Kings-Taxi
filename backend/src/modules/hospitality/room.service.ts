@@ -4,6 +4,8 @@ import { Prisma, HotelStatus, HotelPublicationStatus } from '@prisma/client';
 import { CreateRoomTypeDto, UpdateRoomTypeDto, CreateRateDto } from './hospitality.types';
 import { HospitalityImageService } from './hospitalityImage.service';
 import { BUILTIN_GONDAR_HOTELS } from './hotel.service';
+import { inventoryService } from './inventory.service';
+import { inventoryEventBus } from './inventoryEvents';
 import {
   parseCalendarDate,
   validateBookingDates,
@@ -155,7 +157,17 @@ export class RoomService {
     const room = await prisma.hotelRoomType.findUnique({ where: { id: roomTypeId } });
     if (!room) throw new Error('ROOM_TYPE_NOT_FOUND: Room type does not exist');
 
-    return prisma.hotelRoomType.update({
+    if (dto.totalInventory !== undefined && dto.totalInventory !== room.totalInventory) {
+      await inventoryService.adjustTotalInventory({
+        hotelId: room.hotelId,
+        roomTypeId,
+        newTotalRooms: dto.totalInventory,
+        adminId: 'ADMIN',
+        note: 'Updated via room type edit',
+      });
+    }
+
+    const updated = await prisma.hotelRoomType.update({
       where: { id: roomTypeId },
       data: {
         name: dto.name,
@@ -163,12 +175,22 @@ export class RoomService {
         maximumAdults: dto.maximumAdults,
         maximumChildren: dto.maximumChildren,
         maximumGuests: dto.maximumGuests,
-        totalInventory: dto.totalInventory,
         basePricePerNight: dto.basePricePerNight !== undefined ? new Prisma.Decimal(dto.basePricePerNight) : undefined,
         currency: dto.currency,
         status: dto.status,
       },
     });
+
+    if (dto.status !== undefined && dto.status !== room.status) {
+      inventoryEventBus.emitSync({
+        type: 'ROOM_TYPE_STATUS_CHANGED',
+        hotelId: room.hotelId,
+        roomTypeId,
+        dates: [],
+      });
+    }
+
+    return updated;
   }
 
   /**
@@ -302,8 +324,22 @@ export class RoomService {
         };
       }
 
-      // Find all overlapping active bookings for this hotel
-      // Overlapping condition: booking.checkInDate < checkOutDate AND booking.checkOutDate > checkInDate
+      // Read date-based inventory records across [checkInDate, checkOutDate)
+      const inventoryRows = prisma.hotelRoomInventory
+        ? await prisma.hotelRoomInventory.findMany({
+            where: {
+              hotelId,
+              roomTypeId: { in: roomTypes.map((r) => r.id) },
+              inventoryDate: { gte: checkInDate, lt: checkOutDate },
+            },
+          })
+        : [];
+      const inventoryByRoomAndDate = new Map<string, typeof inventoryRows[number]>();
+      for (const row of inventoryRows) {
+        inventoryByRoomAndDate.set(`${row.roomTypeId}:${formatCalendarDate(row.inventoryDate)}`, row);
+      }
+
+      // Fallback check for legacy bookings that don't have HotelRoomInventory rows
       const overlappingBookings = await prisma.hotelBooking.findMany({
         where: {
           hotelId,
@@ -316,7 +352,6 @@ export class RoomService {
         },
       });
 
-      // Calculate booked inventory per room type
       const bookedQuantities: Record<string, number> = {};
       for (const booking of overlappingBookings) {
         for (const br of booking.bookingRooms) {
@@ -325,18 +360,21 @@ export class RoomService {
       }
 
       const evaluatedRooms = roomTypes.map((room) => {
-        const booked = bookedQuantities[room.id] || 0;
-        const remainingInventory = Math.max(0, room.totalInventory - booked);
-        const isCapacitySufficient = room.maximumGuests >= guestsCount;
-        const hasEnoughInventory = remainingInventory >= roomsNeeded;
-
-        // Calculate nightly prices across the range
+        const legacyBooked = bookedQuantities[room.id] || 0;
+        let minNightAvailable = room.totalInventory;
         const nightlyRates: Array<{ date: string; price: number; isSeasonal: boolean }> = [];
         let totalRoomPrice = new Prisma.Decimal(0);
 
         for (let dayOffset = 0; dayOffset < nights; dayOffset++) {
           const currentDate = addCalendarDays(checkInDate, dayOffset);
           const dateStr = formatCalendarDate(currentDate);
+          const invRow = inventoryByRoomAndDate.get(`${room.id}:${dateStr}`);
+          const nightAvail = invRow
+            ? Math.max(0, invRow.totalRooms - invRow.reservedRooms - invRow.confirmedRooms - invRow.blockedRooms)
+            : Math.max(0, room.totalInventory - legacyBooked);
+          if (nightAvail < minNightAvailable) {
+            minNightAvailable = nightAvail;
+          }
 
           // Check if there is an active seasonal rate covering this specific date
           const matchingRate = room.rates.find(
@@ -355,6 +393,9 @@ export class RoomService {
           });
         }
 
+        const remainingInventory = Math.max(0, minNightAvailable);
+        const isCapacitySufficient = room.maximumGuests >= guestsCount;
+        const hasEnoughInventory = remainingInventory >= roomsNeeded;
         const averageNightlyPrice = Number(totalRoomPrice.dividedBy(nights).toFixed(2));
 
         return {

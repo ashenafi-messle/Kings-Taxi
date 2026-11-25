@@ -7,7 +7,7 @@ import {
   HotelPartnerFilterParams,
   PaginatedResult,
 } from '../types';
-import { apiRequest } from './apiClient';
+import { apiRequest, buildApiUrl } from './apiClient';
 
 export class HotelService {
   // ============================================================================
@@ -653,5 +653,115 @@ export class HotelService {
       return res.data;
     }
     throw new Error(res.error || 'Failed to update booking status on database.');
+  }
+
+  // ============================================================================
+  // 5. REAL-TIME DATE-BASED ROOM INVENTORY SYNCHRONIZATION
+  // ============================================================================
+
+  static async getHotelInventorySummary(
+    hotelId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<any> {
+    const q = new URLSearchParams();
+    if (startDate) q.set('startDate', startDate);
+    if (endDate) q.set('endDate', endDate);
+    const qs = q.toString();
+    const res = await apiRequest<any>(
+      qs ? `/admin/hotels/${hotelId}/inventory?${qs}` : `/admin/hotels/${hotelId}/inventory`
+    );
+    if (res.success && res.data) {
+      return res.data;
+    }
+    throw new Error(res.error || 'Failed to load hotel room inventory summary.');
+  }
+
+  static async adjustRoomInventory(
+    hotelId: string,
+    roomTypeId: string,
+    totalInventory: number,
+    note?: string
+  ): Promise<any> {
+    const res = await apiRequest<any>(
+      `/admin/hotels/${hotelId}/room-types/${roomTypeId}/inventory`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ totalInventory, note }),
+      }
+    );
+    if (res.success && res.data) {
+      return res.data;
+    }
+    throw new Error(res.error || 'Failed to adjust room inventory.');
+  }
+
+  static async blockRoomInventory(
+    hotelId: string,
+    roomTypeId: string,
+    payload: {
+      startDate: string;
+      endDate: string;
+      quantity: number;
+      action: 'BLOCK' | 'UNBLOCK';
+      note?: string;
+    }
+  ): Promise<any> {
+    const res = await apiRequest<any>(
+      `/admin/hotels/${hotelId}/room-types/${roomTypeId}/block`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    );
+    if (res.success && res.data) {
+      return res.data;
+    }
+    throw new Error(res.error || 'Failed to update blocked room inventory.');
+  }
+
+  static subscribeInventoryEvents(
+    hotelId: string,
+    onEvent: (event: any) => void,
+    onConnectionChange?: (connected: boolean) => void
+  ): () => void {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+      return () => {};
+    }
+
+    const token =
+      localStorage.getItem('kt_admin_access_token') ||
+      localStorage.getItem('accessToken') ||
+      '';
+    const qs = new URLSearchParams({ hotelId });
+    if (token) qs.set('token', token);
+
+    const url = buildApiUrl(`/admin/hotels/inventory/events?${qs.toString()}`);
+    const eventSource = new EventSource(url);
+
+    eventSource.onopen = () => {
+      onConnectionChange?.(true);
+    };
+
+    eventSource.onerror = () => {
+      onConnectionChange?.(false);
+    };
+
+    const handlePayload = (e: MessageEvent) => {
+      try {
+        const parsed = JSON.parse(e.data);
+        onEvent(parsed);
+      } catch {
+        // Ignore malformed keepalive frames
+      }
+    };
+
+    eventSource.addEventListener('inventory', handlePayload);
+    eventSource.onmessage = handlePayload;
+
+    return () => {
+      eventSource.close();
+      onConnectionChange?.(false);
+    };
   }
 }
