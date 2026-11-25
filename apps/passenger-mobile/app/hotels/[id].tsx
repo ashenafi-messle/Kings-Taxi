@@ -44,6 +44,8 @@ import { mockHotels } from '../../src/mocks';
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
 
+const EMPTY_IMAGES: string[] = [];
+
 export default function HotelDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -106,9 +108,68 @@ export default function HotelDetailScreen() {
     }
   }, [hotelId]);
 
+  const handleOpenRoomGallery = useCallback(
+    (roomId: string, roomTitle: string, roomImages: string[], index: number) => {
+      setSelectedRoomId(roomId);
+      setGalleryModal({
+        visible: true,
+        images: roomImages,
+        initialIndex: index,
+        title: roomTitle,
+      });
+    },
+    []
+  );
+
   useEffect(() => {
-    loadHotel();
-  }, [loadHotel]);
+    let cancelled = false;
+    async function init() {
+      if (!hotelId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [hotelRes, ratesRes] = await Promise.all([
+          HotelService.getHotelById(hotelId),
+          HotelService.getTransferRates(hotelId),
+        ]);
+        if (cancelled) return;
+
+        if (hotelRes.success && hotelRes.data) {
+          let loadedHotel = hotelRes.data;
+          if (!loadedHotel.rooms || loadedHotel.rooms.length === 0) {
+            const roomsRes = await HotelService.getHotelRooms(hotelId);
+            if (!cancelled && roomsRes.success && roomsRes.data.length > 0) {
+              loadedHotel = { ...loadedHotel, rooms: roomsRes.data };
+            }
+          }
+          if (!cancelled) {
+            setHotel(loadedHotel);
+            if (loadedHotel.rooms.length > 0) {
+              setSelectedRoomId(loadedHotel.rooms[0].id);
+            }
+          }
+        } else if (!cancelled) {
+          setError(hotelRes.error || 'Hotel property not found.');
+        }
+
+        if (!cancelled && ratesRes.success && ratesRes.data) {
+          setTransferRates(ratesRes.data);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message || 'Failed to load hotel details.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+    init();
+    return () => {
+      cancelled = true;
+    };
+  }, [hotelId]);
 
   if (isLoading && !hotel) {
     return (
@@ -341,7 +402,7 @@ export default function HotelDetailScreen() {
           <Text style={styles.sectionTitle}>{t('availableRooms')}</Text>
           {hotel.rooms.map((room) => {
             const isSelected = room.id === selectedRoomId;
-            const roomImages = room.photos || [];
+            const roomImages = room.photos || EMPTY_IMAGES;
             return (
               <View
                 key={room.id}
@@ -353,15 +414,9 @@ export default function HotelDetailScreen() {
                 <RoomImageGallery
                   images={roomImages}
                   roomTitle={room.title}
-                  onImagePress={(index) => {
-                    setSelectedRoomId(room.id);
-                    setGalleryModal({
-                      visible: true,
-                      images: roomImages,
-                      initialIndex: index,
-                      title: room.title,
-                    });
-                  }}
+                  onImagePress={(index) =>
+                    handleOpenRoomGallery(room.id, room.title, roomImages, index)
+                  }
                 />
 
                 <TouchableOpacity

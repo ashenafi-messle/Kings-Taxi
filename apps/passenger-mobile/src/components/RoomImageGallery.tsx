@@ -59,16 +59,16 @@ export const RoomImageGallery: React.FC<RoomImageGalleryProps> = React.memo(
     );
 
     const handleLoadStart = useCallback((index: number) => {
-      setLoadingMap((prev) => ({ ...prev, [index]: true }));
+      setLoadingMap((prev) => (prev[index] === true ? prev : { ...prev, [index]: true }));
     }, []);
 
     const handleLoadEnd = useCallback((index: number) => {
-      setLoadingMap((prev) => ({ ...prev, [index]: false }));
+      setLoadingMap((prev) => (prev[index] === false ? prev : { ...prev, [index]: false }));
     }, []);
 
     const handleError = useCallback((index: number) => {
-      setLoadingMap((prev) => ({ ...prev, [index]: false }));
-      setErrorMap((prev) => ({ ...prev, [index]: true }));
+      setLoadingMap((prev) => (prev[index] === false ? prev : { ...prev, [index]: false }));
+      setErrorMap((prev) => (prev[index] === true ? prev : { ...prev, [index]: true }));
     }, []);
 
     if (validImages.length === 0) {
