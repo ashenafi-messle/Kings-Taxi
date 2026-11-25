@@ -1,4 +1,4 @@
-import { prisma } from '../../core/database/prisma';
+import { prisma, isDbConnectionError } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
 import { HotelStatus, HotelCategory, HotelPublicationStatus, HotelVerificationStatus } from '@prisma/client';
 import { CreateHotelDto, UpdateHotelDto, CreateHotelImageDto } from './hospitality.types';
@@ -8,28 +8,7 @@ function isUuid(val?: string | null): boolean {
   return !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
 }
 
-export function isDbConnectionError(err: any): boolean {
-  if (!err) return false;
-  const name = String(err.name || '');
-  const msg = String(err.message || '');
-  const code = String(err.code || '');
-
-  return (
-    name.includes('PrismaClient') ||
-    code.startsWith('P1') ||
-    code === 'ECONNREFUSED' ||
-    code === 'ETIMEDOUT' ||
-    code === 'EADDRNOTAVAIL' ||
-    code === 'EHOSTUNREACH' ||
-    msg.includes("Can't reach database server") ||
-    msg.includes('connection timed out') ||
-    msg.includes('Connection refused') ||
-    msg.includes('connect ECONNREFUSED') ||
-    msg.includes('connect ETIMEDOUT') ||
-    msg.includes('database') ||
-    msg.includes('5433')
-  );
-}
+export { isDbConnectionError };
 
 export const BUILTIN_GONDAR_HOTELS: any[] = [
   {
@@ -573,43 +552,7 @@ export class HotelService {
       if (finalCoverPublicId) {
         await HospitalityImageService.safeDelete(finalCoverPublicId);
       }
-      if (isDbConnectionError(err)) {
-        logger.warn('[createHotel] DB unreachable, creating in-memory fallback hotel');
-        const fallbackHotel = {
-          id: `htl_${Date.now()}`,
-          partnerId: null,
-          category: dto.category || HotelCategory.BOUTIQUE_HERITAGE,
-          coverImageUrl: dto.coverImageUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-          coverImagePublicId: finalCoverPublicId || undefined,
-          name: dto.name,
-          slug,
-          description: dto.description || 'Quality lodging partner in Ethiopia',
-          shortDescription: dto.shortDescription || null,
-          address: dto.address,
-          city: dto.city || 'Gondar',
-          subCity: dto.subCity || null,
-          latitude: Number(dto.latitude || 12.6078),
-          longitude: Number(dto.longitude || 37.4705),
-          contactPhone: dto.contactPhone || '+251 58 111 0000',
-          contactEmail: dto.contactEmail || null,
-          website: dto.website || null,
-          starRating: dto.starRating ? Number(dto.starRating) : 4,
-          checkInTime: dto.checkInTime || '14:00',
-          checkOutTime: dto.checkOutTime || '11:00',
-          timezone: dto.timezone || 'Africa/Addis_Ababa',
-          status: 'PUBLISHED',
-          verificationStatus: 'APPROVED',
-          publicationStatus: 'PUBLISHED',
-          featured: dto.featured ?? false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          roomTypes: [],
-          images: [],
-          _count: { roomTypes: 0, transferRates: 0, hotelBookings: 0 },
-        };
-        BUILTIN_GONDAR_HOTELS.unshift(fallbackHotel);
-        return fallbackHotel as any;
-      }
+      logger.error({ err, name: dto.name }, '[createHotel] Database persistence error creating hotel property');
       throw err;
     }
   }
@@ -1276,9 +1219,16 @@ export class HotelService {
               select: {
                 id: true,
                 name: true,
+                description: true,
                 basePricePerNight: true,
                 totalInventory: true,
+                maximumAdults: true,
+                maximumChildren: true,
+                maximumGuests: true,
                 status: true,
+                images: {
+                  orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+                },
               },
             },
             _count: {

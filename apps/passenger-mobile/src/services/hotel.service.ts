@@ -29,11 +29,12 @@ function mapBackendHotelToMobile(h: any): Hotel {
     'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800';
 
   const rooms: HotelRoom[] = (h.roomTypes || []).map((r: any) => {
+    // Only use photos belonging strictly to this room type
     const roomPhotos = (r.images && Array.isArray(r.images) && r.images.length > 0)
       ? r.images.map((img: any) => typeof img === 'string' ? img : img.imageUrl)
       : (r.photos && Array.isArray(r.photos) && r.photos.length > 0)
       ? r.photos
-      : [heroImage];
+      : [];
 
     return {
       id: r.id,

@@ -129,8 +129,9 @@ export default function HotelDetailPage() {
         description: '',
       });
       loadHotel();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to add room type:', err);
+      setRoomImageError(err.message || 'Failed to add room type to hotel.');
     }
   };
 
@@ -140,6 +141,7 @@ export default function HotelDetailPage() {
       setRoomImageError('A room type must have between 1 and 8 images.');
       return;
     }
+    setRoomImageError(null);
 
     try {
       await HotelService.updateRoomImages(
@@ -149,8 +151,9 @@ export default function HotelDetailPage() {
       );
       setEditingRoomGallery(null);
       loadHotel();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update room gallery:', err);
+      setRoomImageError(err.message || 'Failed to update room gallery.');
     }
   };
 
@@ -654,6 +657,11 @@ export default function HotelDetailPage() {
               </div>
 
               <div className="modal-body py-3">
+                {roomImageError && (
+                  <div className="alert alert-danger py-2 px-3 small mb-3">
+                    {roomImageError}
+                  </div>
+                )}
                 <ImageUploadGallery
                   label="Room Gallery Images (1 to 6 Images)"
                   helperText="Upload, reorder, replace, or set the primary cover photo for this room type."

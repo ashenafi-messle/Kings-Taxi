@@ -328,7 +328,10 @@ export default function HotelDetailScreen() {
           <Text style={styles.sectionTitle}>{t('availableRooms')}</Text>
           {hotel.rooms.map((room) => {
             const isSelected = room.id === selectedRoomId;
-            const primaryPhoto = room.photos && room.photos.length > 0 ? room.photos[0] : hotel.heroImage;
+            const hasRoomPhotos = room.photos && room.photos.length > 0;
+            const primaryPhoto = hasRoomPhotos
+              ? room.photos[0]
+              : 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800&auto=format&fit=crop&q=80';
             return (
               <TouchableOpacity
                 key={room.id}
@@ -344,7 +347,7 @@ export default function HotelDetailScreen() {
                     source={{ uri: primaryPhoto }}
                     style={styles.roomImage}
                   />
-                  {room.photos && room.photos.length > 1 && (
+                  {hasRoomPhotos && room.photos.length > 1 && (
                     <View style={styles.photoCountBadge}>
                       <Camera size={11} color="#FFF" />
                       <Text style={styles.photoCountText}>{room.photos.length} photos</Text>

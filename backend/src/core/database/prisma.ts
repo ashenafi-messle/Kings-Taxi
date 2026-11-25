@@ -42,6 +42,8 @@ export async function disconnectPrisma(): Promise<void> {
 
 /**
  * Robust detection of database unreachable / network failure / SSH tunnel drop conditions.
+ * Only flags genuine network connectivity and initialization failures.
+ * Never flags query, schema, validation, or constraint errors (P2xxx).
  */
 export function isDbConnectionError(err: any): boolean {
   if (!err) return false;
@@ -50,7 +52,7 @@ export function isDbConnectionError(err: any): boolean {
   const code = String(err.code || '');
 
   return (
-    name.includes('PrismaClient') ||
+    name === 'PrismaClientInitializationError' ||
     code.startsWith('P1') ||
     code === 'ECONNREFUSED' ||
     code === 'ETIMEDOUT' ||
@@ -61,8 +63,7 @@ export function isDbConnectionError(err: any): boolean {
     msg.includes('Connection refused') ||
     msg.includes('connect ECONNREFUSED') ||
     msg.includes('connect ETIMEDOUT') ||
-    msg.includes('database') ||
-    msg.includes('5433')
+    msg.includes('Server has closed the connection')
   );
 }
 
