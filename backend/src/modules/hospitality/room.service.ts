@@ -21,6 +21,7 @@ export class RoomService {
    */
   async createRoomType(hotelId: string, dto: CreateRoomTypeDto) {
     const isHotelUuid = isUuid(hotelId);
+
     if (!isHotelUuid) {
       throw new Error('INVALID_HOTEL_ID: Hotel ID must be a valid UUID');
     }
@@ -36,14 +37,6 @@ export class RoomService {
           hotelId,
           name: dto.name,
           description: dto.description || '',
-          maximumAdults: dto.maximumAdults || 2,
-          maximumChildren: dto.maximumChildren || 1,
-          maximumGuests: dto.maximumGuests || 3,
-          totalInventory: dto.totalInventory || 10,
-          basePricePerNight: new Prisma.Decimal(dto.basePricePerNight || 3500),
-          currency: dto.currency || 'ETB',
-        },
-      });
           maximumAdults: dto.maximumAdults || 2,
           maximumChildren: dto.maximumChildren || 1,
           maximumGuests: dto.maximumGuests || 3,
@@ -601,7 +594,7 @@ export class RoomService {
 
       return created;
     } catch (err: any) {
-      logger.error({ err, roomTypeId }, '[setRoomImages] Database error updating room gallery images');
+      logger.error({ err, roomTypeId }, '[setRoomImages] Database error setting room images');
       throw err;
     }
   }
