@@ -35,6 +35,8 @@ import {
   AppHeader,
   RatingComponent,
   PrimaryButton,
+  RoomImageGallery,
+  FullScreenImageModal,
 } from '../../src/components';
 import { HotelService } from '../../src/services/hotel.service';
 import { Hotel, AirportTransferRateDto } from '../../src/types';
@@ -51,6 +53,17 @@ export default function HotelDetailScreen() {
   const [transferRates, setTransferRates] = useState<AirportTransferRateDto[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
+  const [galleryModal, setGalleryModal] = useState<{
+    visible: boolean;
+    images: string[];
+    initialIndex: number;
+    title: string;
+  }>({
+    visible: false,
+    images: [],
+    initialIndex: 0,
+    title: '',
+  });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -328,34 +341,34 @@ export default function HotelDetailScreen() {
           <Text style={styles.sectionTitle}>{t('availableRooms')}</Text>
           {hotel.rooms.map((room) => {
             const isSelected = room.id === selectedRoomId;
-            const hasRoomPhotos = room.photos && room.photos.length > 0;
-            const primaryPhoto = hasRoomPhotos
-              ? room.photos[0]
-              : 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800&auto=format&fit=crop&q=80';
+            const roomImages = room.photos || [];
             return (
-              <TouchableOpacity
+              <View
                 key={room.id}
-                activeOpacity={0.85}
-                onPress={() => setSelectedRoomId(room.id)}
                 style={[
                   styles.roomCard,
                   isSelected && styles.roomCardSelected,
                 ]}
               >
-                <View style={styles.roomImageContainer}>
-                  <Image
-                    source={{ uri: primaryPhoto }}
-                    style={styles.roomImage}
-                  />
-                  {hasRoomPhotos && room.photos.length > 1 && (
-                    <View style={styles.photoCountBadge}>
-                      <Camera size={11} color="#FFF" />
-                      <Text style={styles.photoCountText}>{room.photos.length} photos</Text>
-                    </View>
-                  )}
-                </View>
+                <RoomImageGallery
+                  images={roomImages}
+                  roomTitle={room.title}
+                  onImagePress={(index) => {
+                    setSelectedRoomId(room.id);
+                    setGalleryModal({
+                      visible: true,
+                      images: roomImages,
+                      initialIndex: index,
+                      title: room.title,
+                    });
+                  }}
+                />
 
-                <View style={styles.roomDetails}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setSelectedRoomId(room.id)}
+                  style={styles.roomDetails}
+                >
                   <View style={styles.roomHeaderRow}>
                     <Text style={styles.roomTitle}>{room.title}</Text>
                     {isSelected && (
@@ -378,17 +391,33 @@ export default function HotelDetailScreen() {
                     </View>
                   </View>
 
-                  {/* Independent room gallery thumbnails for selected room */}
-                  {isSelected && room.photos && room.photos.length > 1 && (
+                  {/* Independent room gallery thumbnails for quick jump to full-screen */}
+                  {roomImages.length > 1 && (
                     <View style={styles.roomGalleryContainer}>
-                      <Text style={styles.roomGalleryLabel}>Room Photo Gallery ({room.photos.length} photos):</Text>
+                      <Text style={styles.roomGalleryLabel}>Room Photo Gallery ({roomImages.length} photos):</Text>
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.roomGalleryScroll}
                       >
-                        {room.photos.map((photoUri, pIdx) => (
-                          <View key={pIdx} style={styles.roomGalleryThumbWrap}>
+                        {roomImages.map((photoUri, pIdx) => (
+                          <TouchableOpacity
+                            key={pIdx}
+                            activeOpacity={0.8}
+                            onPress={() => {
+                              setSelectedRoomId(room.id);
+                              setGalleryModal({
+                                visible: true,
+                                images: roomImages,
+                                initialIndex: pIdx,
+                                title: room.title,
+                              });
+                            }}
+                            style={styles.roomGalleryThumbWrap}
+                            accessible
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${room.title} photo ${pIdx + 1} in full screen`}
+                          >
                             <Image
                               source={{ uri: photoUri }}
                               style={styles.roomGalleryThumb}
@@ -398,7 +427,7 @@ export default function HotelDetailScreen() {
                                 <Text style={styles.primaryPhotoText}>Primary</Text>
                               </View>
                             )}
-                          </View>
+                          </TouchableOpacity>
                         ))}
                       </ScrollView>
                     </View>
@@ -415,8 +444,8 @@ export default function HotelDetailScreen() {
                         : 'Available on request'}
                     </Text>
                   </View>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             );
           })}
         </View>
@@ -445,6 +474,14 @@ export default function HotelDetailScreen() {
           style={styles.reserveBtn}
         />
       </ScrollView>
+
+      <FullScreenImageModal
+        visible={galleryModal.visible}
+        images={galleryModal.images}
+        initialIndex={galleryModal.initialIndex}
+        title={galleryModal.title}
+        onClose={() => setGalleryModal((prev) => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 }
