@@ -67,7 +67,7 @@ export default function HotelDetailScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const hotelId = (id as string) || (hotel ? hotel.id : '');
+  const hotelId = Array.isArray(id) ? id[0] || '' : id || '';
 
   const loadHotel = useCallback(async () => {
     if (!hotelId) return;

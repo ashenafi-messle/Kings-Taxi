@@ -99,8 +99,55 @@ export default function HotelsTabScreen() {
   }, [activeCategory, selectedCityId, searchQuery]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let cancelled = false;
+
+    async function fetchInitial() {
+      setIsLoading(true);
+      setErrorMessage(null);
+      try {
+        if (activeCategory === 'HOTELS') {
+          const res = await HotelService.searchHotels(searchQuery, selectedCityId);
+          if (!cancelled) {
+            if (res.success && res.data) {
+              setHotels(res.data);
+            } else {
+              setErrorMessage(res.error || 'Unable to retrieve partner hotels at this time.');
+            }
+          }
+        } else {
+          const res = await HotelService.listLounges(selectedCityId);
+          if (!cancelled) {
+            if (res.success && res.data) {
+              let list = res.data;
+              if (searchQuery) {
+                list = list.filter(
+                  (l) =>
+                    l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    l.address.toLowerCase().includes(searchQuery.toLowerCase())
+                );
+              }
+              setLounges(list);
+            } else {
+              setErrorMessage(res.error || 'Unable to retrieve VIP lounges at this time.');
+            }
+          }
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setErrorMessage(err.message || 'Network connection issue. Please check your internet connection.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchInitial();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCategory, selectedCityId, searchQuery]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

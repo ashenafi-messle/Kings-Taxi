@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -58,9 +58,11 @@ const ZoomableImageSlide: React.FC<ZoomableSlideProps> = React.memo(
     const savedTranslateX = useSharedValue(0);
     const savedTranslateY = useSharedValue(0);
 
-    // Reset zoom & pan whenever slide becomes inactive
+    const wasActiveRef = useRef(isActive);
+
+    // Reset zoom & pan only when an active slide becomes inactive
     useEffect(() => {
-      if (!isActive) {
+      if (wasActiveRef.current && !isActive) {
         scale.value = withTiming(1, { duration: 150 });
         savedScale.value = 1;
         translateX.value = withTiming(0, { duration: 150 });
@@ -69,6 +71,7 @@ const ZoomableImageSlide: React.FC<ZoomableSlideProps> = React.memo(
         savedTranslateY.value = 0;
         onZoomChange(false);
       }
+      wasActiveRef.current = isActive;
     }, [isActive, onZoomChange, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
 
     const notifyZoom = useCallback(
@@ -203,9 +206,13 @@ export const FullScreenImageModal: React.FC<FullScreenImageModalProps> = ({
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList<string>>(null);
 
-  const validImages = Array.isArray(images)
-    ? images.filter((uri) => typeof uri === 'string' && uri.trim().length > 0)
-    : [];
+  const validImages = useMemo(
+    () =>
+      Array.isArray(images)
+        ? images.filter((uri) => typeof uri === 'string' && uri.trim().length > 0)
+        : [],
+    [images]
+  );
 
   const safeInitialIndex = Math.max(
     0,

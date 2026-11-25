@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,16 +32,20 @@ export const RoomImageGallery: React.FC<RoomImageGalleryProps> = React.memo(
     const [errorMap, setErrorMap] = useState<Record<number, boolean>>({});
     const flatListRef = useRef<FlatList<string>>(null);
 
-    const validImages = Array.isArray(images)
-      ? images.filter((uri) => typeof uri === 'string' && uri.trim().length > 0)
-      : [];
+    const validImages = useMemo(
+      () =>
+        Array.isArray(images)
+          ? images.filter((uri) => typeof uri === 'string' && uri.trim().length > 0)
+          : [],
+      [images]
+    );
 
     const handleLayout = useCallback((e: LayoutChangeEvent) => {
       const width = Math.round(e.nativeEvent.layout.width);
-      if (width > 0 && width !== containerWidth) {
-        setContainerWidth(width);
+      if (width > 0) {
+        setContainerWidth((prev) => (prev === width ? prev : width));
       }
-    }, [containerWidth]);
+    }, []);
 
     const handleScrollEnd = useCallback(
       (e: NativeSyntheticEvent<NativeScrollEvent>) => {
