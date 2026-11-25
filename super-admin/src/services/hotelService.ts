@@ -117,7 +117,8 @@ export class HotelService {
     if (params.page) q.set('page', String(params.page));
     if (params.limit) q.set('limit', String(params.limit));
 
-    const res = await apiRequest<any>(`/admin/hotels?${q.toString()}`);
+    const qs = q.toString();
+    const res = await apiRequest<any>(qs ? `/admin/hotels?${qs}` : '/admin/hotels');
     if (res.success && res.data?.hotels && Array.isArray(res.data.hotels)) {
       let mappedHotels: Hotel[] = res.data.hotels.map((h: any) => ({
         id: h.id,

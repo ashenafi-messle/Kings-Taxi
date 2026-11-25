@@ -875,35 +875,41 @@ export class HotelService {
       const limit = Math.min(50, Math.max(1, params.limit || 10));
       const skip = (page - 1) * limit;
 
-      const where: any = {
-        OR: [
-          { status: HotelStatus.PUBLISHED },
-          { publicationStatus: HotelPublicationStatus.PUBLISHED },
-        ],
-        status: { not: HotelStatus.ARCHIVED },
-      };
+      const andConditions: any[] = [
+        {
+          OR: [
+            { status: HotelStatus.PUBLISHED },
+            { publicationStatus: HotelPublicationStatus.PUBLISHED },
+          ],
+        },
+        { status: { not: HotelStatus.ARCHIVED } },
+      ];
 
       if (params.city && params.city !== 'ALL') {
-        where.city = { equals: params.city, mode: 'insensitive' };
+        andConditions.push({ city: { equals: params.city, mode: 'insensitive' } });
       }
 
       if (params.featured !== undefined) {
-        where.featured = params.featured;
+        andConditions.push({ featured: params.featured });
       }
 
       if (params.starRating) {
-        where.starRating = { gte: params.starRating };
+        andConditions.push({ starRating: { gte: params.starRating } });
       }
 
       if (params.search && params.search.trim()) {
         const q = params.search.trim();
-        where.OR = [
-          { name: { contains: q, mode: 'insensitive' } },
-          { address: { contains: q, mode: 'insensitive' } },
-          { city: { contains: q, mode: 'insensitive' } },
-          { description: { contains: q, mode: 'insensitive' } },
-        ];
+        andConditions.push({
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { address: { contains: q, mode: 'insensitive' } },
+            { city: { contains: q, mode: 'insensitive' } },
+            { description: { contains: q, mode: 'insensitive' } },
+          ],
+        });
       }
+
+      const where: any = { AND: andConditions };
 
       const [hotels, total] = await Promise.all([
         prisma.hotel.findMany({
@@ -1043,13 +1049,7 @@ export class HotelService {
         },
       };
     } catch (err: any) {
-      if (isDbConnectionError(err)) {
-        logger.warn(
-          { err: err.message },
-          '[Hospitality] Database unreachable on port 5433. Serving built-in Gondar hotels for development.'
-        );
-        return this.getBuiltinHotels(params);
-      }
+      logger.error({ err }, '[listPublishedHotels] Database error retrieving published hotels');
       throw err;
     }
   }
@@ -1153,9 +1153,6 @@ export class HotelService {
       });
 
       if (!hotel) {
-        if (!isIdUuid) {
-          return this.getBuiltinHotelDetails(idOrSlug);
-        }
         return null;
       }
 
@@ -1174,7 +1171,7 @@ export class HotelService {
           basePricePerNight: Number(r.basePricePerNight),
           photos: (r.images && r.images.length > 0)
             ? r.images.map((img) => img.imageUrl)
-            : (coverImage ? [coverImage] : []),
+            : [],
           rates: r.rates.map((rt) => ({
             ...rt,
             pricePerNight: Number(rt.pricePerNight),
@@ -1186,13 +1183,7 @@ export class HotelService {
         })),
       };
     } catch (err: any) {
-      if (isDbConnectionError(err) || !isIdUuid) {
-        logger.warn(
-          { err: err.message },
-          `[Hospitality] Database unreachable. Serving built-in details for ${idOrSlug}`
-        );
-        return this.getBuiltinHotelDetails(idOrSlug);
-      }
+      logger.error({ err, idOrSlug }, '[getHotelDetails] Database error retrieving hotel details');
       throw err;
     }
   }
@@ -1256,31 +1247,7 @@ export class HotelService {
         },
       };
     } catch (err: any) {
-      if (isDbConnectionError(err)) {
-        logger.warn('[listAdminHotels] DB unreachable, returning built-in hotels');
-        const hotels = BUILTIN_GONDAR_HOTELS.map((h) => ({
-          ...h,
-          partner: {
-            id: 'hp-gondar-hospitality-corp',
-            businessName: 'Gondar Heritage Hospitality Group Ltd',
-            partnerCode: 'HP-10001',
-          },
-          _count: {
-            roomTypes: h.roomTypes?.length || 3,
-            transferRates: 1,
-            hotelBookings: 5,
-          },
-        }));
-        return {
-          hotels,
-          pagination: {
-            page: 1,
-            limit,
-            total: hotels.length,
-            totalPages: 1,
-          },
-        };
-      }
+      logger.error({ err }, '[listAdminHotels] Database error listing admin hotels');
       throw err;
     }
   }

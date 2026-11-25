@@ -7,38 +7,53 @@ import { loungeService } from './lounge.service';
 import { ApiResponse } from '../../core/response/apiResponse';
 import { logger } from '../../core/logging/logger';
 import { CloudinaryService } from '../../integrations/cloudinary/cloudinary.service';
+import { isDbConnectionError } from '../../core/database/prisma';
 
 function handleHospitalityError(res: Response, err: any, fallbackMessage: string) {
-  const name = String(err?.name || '');
   const msg = String(err?.message || '');
-  const code = String(err?.code || '');
 
-  const isDbDown =
-    name.includes('PrismaClient') ||
-    code.startsWith('P1') ||
-    code === 'ECONNREFUSED' ||
-    code === 'ETIMEDOUT' ||
-    code === 'EADDRNOTAVAIL' ||
-    code === 'EHOSTUNREACH' ||
-    msg.includes("Can't reach database server") ||
-    msg.includes('connection timed out') ||
-    msg.includes('Connection refused') ||
-    msg.includes('connect ECONNREFUSED') ||
-    msg.includes('connect ETIMEDOUT') ||
-    msg.includes('database') ||
-    msg.includes('5433');
-
-  if (isDbDown) {
+  if (isDbConnectionError(err)) {
     ApiResponse.error(
       res,
       'DEPENDENCY_UNAVAILABLE',
-      'PostgreSQL database server at 127.0.0.1:5433 is unreachable. Ensure the SSH tunnel is active: ssh -N -L 5433:172.18.0.7:5432 ambelu@196.188.250.186',
+      'Database service is temporarily unavailable. Please try again shortly.',
       503
     );
     return;
   }
 
   ApiResponse.serverError(res, msg || fallbackMessage);
+}
+
+function handleAdminMutationError(res: Response, err: any, fallbackMessage: string) {
+  if (isDbConnectionError(err)) {
+    handleHospitalityError(res, err, fallbackMessage);
+    return;
+  }
+
+  const msg = String(err?.message || '');
+  const code = String(err?.code || '');
+  if (msg.includes('NOT_FOUND') || code === 'P2025') {
+    ApiResponse.notFound(res, msg.split(': ')[1] || msg || 'Resource not found');
+    return;
+  }
+  if (
+    msg.startsWith('INVALID_') ||
+    msg.includes('REQUIRED') ||
+    msg.includes('must be') ||
+    msg.includes('between') ||
+    code === 'P2002' ||
+    code === 'P2003'
+  ) {
+    ApiResponse.badRequest(res, msg || fallbackMessage);
+    return;
+  }
+  if (err?.name?.includes('PrismaClient')) {
+    ApiResponse.serverError(res, fallbackMessage);
+    return;
+  }
+
+  ApiResponse.badRequest(res, msg || fallbackMessage);
 }
 
 export class HospitalityController {
@@ -412,13 +427,26 @@ export class HospitalityController {
 
   async adminListHotels(req: Request, res: Response) {
     try {
-      const page = req.query.page ? Number(req.query.page) : 1;
-      const limit = req.query.limit ? Number(req.query.limit) : 20;
+      const rawPage = req.query.page;
+      const rawLimit = req.query.limit;
+
+      const page = rawPage !== undefined ? Number(rawPage) : 1;
+      const limit = rawLimit !== undefined ? Number(rawLimit) : 20;
+
+      if (!Number.isInteger(page) || page < 1) {
+        ApiResponse.badRequest(res, 'Invalid page parameter. Must be a positive integer.');
+        return;
+      }
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+        ApiResponse.badRequest(res, 'Invalid limit parameter. Must be an integer between 1 and 200.');
+        return;
+      }
+
       const result = await hotelService.listAdminHotels(page, limit);
       ApiResponse.success(res, result, 'Admin hotels retrieved successfully');
     } catch (err: any) {
       logger.error({ err }, 'Error in adminListHotels');
-      ApiResponse.serverError(res, 'Unable to list hotels');
+      handleHospitalityError(res, err, 'Unable to list hotels');
     }
   }
 
@@ -426,10 +454,10 @@ export class HospitalityController {
     try {
       const adminId = req.user?.sub;
       const hotel = await hotelService.createHotel(req.body, adminId);
-      ApiResponse.created(res, hotel, 'Hotel created successfully in DRAFT status');
+      ApiResponse.created(res, hotel, 'Hotel created successfully');
     } catch (err: any) {
       logger.error({ err }, 'Error in adminCreateHotel');
-      ApiResponse.badRequest(res, err.message || 'Unable to create hotel');
+      handleAdminMutationError(res, err, 'Unable to create hotel');
     }
   }
 
@@ -442,7 +470,8 @@ export class HospitalityController {
       }
       ApiResponse.success(res, hotel, 'Hotel retrieved successfully');
     } catch (err: any) {
-      ApiResponse.serverError(res, 'Unable to retrieve hotel');
+      logger.error({ err }, 'Error in adminGetHotel');
+      handleHospitalityError(res, err, 'Unable to retrieve hotel');
     }
   }
 
@@ -452,7 +481,8 @@ export class HospitalityController {
       const updated = await hotelService.updateHotel(req.params.id, req.body, adminId);
       ApiResponse.success(res, updated, 'Hotel updated successfully');
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to update hotel');
+      logger.error({ err }, 'Error in adminUpdateHotel');
+      handleAdminMutationError(res, err, 'Unable to update hotel');
     }
   }
 
@@ -463,7 +493,8 @@ export class HospitalityController {
       const verified = await hotelService.verifyHotel(req.params.id, verificationStatus, adminId, reason);
       ApiResponse.success(res, verified, `Hotel verification updated to ${verificationStatus}`);
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to update hotel verification');
+      logger.error({ err }, 'Error in adminVerifyHotel');
+      handleAdminMutationError(res, err, 'Unable to update hotel verification');
     }
   }
 
@@ -472,7 +503,8 @@ export class HospitalityController {
       const deleted = await hotelService.deleteHotel(req.params.id);
       ApiResponse.success(res, deleted, 'Hotel deleted or archived successfully');
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to delete hotel');
+      logger.error({ err }, 'Error in adminDeleteHotel');
+      handleAdminMutationError(res, err, 'Unable to delete hotel');
     }
   }
 
@@ -482,7 +514,8 @@ export class HospitalityController {
       const published = await hotelService.publishHotel(req.params.id, adminId);
       ApiResponse.success(res, published, 'Hotel published successfully to mobile passenger app');
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to publish hotel');
+      logger.error({ err }, 'Error in adminPublishHotel');
+      handleAdminMutationError(res, err, 'Unable to publish hotel');
     }
   }
 
@@ -492,7 +525,8 @@ export class HospitalityController {
       const unpublished = await hotelService.unpublishHotel(req.params.id, adminId);
       ApiResponse.success(res, unpublished, 'Hotel unpublished successfully');
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to unpublish hotel');
+      logger.error({ err }, 'Error in adminUnpublishHotel');
+      handleAdminMutationError(res, err, 'Unable to unpublish hotel');
     }
   }
 
@@ -508,7 +542,7 @@ export class HospitalityController {
       ApiResponse.success(res, updated, 'Hotel cover image uploaded successfully to Cloudinary');
     } catch (err: any) {
       logger.error({ err }, 'Error uploading hotel cover image');
-      ApiResponse.badRequest(res, err.message || 'Unable to upload cover image');
+      handleAdminMutationError(res, err, 'Unable to upload cover image');
     }
   }
 
@@ -517,7 +551,8 @@ export class HospitalityController {
       const image = await hotelService.addImage(req.params.id, req.body);
       ApiResponse.created(res, image, 'Hotel image added successfully');
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to add image');
+      logger.error({ err }, 'Error in adminAddHotelImage');
+      handleAdminMutationError(res, err, 'Unable to add image');
     }
   }
 
@@ -526,7 +561,8 @@ export class HospitalityController {
       await hotelService.deleteImage(req.params.imageId);
       ApiResponse.success(res, { deleted: true }, 'Hotel image deleted successfully');
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to delete image');
+      logger.error({ err }, 'Error in adminDeleteHotelImage');
+      handleAdminMutationError(res, err, 'Unable to delete image');
     }
   }
 
@@ -535,7 +571,8 @@ export class HospitalityController {
       const room = await roomService.createRoomType(req.params.id, req.body);
       ApiResponse.created(res, room, 'Room type created successfully');
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to create room type');
+      logger.error({ err }, 'Error in adminCreateRoomType');
+      handleAdminMutationError(res, err, 'Unable to create room type');
     }
   }
 
@@ -544,7 +581,8 @@ export class HospitalityController {
       const updated = await roomService.updateRoomType(req.params.roomTypeId, req.body);
       ApiResponse.success(res, updated, 'Room type updated successfully');
     } catch (err: any) {
-      ApiResponse.badRequest(res, err.message || 'Unable to update room type');
+      logger.error({ err }, 'Error in adminUpdateRoomType');
+      handleAdminMutationError(res, err, 'Unable to update room type');
     }
   }
 

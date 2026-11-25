@@ -24,18 +24,21 @@ export default function HotelsPage() {
   const router = useRouter();
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState('ALL');
 
   const fetchHotels = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const res = await HotelService.getHotels({
         city: cityFilter,
         limit: 100,
       });
       setHotels(res.items);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load hotels:', err);
+      setError(err?.message || 'Unable to load partner hotels from the server.');
     } finally {
       setIsLoading(false);
     }
@@ -198,6 +201,15 @@ export default function HotelsPage() {
           </div>
         }
       />
+
+      {error && (
+        <div className="alert alert-danger d-flex align-items-center justify-content-between py-2.5 px-3 mb-3 rounded-3 text-sm">
+          <span>{error}</span>
+          <button type="button" className="btn btn-outline-danger btn-sm" onClick={fetchHotels}>
+            Retry
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={columns}

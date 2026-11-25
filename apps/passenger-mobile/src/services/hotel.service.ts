@@ -12,7 +12,6 @@ import {
   Lounge,
   LoungeReservation,
 } from '../types';
-import { mockHotels } from '../mocks';
 
 async function requestWithAuth<T>(
   endpoint: string,
@@ -87,22 +86,9 @@ function mapBackendHotelToMobile(h: any): Hotel {
     },
     phone: h.contactPhone || h.phone || '+251 58 111 0000',
     email: h.contactEmail || h.email || 'hospitality@kingstaxi.et',
-    startingPricePerNight: Number(h.startingPrice ?? h.startingPriceETB ?? (rooms[0]?.pricePerNight || 3500)),
-    rooms: rooms.length > 0 ? rooms : [
-      {
-        id: `${h.id}-deluxe`,
-        title: 'Deluxe Panorama Room',
-        description: 'Spacious guest room with panoramic valley and city views.',
-        pricePerNight: Number(h.startingPrice ?? h.startingPriceETB ?? 3500),
-        capacityAdults: 2,
-        capacityChildren: 1,
-        bedType: '1 King Bed',
-        amenities: ['Free Wi-Fi', 'Balcony', 'Breakfast', 'Ensuite Bath'],
-        photos: [heroImage],
-        availableCount: 4,
-      },
-    ],
-    transferAvailable: true,
+    startingPricePerNight: Number(h.startingPrice ?? h.startingPriceETB ?? (rooms[0]?.pricePerNight || 0)),
+    rooms,
+    transferAvailable: Boolean(h.airportTransferAvailable),
   };
 }
 
@@ -128,29 +114,10 @@ export class HotelService {
       return { success: true, data: mapped };
     }
 
-    // In development only, if network request failed completely, fallback gracefully
-    if (process.env.NODE_ENV !== 'production' && !res.success) {
-      let list = [...mockHotels];
-      if (city && city !== 'ALL') {
-        list = list.filter((h) => h.city.toLowerCase() === city.toLowerCase());
-      }
-      if (query) {
-        list = list.filter(
-          (h) =>
-            h.name.toLowerCase().includes(query.toLowerCase()) ||
-            h.city.toLowerCase().includes(query.toLowerCase())
-        );
-      }
-      return {
-        success: true,
-        data: list,
-      };
-    }
-
     return {
-      success: res.success,
+      success: false,
       data: [],
-      error: res.error || 'Failed to retrieve hotels',
+      error: res.error || 'Failed to retrieve hotels from server',
     };
   }
 
@@ -165,12 +132,13 @@ export class HotelService {
       ? res.data.hotels
       : null;
 
-    if (res.success && rawList && rawList.length > 0) {
+    if (res.success && rawList !== null) {
       return { success: true, data: rawList.map(mapBackendHotelToMobile) };
     }
     return {
-      success: true,
-      data: mockHotels.slice(0, 3),
+      success: false,
+      data: [],
+      error: res.error || 'Failed to retrieve featured hotels',
     };
   }
 
@@ -184,22 +152,6 @@ export class HotelService {
         success: true,
         data: mapBackendHotelToMobile(res.data),
       };
-    }
-
-    // In development fallback if backend is offline
-    if (process.env.NODE_ENV !== 'production' && !res.success) {
-      const clean = (s: string) => (s || '').toLowerCase().replace(/^(htl_|h_)/, '').replace(/[-_]/g, '');
-      const target = clean(idOrSlug);
-      const fallback =
-        mockHotels.find(
-          (h) => h.id === idOrSlug || (h as any).slug === idOrSlug || clean(h.id) === target
-        ) || null;
-      if (fallback) {
-        return {
-          success: true,
-          data: fallback,
-        };
-      }
     }
 
     return {
