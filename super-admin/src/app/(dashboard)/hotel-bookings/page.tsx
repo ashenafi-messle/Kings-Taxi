@@ -267,59 +267,64 @@ export default function HotelBookingsPage() {
       key: 'actions',
       header: 'Actions',
       align: 'right',
-      render: (b) => (
-        <div className="d-flex align-items-center justify-content-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-          {b.bookingStatus === 'PENDING' && (
-            <>
-              <button
-                type="button"
-                className="btn btn-sm py-1 px-2.5 fw-bold d-flex align-items-center gap-1 border-0 rounded-2"
-                style={{ backgroundColor: '#EAF7EE', color: '#15803D' }}
-                title="Accept Hotel Booking Request"
-                onClick={() => setAcceptingBooking(b)}
-              >
-                <Check size={14} />
-                <span>Accept</span>
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm py-1 px-2.5 fw-bold d-flex align-items-center gap-1 border-0 rounded-2"
-                style={{ backgroundColor: '#FEE8E8', color: '#B91C1C' }}
-                title="Decline Hotel Booking Request"
-                onClick={() => setDecliningBooking(b)}
-              >
-                <X size={14} />
-                <span>Decline</span>
-              </button>
-            </>
-          )}
+      render: (b) => {
+        const needsReview =
+          b.bookingStatus === 'PENDING' ||
+          (b.bookingStatus === 'CONFIRMED' && !b.reviewedAt && b.paymentStatus === 'PENDING');
+        return (
+          <div className="d-flex align-items-center justify-content-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+            {needsReview && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-sm py-1 px-2.5 fw-bold d-flex align-items-center gap-1 border-0 rounded-2"
+                  style={{ backgroundColor: '#EAF7EE', color: '#15803D' }}
+                  title="Confirm Hotel Booking Request"
+                  onClick={() => setAcceptingBooking(b)}
+                >
+                  <Check size={14} />
+                  <span>Confirm</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm py-1 px-2.5 fw-bold d-flex align-items-center gap-1 border-0 rounded-2"
+                  style={{ backgroundColor: '#FEE8E8', color: '#B91C1C' }}
+                  title="Decline Hotel Booking Request"
+                  onClick={() => setDecliningBooking(b)}
+                >
+                  <X size={14} />
+                  <span>Decline</span>
+                </button>
+              </>
+            )}
 
-          {b.bookingStatus === 'CONFIRMED' && (
-            <button
-              type="button"
-              className="btn btn-outline-success btn-sm py-1 px-2 text-xs d-flex align-items-center gap-1"
-              title="Confirm Check-In Arrival"
-              onClick={async () => {
-                await HotelService.updateBookingStatus(b.id, 'CHECKED_IN');
-                fetchBookings();
-                showToast('success', `Guest marked as Checked-In for ${b.bookingReference}.`);
-              }}
+            {b.bookingStatus === 'CONFIRMED' && Boolean(b.reviewedAt) && (
+              <button
+                type="button"
+                className="btn btn-outline-success btn-sm py-1 px-2 text-xs d-flex align-items-center gap-1"
+                title="Confirm Check-In Arrival"
+                onClick={async () => {
+                  await HotelService.updateBookingStatus(b.id, 'CHECKED_IN');
+                  fetchBookings();
+                  showToast('success', `Guest marked as Checked-In for ${b.bookingReference}.`);
+                }}
+              >
+                <CheckCircle size={13} />
+                <span>Check In</span>
+              </button>
+            )}
+
+            <Link
+              href={`/hotel-bookings/${b.id}`}
+              className="btn btn-light btn-sm p-1.5 text-secondary hover-gold border"
+              style={{ backgroundColor: '#FFFDF7', borderColor: '#E8E3D8' }}
+              title="View Full Booking Details"
             >
-              <CheckCircle size={13} />
-              <span>Check In</span>
-            </button>
-          )}
-
-          <Link
-            href={`/hotel-bookings/${b.id}`}
-            className="btn btn-light btn-sm p-1.5 text-secondary hover-gold border"
-            style={{ backgroundColor: '#FFFDF7', borderColor: '#E8E3D8' }}
-            title="View Full Booking Details"
-          >
-            <Eye size={15} />
-          </Link>
-        </div>
-      ),
+              <Eye size={15} />
+            </Link>
+          </div>
+        );
+      },
     },
   ];
 

@@ -307,7 +307,13 @@ export class RoomService {
       let resolvedHotelId = hotelId;
       if (!isUuid(hotelId)) {
         const hotelBySlug = await prisma.hotel.findUnique({ where: { slug: hotelId }, select: { id: true } });
-        if (!hotelBySlug) {
+        if (hotelBySlug) {
+          resolvedHotelId = hotelBySlug.id;
+        } else if (
+          hotelId.startsWith('htl_') ||
+          hotelId.startsWith('h_') ||
+          BUILTIN_GONDAR_HOTELS.some((h) => h.id === hotelId || h.slug === hotelId)
+        ) {
           return this.getBuiltinRoomAvailability(
             hotelId,
             checkInDate,
@@ -317,7 +323,6 @@ export class RoomService {
             roomsNeeded
           );
         }
-        resolvedHotelId = hotelBySlug.id;
       }
 
       // Fetch active room types for this hotel

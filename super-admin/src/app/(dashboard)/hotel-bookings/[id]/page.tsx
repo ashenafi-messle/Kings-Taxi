@@ -160,7 +160,8 @@ export default function HotelBookingDetailPage() {
               <span>Back to List</span>
             </Link>
 
-            {booking.bookingStatus === 'PENDING' && (
+            {(booking.bookingStatus === 'PENDING' ||
+              (booking.bookingStatus === 'CONFIRMED' && !booking.reviewedAt && booking.paymentStatus === 'PENDING')) && (
               <>
                 <button
                   type="button"
@@ -168,7 +169,7 @@ export default function HotelBookingDetailPage() {
                   onClick={() => setShowAcceptModal(true)}
                 >
                   <Check size={16} />
-                  <span>Accept Booking</span>
+                  <span>Confirm Booking</span>
                 </button>
                 <button
                   type="button"
@@ -181,7 +182,7 @@ export default function HotelBookingDetailPage() {
               </>
             )}
 
-            {booking.bookingStatus === 'CONFIRMED' && (
+            {booking.bookingStatus === 'CONFIRMED' && Boolean(booking.reviewedAt) && (
               <button
                 type="button"
                 className="btn btn-outline-success btn-sm d-flex align-items-center gap-1.5"

@@ -1055,7 +1055,7 @@ export class HospitalityBookingService {
           throw new Error('Hotel booking not found.');
         }
 
-        if (booking.bookingStatus === 'CONFIRMED') {
+        if (booking.bookingStatus === 'CONFIRMED' && booking.reviewedAt) {
           throw new Error('This booking has already been accepted and confirmed.');
         }
 
