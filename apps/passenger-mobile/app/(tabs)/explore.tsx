@@ -9,40 +9,31 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Compass, Hotel as HotelIcon, Landmark, Route } from 'lucide-react-native';
+import { Compass, Landmark, Route } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import {
   SearchInput,
-  HotelCard,
   HeritageCard,
   EmptyState,
 } from '../../src/components';
-import { HotelService } from '../../src/services/hotel.service';
 import { HeritageService } from '../../src/services/heritage.service';
-import { Hotel, HeritageSite } from '../../src/types';
+import { HeritageSite } from '../../src/types';
 import { useTranslation } from '../../src/i18n';
 
-type CategoryFilter = 'all' | 'hotels' | 'heritage' | 'tours';
+type CategoryFilter = 'all' | 'heritage' | 'tours';
 
 export default function ExploreScreen() {
   const router = useRouter();
-  const { t } = useTranslation(['heritage', 'hotels', 'home', 'common']);
+  const { t } = useTranslation(['heritage', 'home', 'common']);
   const [selectedFilter, setSelectedFilter] = useState<CategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [hotels, setHotels] = useState<Hotel[]>([]);
   const [heritageSites, setHeritageSites] = useState<HeritageSite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadExploreData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [hotelsRes, sitesRes] = await Promise.all([
-        HotelService.searchHotels(),
-        HeritageService.getAllSites(),
-      ]);
-      if (hotelsRes.success && Array.isArray(hotelsRes.data)) {
-        setHotels(hotelsRes.data);
-      }
+      const sitesRes = await HeritageService.getAllSites();
       if (sitesRes.success && Array.isArray(sitesRes.data)) {
         setHeritageSites(sitesRes.data);
       }
@@ -57,23 +48,13 @@ export default function ExploreScreen() {
     }, [loadExploreData])
   );
 
-  const filteredHotels = hotels.filter(
-    (h) =>
-      h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      h.city.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   const filteredHeritage = heritageSites.filter(
     (s) =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.region.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const hasResults =
-    (selectedFilter === 'all' && (filteredHotels.length > 0 || filteredHeritage.length > 0)) ||
-    (selectedFilter === 'hotels' && filteredHotels.length > 0) ||
-    (selectedFilter === 'heritage' && filteredHeritage.length > 0) ||
-    selectedFilter === 'tours';
+  const hasResults = filteredHeritage.length > 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -110,24 +91,6 @@ export default function ExploreScreen() {
               ]}
             >
               {t('heritage:categories.all')}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterPill, selectedFilter === 'hotels' && styles.filterPillActive]}
-            onPress={() => setSelectedFilter('hotels')}
-          >
-            <HotelIcon
-              size={14}
-              color={selectedFilter === 'hotels' ? theme.colors.antiqueGold : theme.colors.textMuted}
-            />
-            <Text
-              style={[
-                styles.filterPillText,
-                selectedFilter === 'hotels' && styles.filterPillTextActive,
-              ]}
-            >
-              {t('home:services.hotelsTitle')}
             </Text>
           </TouchableOpacity>
 
@@ -173,7 +136,11 @@ export default function ExploreScreen() {
         contentContainerStyle={styles.scrollList}
         showsVerticalScrollIndicator={false}
       >
-        {!hasResults ? (
+        {isLoading && heritageSites.length === 0 ? (
+          <View style={{ paddingVertical: 48, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={theme.colors.antiqueGold} />
+          </View>
+        ) : !hasResults ? (
           <EmptyState
             title={t('common:noResults')}
             description={t('common:empty')}
@@ -184,55 +151,26 @@ export default function ExploreScreen() {
             }}
           />
         ) : (
-          <>
-            {/* Heritage Sites Section */}
-            {(selectedFilter === 'all' || selectedFilter === 'heritage' || selectedFilter === 'tours') && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{t('heritage:categories.historical')}</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    {t('heritage:categories.unesco')}
-                  </Text>
-                </View>
-                {filteredHeritage.map((site) => (
-                  <HeritageCard
-                    key={site.id}
-                    site={site}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/heritage/[id]',
-                        params: { id: site.id },
-                      })
-                    }
-                  />
-                ))}
-              </View>
-            )}
-
-            {/* Verified Hotels Section */}
-            {(selectedFilter === 'all' || selectedFilter === 'hotels') && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Verified Ethiopian Hotels</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    Curated luxury, resort, and boutique accommodations
-                  </Text>
-                </View>
-                {filteredHotels.map((hotel) => (
-                  <HotelCard
-                    key={hotel.id}
-                    hotel={hotel}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/hotels/[id]',
-                        params: { id: hotel.id },
-                      })
-                    }
-                  />
-                ))}
-              </View>
-            )}
-          </>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{t('heritage:categories.historical')}</Text>
+              <Text style={styles.sectionSubtitle}>
+                {t('heritage:categories.unesco')}
+              </Text>
+            </View>
+            {filteredHeritage.map((site) => (
+              <HeritageCard
+                key={site.id}
+                site={site}
+                onPress={() =>
+                  router.push({
+                    pathname: '/heritage/[id]',
+                    params: { id: site.id },
+                  })
+                }
+              />
+            ))}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
