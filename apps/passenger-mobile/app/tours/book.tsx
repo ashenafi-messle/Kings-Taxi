@@ -97,10 +97,9 @@ export default function TourBookingScreen() {
     async function loadData() {
       setLoading(true);
       try {
-        const [siteRes, pkgRes, vehRes, guideRes, fleetRes] = await Promise.all([
+        const [siteRes, pkgRes, guideRes, fleetRes] = await Promise.all([
           siteId ? HeritageService.getSiteById(siteId) : Promise.resolve({ success: false, data: null }),
           HeritageService.getPackages(),
-          HeritageService.getVehicleOptions(),
           HeritageService.getGuides(),
           HeritageService.getAvailableFleetVehicles(scheduledDate, adults + children),
         ]);
@@ -117,18 +116,18 @@ export default function TourBookingScreen() {
           }
         }
 
-        if (vehRes.success && vehRes.data) {
-          setVehicles(vehRes.data);
-          if (vehRes.data.length > 0) {
-            setSelectedVehicleId(vehRes.data[0].id);
-          }
-        }
-
         if (fleetRes.success && Array.isArray(fleetRes.data)) {
           setFleetVehicles(fleetRes.data);
           if (fleetRes.data.length > 0) {
-            setSelectedFleetVehicleId(fleetRes.data[0].id);
+            setSelectedFleetVehicleId((prev) =>
+              fleetRes.data.some((v: any) => v.id === prev) ? prev : fleetRes.data[0].id
+            );
+          } else {
+            setSelectedFleetVehicleId('');
           }
+        } else {
+          setFleetVehicles([]);
+          setSelectedFleetVehicleId('');
         }
 
         if (guideRes.success && guideRes.data) {
@@ -146,8 +145,8 @@ export default function TourBookingScreen() {
   // Fetch Authoritative Quote whenever parameters change
   useEffect(() => {
     async function fetchQuote() {
-      // Must have either a site selected or a package selected, plus a vehicle
-      if ((!selectedSite && !selectedPackageId) || !selectedVehicleId) return;
+      // Must have either a site selected or a package selected
+      if (!selectedSite && !selectedPackageId) return;
       setQuoteLoading(true);
       setQuoteError(null);
 
@@ -157,7 +156,7 @@ export default function TourBookingScreen() {
           preferredStartTime,
           adults,
           children,
-          vehicleOptionId: selectedVehicleId,
+          ...(selectedVehicleId ? { vehicleOptionId: selectedVehicleId } : {}),
           requestGuide,
           preferredGuideLanguage: guideLanguage,
           pickupLocation,
@@ -549,18 +548,15 @@ export default function TourBookingScreen() {
           </View>
         </View>
 
-        {/* Chauffeured Vehicle Selection */}
+        {/* Chauffeured Vehicle Selection (Real Super Admin Registered Fleet Vehicles Only) */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>{stepOffset ? '4' : '3'}. Chauffeured Vehicle</Text>
           <Text style={styles.sectionSubtitle}>
-            Total party: {totalPax} guests. Please select a vehicle with sufficient seating.
+            Total party: {totalPax} guests. Showing available registered fleet vehicles.
           </Text>
 
-          {fleetVehicles.length > 0 && (
-            <View style={{ marginBottom: 12 }}>
-              <Text style={[styles.counterLabel, { marginBottom: 6 }]}>
-                Registered Fleet Vehicles Available ({fleetVehicles.length})
-              </Text>
+          {fleetVehicles.length > 0 ? (
+            <View>
               {fleetVehicles.map((fv) => {
                 const isFleetSelected = fv.id === selectedFleetVehicleId;
                 return (
@@ -574,13 +570,19 @@ export default function TourBookingScreen() {
                     onPress={() => setSelectedFleetVehicleId(fv.id)}
                   >
                     <View style={styles.vehicleHeader}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.counterLabel}>
-                          {fv.vehicleModel} ({fv.plateNumber})
-                        </Text>
-                        <Text style={styles.counterSub}>
-                          {fv.vehicleType} • Up to {fv.seatingCapacity} passengers • {fv.vehicleColor}
-                        </Text>
+                      <View style={styles.vehicleTitleRow}>
+                        <Car
+                          size={18}
+                          color={isFleetSelected ? theme.colors.heritageAccent : theme.colors.textMuted}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.vehicleName, isFleetSelected && styles.vehicleNameSelected]}>
+                            {fv.make ? `${fv.make} ${fv.vehicleModel}` : fv.vehicleModel} ({fv.plateNumber})
+                          </Text>
+                          <Text style={styles.vehicleCapacity}>
+                            {fv.vehicleType} • Up to {fv.seatingCapacity} seats • {fv.vehicleColor}
+                          </Text>
+                        </View>
                       </View>
                       {isFleetSelected && (
                         <CheckCircle2 size={18} color={theme.colors.heritageAccent} />
@@ -590,49 +592,13 @@ export default function TourBookingScreen() {
                 );
               })}
             </View>
+          ) : (
+            <View style={{ padding: 12, borderRadius: 10, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' }}>
+              <Text style={{ color: '#991B1B', fontSize: 13 }}>
+                No registered fleet vehicles are currently available for {totalPax} passenger(s) on {scheduledDate}. Please adjust your tour date or party size.
+              </Text>
+            </View>
           )}
-
-          {vehicles.map((v) => {
-            const isSelected = v.id === selectedVehicleId;
-            const isOverCapacity = totalPax > v.seatingCapacity;
-            return (
-              <TouchableOpacity
-                key={v.id}
-                style={[
-                  styles.vehicleOptionCard,
-                  isSelected && styles.vehicleOptionSelected,
-                  isOverCapacity && styles.vehicleOptionDisabled,
-                ]}
-                onPress={() => {
-                  if (!isOverCapacity) setSelectedVehicleId(v.id);
-                }}
-              >
-                <View style={styles.vehicleHeader}>
-                  <View style={styles.vehicleTitleRow}>
-                    <Car
-                      size={18}
-                      color={isSelected ? theme.colors.heritageAccent : theme.colors.textMuted}
-                    />
-                    <Text style={[styles.vehicleName, isSelected && styles.vehicleNameSelected]}>
-                      {v.displayName}
-                    </Text>
-                  </View>
-                  <Text style={styles.vehiclePrice}>{formatETB(v.baseRate)}</Text>
-                </View>
-
-                <View style={styles.vehicleMeta}>
-                  <Text style={styles.vehicleCapacity}>
-                    Capacity: Up to {v.seatingCapacity} seats • {v.luggageCapacity} bags
-                  </Text>
-                  {isOverCapacity && (
-                    <Text style={styles.capacityWarning}>
-                      Capacity exceeded for {totalPax} guests
-                    </Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
         </View>
 
         {/* Professional Tour Guide */}
