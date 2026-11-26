@@ -5,145 +5,224 @@ import { apiRequest, buildApiUrl } from './apiClient';
 let heritageSitesData: HeritageSite[] = [...mockHeritageSites];
 let heritageBookingsData: HeritageTourBooking[] = [...mockHeritageBookings];
 
+function mapBackendSiteToAdmin(s: any): HeritageSite {
+  const destImages = Array.isArray(s.destinationImages)
+    ? s.destinationImages.map((img: any, idx: number) => ({
+        id: img.id,
+        imageUrl: img.imageUrl,
+        publicId: img.publicId,
+        caption: img.caption || `${s.name} Photo ${idx + 1}`,
+        displayOrder: img.displayOrder ?? idx,
+        isPrimary: Boolean(img.isPrimary),
+      }))
+    : [];
+  const gallery =
+    destImages.length > 0
+      ? destImages.map((i: any) => i.imageUrl)
+      : Array.isArray(s.galleryImages)
+      ? s.galleryImages
+      : [];
+  const heroImage =
+    s.coverImageUrl ||
+    destImages.find((i: any) => i.isPrimary)?.imageUrl ||
+    gallery[0] ||
+    'https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800&auto=format&fit=crop&q=80';
+
+  return {
+    id: s.id,
+    name: s.name,
+    slug: s.slug,
+    region: s.region || 'Amhara Region',
+    city: s.city || 'Gondar',
+    category: s.destinationType || s.category || 'HISTORICAL_PALACE',
+    categoryLabel: String(s.destinationType || s.category || 'Historical Palace').replace(/_/g, ' '),
+    unescoDesignated: Boolean(s.unescoDesignated),
+    unescoWorldHeritage: Boolean(s.unescoDesignated),
+    unescoYear: s.unescoYear || undefined,
+    shortDescription: s.shortDescription || '',
+    description: s.fullDescription || s.shortDescription || '',
+    historicalOverview: s.historicalInformation || s.fullDescription || '',
+    culturalSignificance: s.culturalInformation || '',
+    latitude: Number(s.latitude ?? 12.6078),
+    longitude: Number(s.longitude ?? 37.4705),
+    address: s.specificLocation || s.city || 'Gondar',
+    visitingHours: s.visitingRules || '08:30 AM - 05:30 PM',
+    recommendedDuration: `${Math.max(1, Math.round((Number(s.estimatedVisitDurationMinutes || 120) / 60) * 10) / 10)} Hours`,
+    entryFeeETB: Number(s.entryFeeETB ?? 0),
+    entranceFeeETB: Number(s.entryFeeETB ?? 0),
+    heroImage,
+    galleryImages: gallery,
+    destinationImages: destImages,
+    tourPackages: s.tourPackages || [],
+    status: s.status || 'PUBLISHED',
+    featured: Boolean(s.featured),
+    createdAt: s.createdAt || new Date().toISOString(),
+    updatedAt: s.updatedAt || new Date().toISOString(),
+  } as HeritageSite;
+}
+
 export class HeritageService {
   static async getHeritageSites(params: HeritageFilterParams = {}): Promise<PaginatedResult<HeritageSite>> {
-    await new Promise((r) => setTimeout(r, 200));
+    const q = new URLSearchParams();
+    if (params.search) q.set('search', params.search);
+    if (params.city && params.city !== 'ALL') q.set('city', params.city);
+    if (params.category && params.category !== 'ALL') q.set('destinationType', params.category);
+    const qs = q.toString();
 
-    let filtered = [...heritageSitesData];
+    const res = await apiRequest<any[]>(qs ? `/admin/heritage/sites?${qs}` : '/admin/heritage/sites');
+    if (!res.success || !Array.isArray(res.data)) {
+      throw new Error(res.error || 'Failed to load heritage destinations from database.');
+    }
 
+    let mapped = res.data.map(mapBackendSiteToAdmin);
     if (params.search) {
-      const q = params.search.toLowerCase().trim();
-      filtered = filtered.filter(
+      const sQuery = params.search.toLowerCase().trim();
+      mapped = mapped.filter(
         (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.city.toLowerCase().includes(q) ||
-          s.region.toLowerCase().includes(q)
+          s.name.toLowerCase().includes(sQuery) ||
+          s.city.toLowerCase().includes(sQuery) ||
+          s.region.toLowerCase().includes(sQuery)
       );
     }
-
     if (params.city && params.city !== 'ALL') {
-      filtered = filtered.filter((s) => s.city.toLowerCase() === params.city?.toLowerCase());
+      mapped = mapped.filter((s) => s.city.toLowerCase() === params.city?.toLowerCase());
     }
-
     if (params.category && params.category !== 'ALL') {
-      filtered = filtered.filter((s) => s.category === params.category);
+      mapped = mapped.filter((s) => s.category === params.category);
     }
 
     const page = params.page || 1;
-    const limit = params.limit || 10;
-    const total = filtered.length;
+    const limit = params.limit || 100;
+    const total = mapped.length;
     const totalPages = Math.ceil(total / limit) || 1;
     const start = (page - 1) * limit;
-    const items = filtered.slice(start, start + limit);
+    const items = mapped.slice(start, start + limit);
 
     return { items, total, page, limit, totalPages };
   }
 
   static async getHeritageSiteById(id: string): Promise<HeritageSite | null> {
-    await new Promise((r) => setTimeout(r, 150));
-    return heritageSitesData.find((s) => s.id === id || s.slug === id) || null;
+    const res = await apiRequest<any>(`/admin/heritage/sites/${id}`);
+    if (res.success && res.data) {
+      return mapBackendSiteToAdmin(res.data);
+    }
+    if (!res.success && (res.error?.includes('404') || res.error?.toLowerCase().includes('not found'))) {
+      return null;
+    }
+    throw new Error(res.error || 'Failed to load heritage destination details.');
   }
 
-  static async createHeritageSite(payload: Partial<HeritageSite>): Promise<HeritageSite> {
-    await new Promise((r) => setTimeout(r, 300));
-    const newId = `hrt_${Date.now()}`;
-    const slug = (payload.name || 'heritage-site').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  static async createHeritageSite(payload: Partial<HeritageSite> & Record<string, any>): Promise<HeritageSite> {
+    const res = await apiRequest<any>('/admin/heritage/sites', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: payload.name,
+        slug: payload.slug,
+        shortDescription: payload.shortDescription || payload.description,
+        fullDescription: payload.description || payload.historicalOverview || payload.shortDescription,
+        region: payload.region || 'Amhara Region',
+        city: payload.city || 'Gondar',
+        specificLocation: payload.address || payload.specificLocation || `${payload.city || 'Gondar'}, Ethiopia`,
+        latitude: payload.latitude ?? 12.6078,
+        longitude: payload.longitude ?? 37.4705,
+        category: payload.category,
+        destinationType: payload.destinationType,
+        visitingHours: payload.visitingHours,
+        entryFeeETB: Number(payload.entranceFeeETB ?? payload.entryFeeETB ?? 0),
+        unescoDesignated: Boolean(payload.unescoWorldHeritage ?? payload.unescoDesignated),
+        featured: Boolean(payload.featured),
+        status: payload.status || 'PUBLISHED',
+        destinationImages: payload.destinationImages,
+        coverImageUrl: payload.heroImage || payload.coverImageUrl,
+      }),
+    });
 
-    const primaryImage =
-      payload.destinationImages?.find((img) => img.isPrimary)?.imageUrl ||
-      payload.destinationImages?.[0]?.imageUrl ||
-      payload.heroImage ||
-      'https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800&auto=format&fit=crop&q=80';
+    if (!res.success || !res.data) {
+      throw new Error(res.error || 'Failed to persist heritage destination to database.');
+    }
 
-    const newSite: HeritageSite = {
-      id: newId,
-      name: payload.name || 'New Heritage Destination',
-      slug,
-      region: payload.region || 'Amhara Region',
-      city: payload.city || 'Gondar',
-      category: payload.category || 'UNESCO_HERITAGE',
-      categoryLabel: payload.categoryLabel || 'UNESCO World Heritage',
-      unescoDesignated: payload.unescoDesignated ?? true,
-      unescoYear: payload.unescoYear,
-      shortDescription: payload.shortDescription || '',
-      historicalOverview: payload.historicalOverview || '',
-      culturalSignificance: payload.culturalSignificance || '',
-      latitude: payload.latitude || 12.6078,
-      longitude: payload.longitude || 37.4705,
-      address: payload.address || '',
-      visitingHours: payload.visitingHours || '08:30 - 17:30 Daily',
-      recommendedDuration: payload.recommendedDuration || '2 - 3 Hours',
-      entryFeeETB: payload.entryFeeETB || 2000,
-      heroImage: primaryImage,
-      galleryImages: payload.destinationImages?.map((i) => i.imageUrl) || payload.galleryImages || [],
-      destinationImages: payload.destinationImages,
-      tourPackages: payload.tourPackages || [],
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    heritageSitesData = [newSite, ...heritageSitesData];
-    return newSite;
+    return mapBackendSiteToAdmin(res.data);
   }
 
-  static async updateHeritageSite(id: string, updates: Partial<HeritageSite>): Promise<HeritageSite | null> {
-    await new Promise((r) => setTimeout(r, 250));
-    const index = heritageSitesData.findIndex((s) => s.id === id);
-    if (index === -1) return null;
+  static async updateHeritageSite(id: string, updates: Partial<HeritageSite> & Record<string, any>): Promise<HeritageSite | null> {
+    const res = await apiRequest<any>(`/admin/heritage/sites/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...updates,
+        ...(updates.heroImage ? { coverImageUrl: updates.heroImage } : {}),
+        ...(updates.entranceFeeETB !== undefined ? { entryFeeETB: Number(updates.entranceFeeETB) } : {}),
+        ...(updates.unescoWorldHeritage !== undefined ? { unescoDesignated: Boolean(updates.unescoWorldHeritage) } : {}),
+      }),
+    });
 
-    heritageSitesData[index] = {
-      ...heritageSitesData[index],
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-    return heritageSitesData[index];
+    if (!res.success || !res.data) {
+      throw new Error(res.error || 'Failed to update heritage destination in database.');
+    }
+
+    return mapBackendSiteToAdmin(res.data);
+  }
+
+  static async publishHeritageSite(id: string): Promise<HeritageSite> {
+    const res = await apiRequest<any>(`/admin/heritage/sites/${id}/publish`, { method: 'POST' });
+    if (!res.success || !res.data) {
+      throw new Error(res.error || 'Failed to publish heritage destination.');
+    }
+    return mapBackendSiteToAdmin(res.data);
+  }
+
+  static async unpublishHeritageSite(id: string): Promise<HeritageSite> {
+    const res = await apiRequest<any>(`/admin/heritage/sites/${id}/unpublish`, { method: 'POST' });
+    if (!res.success || !res.data) {
+      throw new Error(res.error || 'Failed to unpublish heritage destination.');
+    }
+    return mapBackendSiteToAdmin(res.data);
   }
 
   static async deleteHeritageSite(id: string): Promise<boolean> {
-    await new Promise((r) => setTimeout(r, 200));
-    const initialLen = heritageSitesData.length;
-    heritageSitesData = heritageSitesData.filter((s) => s.id !== id);
-    return heritageSitesData.length < initialLen;
+    const res = await apiRequest<any>(`/admin/heritage/sites/${id}`, { method: 'DELETE' });
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to delete heritage destination.');
+    }
+    return true;
   }
 
   // --- Heritage Tour Bookings ---
 
   static async getHeritageBookings(searchQuery?: string, status?: string): Promise<HeritageTourBooking[]> {
-    try {
-      const queryParams = new URLSearchParams();
-      if (searchQuery) queryParams.set('search', searchQuery);
-      if (status && status !== 'ALL') queryParams.set('status', status);
+    const queryParams = new URLSearchParams();
+    if (searchQuery) queryParams.set('search', searchQuery);
+    if (status && status !== 'ALL') queryParams.set('status', status);
 
-      const res = await apiRequest<any>(
-        `/heritage/admin/heritage/bookings?${queryParams.toString()}`
-      );
-      if (res.success && res.data?.bookings && res.data.bookings.length > 0) {
-        // Backend mapping
-      }
-    } catch {
-      // offline fallback
+    const res = await apiRequest<any>(`/admin/heritage/bookings?${queryParams.toString()}`);
+    if (res.success && Array.isArray(res.data?.bookings)) {
+      return res.data.bookings.map((b: any) => ({
+        id: b.id,
+        bookingReference: b.bookingReference,
+        passengerId: b.passengerId,
+        passengerName: b.passenger?.fullName || 'Passenger',
+        passengerPhone: b.passenger?.phoneNumber || '+251 91 100 0000',
+        passengerEmail: b.passenger?.email || 'passenger@example.et',
+        heritageSiteId: b.bookingSites?.[0]?.siteId || '',
+        heritageSiteName: b.bookingSites?.[0]?.siteNameSnapshot || b.package?.name || 'Heritage Destination',
+        packageId: b.packageId,
+        packageName: b.package?.name || b.bookingSites?.[0]?.siteNameSnapshot || 'Custom Heritage Tour',
+        scheduledDate: typeof b.scheduledDate === 'string' ? b.scheduledDate.split('T')[0] : '',
+        preferredStartTime: b.preferredStartTime || '09:00',
+        adults: b.adults || 1,
+        children: b.children || 0,
+        pickupLocation: b.pickupLocation || 'Gondar',
+        totalAmountETB: Number(b.totalAmount || 0),
+        paymentStatus: b.paymentStatus || 'PENDING',
+        bookingStatus: b.bookingStatus || 'PENDING',
+        declineReason: b.declineReason,
+        adminReviewNote: b.adminReviewNote,
+        reviewedAt: b.reviewedAt,
+        createdAt: b.createdAt || new Date().toISOString(),
+        updatedAt: b.updatedAt || new Date().toISOString(),
+      }));
     }
 
-    await new Promise((r) => setTimeout(r, 200));
-    let filtered = [...heritageBookingsData];
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(
-        (b) =>
-          b.bookingReference.toLowerCase().includes(q) ||
-          b.passengerName.toLowerCase().includes(q) ||
-          (b.heritageSiteName || b.siteName || '').toLowerCase().includes(q) ||
-          (b.packageName || b.packageTitle || '').toLowerCase().includes(q)
-      );
-    }
-
-    if (status && status !== 'ALL') {
-      filtered = filtered.filter((b) => b.bookingStatus === status);
-    }
-
-    return filtered;
+    throw new Error(res.error || 'Failed to fetch heritage tour bookings from database.');
   }
 
   static async getHeritageBookingById(id: string): Promise<HeritageTourBooking | null> {

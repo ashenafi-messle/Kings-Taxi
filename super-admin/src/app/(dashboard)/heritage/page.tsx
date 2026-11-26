@@ -16,11 +16,13 @@ export default function HeritagePage() {
   const router = useRouter();
   const [sites, setSites] = useState<HeritageSite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [cityFilter, setCityFilter] = useState('ALL');
 
-  const fetchSites = async () => {
-    setIsLoading(true);
+  const fetchSites = async (silent = false) => {
+    if (!silent) setIsLoading(true);
+    setError(null);
     try {
       const res = await HeritageService.getHeritageSites({
         category: categoryFilter,
@@ -28,15 +30,24 @@ export default function HeritagePage() {
         limit: 100,
       });
       setSites(res.items);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load heritage destinations:', err);
+      if (!silent) {
+        setError(err?.message || 'Unable to load heritage destinations from database.');
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchSites();
+    const unsubscribe = HeritageService.subscribeHeritageEvents((evt) => {
+      if (evt?.type?.startsWith('heritage.site.')) {
+        fetchSites(true);
+      }
+    });
+    return unsubscribe;
   }, [categoryFilter, cityFilter]);
 
   const columns: Column<HeritageSite>[] = [
@@ -82,16 +93,21 @@ export default function HeritagePage() {
     {
       key: 'tourPackages',
       header: 'Tour Packages',
-      render: (s) => (
-        <div>
-          <span className="fw-bold text-obsidian text-sm">
-            {s.tourPackages.length} Available Packages
-          </span>
-          <div className="text-muted text-xs">
-            From {formatETB(Math.min(...s.tourPackages.map((p) => p.pricePerPersonETB)))} / person
+      render: (s) => {
+        const pkgs = s.tourPackages || [];
+        return (
+          <div>
+            <span className="fw-bold text-obsidian text-sm">
+              {pkgs.length} Available Packages
+            </span>
+            <div className="text-muted text-xs">
+              {pkgs.length > 0
+                ? `From ${formatETB(Math.min(...pkgs.map((p) => p.pricePerPersonETB)))} / person`
+                : 'Custom & Direct Tours'}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'entranceFeeETB',
@@ -113,6 +129,29 @@ export default function HeritagePage() {
       align: 'right',
       render: (s) => (
         <div className="d-flex align-items-center justify-content-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {String(s.status) === 'PUBLISHED' ? (
+            <button
+              type="button"
+              className="btn btn-outline-warning btn-sm py-1 px-2 text-xs"
+              onClick={async () => {
+                await HeritageService.unpublishHeritageSite(s.id);
+                fetchSites(true);
+              }}
+            >
+              Unpublish
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-gold btn-sm py-1 px-2 text-xs fw-semibold"
+              onClick={async () => {
+                await HeritageService.publishHeritageSite(s.id);
+                fetchSites(true);
+              }}
+            >
+              Publish
+            </button>
+          )}
           <Link
             href={`/heritage/${s.id}`}
             className="btn btn-light btn-sm p-1.5 text-secondary hover-gold border-0"
@@ -150,6 +189,15 @@ export default function HeritagePage() {
           </div>
         }
       />
+
+      {error && (
+        <div className="alert alert-danger d-flex align-items-center justify-content-between py-2.5 px-3 mb-3 rounded-3 text-sm">
+          <span>{error}</span>
+          <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => fetchSites(false)}>
+            Retry
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={columns}

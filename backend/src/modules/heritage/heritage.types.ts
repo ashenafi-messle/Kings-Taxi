@@ -47,34 +47,63 @@ export type PublicationStatus = 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED' | 'ARCHIVE
 // VALIDATION SCHEMAS (ZOD)
 // ============================================================================
 
+const imageInputSchema = z.object({
+  imageUrl: z.string().min(1),
+  publicId: z.string().optional(),
+  caption: z.string().optional(),
+  displayOrder: z.number().int().optional(),
+  isPrimary: z.boolean().optional(),
+  fileFormat: z.string().optional(),
+  fileSize: z.number().optional(),
+});
+
 export const createHeritageSiteSchema = z.object({
   name: z.string().min(2).max(128),
-  slug: z.string().min(2).max(128).regex(/^[a-z0-9-]+$/, 'Slug must be URL-safe (lowercase letters, numbers, hyphens)'),
-  shortDescription: z.string().min(10).max(255),
-  fullDescription: z.string().min(20),
+  slug: z
+    .string()
+    .min(2)
+    .max(128)
+    .regex(/^[a-z0-9-]+$/, 'Slug must be URL-safe (lowercase letters, numbers, hyphens)')
+    .optional(),
+  shortDescription: z.string().max(255).optional(),
+  fullDescription: z.string().optional(),
+  description: z.string().optional(),
   region: z.string().default('Amhara Region'),
   city: z.string().default('Gondar'),
-  specificLocation: z.string().min(3).max(255),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  destinationType: z.enum([
-    'HISTORICAL_PALACE',
-    'RELIGIOUS_MONASTERY',
-    'ANCIENT_RUIN',
-    'NATURAL_LANDMARK',
-    'CULTURAL_VILLAGE',
-  ]).default('HISTORICAL_PALACE'),
+  specificLocation: z.string().max(255).optional(),
+  address: z.string().max(255).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  destinationType: z
+    .enum([
+      'HISTORICAL_PALACE',
+      'RELIGIOUS_MONASTERY',
+      'ANCIENT_RUIN',
+      'NATURAL_LANDMARK',
+      'CULTURAL_VILLAGE',
+    ])
+    .optional(),
+  category: z.string().optional(),
   estimatedVisitDurationMinutes: z.number().int().min(15).max(1440).default(120),
   historicalInformation: z.string().optional(),
+  historicalOverview: z.string().optional(),
   culturalInformation: z.string().optional(),
+  culturalSignificance: z.string().optional(),
   visitingRules: z.string().optional(),
-  coverImageUrl: z.string().url(),
-  galleryImages: z.array(z.string().url()).default([]),
+  visitingHours: z.string().optional(),
+  coverImageUrl: z.string().optional(),
+  heroImage: z.string().optional(),
+  galleryImages: z.array(z.string()).default([]),
+  destinationImages: z.array(imageInputSchema).optional(),
+  images: z.array(imageInputSchema).optional(),
   highlights: z.array(z.string()).default([]),
-  entryFeeETB: z.number().min(0).default(0),
+  entryFeeETB: z.number().min(0).optional(),
+  entranceFeeETB: z.number().min(0).optional(),
   requiresBoatTransport: z.boolean().default(false),
-  unescoDesignated: z.boolean().default(false),
+  unescoDesignated: z.boolean().optional(),
+  unescoWorldHeritage: z.boolean().optional(),
   unescoYear: z.number().int().min(1900).max(2100).optional(),
+  status: z.enum(['DRAFT', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED']).optional(),
   featured: z.boolean().default(false),
   displayOrder: z.number().int().default(0),
 });

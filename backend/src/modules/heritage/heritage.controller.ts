@@ -380,7 +380,7 @@ export class HeritageController {
 
   async adminCreateSite(req: Request, res: Response) {
     try {
-      const adminId = (req as any).user?.userId || (req as any).user?.id;
+      const adminId = (req as any).user?.sub || (req as any).user?.userId || (req as any).user?.id;
       const parsed = createHeritageSiteSchema.parse(req.body);
       const site = await heritageSiteService.adminCreateSite(parsed, adminId);
       return res.status(201).json({ success: true, data: site });
@@ -462,6 +462,15 @@ export class HeritageController {
       return res.status(200).json({ success: true, data: sig });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  async adminGetDiagnostics(_req: Request, res: Response) {
+    try {
+      const diagnostics = await heritageSiteService.getDatabaseDiagnostics();
+      return res.status(200).json({ success: true, data: diagnostics });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || 'Database diagnostics failed' });
     }
   }
 

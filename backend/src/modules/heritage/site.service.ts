@@ -1,6 +1,8 @@
+import crypto from 'crypto';
 import { prisma } from '../../core/database/prisma';
 import { HeritageDestinationType } from './heritage.types';
 import { heritageEventBus } from './heritageEvents';
+import { CloudinaryService } from '../../integrations/cloudinary/cloudinary.service';
 
 export interface HeritageSiteFallback {
   id: string;
@@ -351,31 +353,329 @@ export class HeritageSiteService {
     return null;
   }
 
-  /**
-   * Super-admin: Create Heritage Site
-   */
-  async adminCreateSite(data: any, adminId?: string) {
-    const created = await prisma.heritageSite.create({
-      data: {
-        ...data,
-        createdByAdminId: adminId,
-        status: data.status || 'DRAFT',
-      },
-    });
-    heritageEventBus.emitHeritage({ type: 'heritage.site.created', siteId: created.id, status: created.status });
-    return created;
+  private async uploadImagesToCloudinary(
+    images: Array<{
+      imageUrl: string;
+      publicId?: string;
+      caption?: string;
+      displayOrder?: number;
+      isPrimary?: boolean;
+      fileFormat?: string;
+      fileSize?: number;
+    }>,
+    folder: string
+  ) {
+    const uploadedPublicIds: string[] = [];
+    const hasPrimary = images.some((img) => img.isPrimary);
+    const processed = await Promise.all(
+      images.map(async (img, idx) => {
+        const rawUrl = (img.imageUrl || '').trim();
+        if (!rawUrl) {
+          throw new Error('INVALID_IMAGE: Image URL or payload cannot be empty.');
+        }
+
+        let finalUrl = rawUrl;
+        let finalPublicId = img.publicId || null;
+        let finalFormat = img.fileFormat || null;
+        let finalSize = img.fileSize || null;
+
+        if (rawUrl.startsWith('data:') || rawUrl.length > 500) {
+          const uploadRes = await CloudinaryService.uploadAsset(rawUrl, {
+            folder,
+            resourceType: 'image',
+          });
+          finalUrl = uploadRes.secureUrl || uploadRes.url;
+          finalPublicId = uploadRes.publicId;
+          finalFormat = uploadRes.format;
+          finalSize = uploadRes.bytes;
+          if (uploadRes.publicId) {
+            uploadedPublicIds.push(uploadRes.publicId);
+          }
+        }
+
+        return {
+          imageUrl: finalUrl,
+          publicId: finalPublicId,
+          caption: img.caption || null,
+          displayOrder: img.displayOrder !== undefined ? img.displayOrder : idx,
+          isPrimary: hasPrimary ? Boolean(img.isPrimary) : idx === 0,
+          fileFormat: finalFormat,
+          fileSize: finalSize,
+        };
+      })
+    );
+
+    return { processed, uploadedPublicIds };
+  }
+
+  private mapDestinationType(raw?: string): HeritageDestinationType {
+    const s = String(raw || '').toUpperCase();
+    if (['HISTORICAL_PALACE', 'RELIGIOUS_MONASTERY', 'ANCIENT_RUIN', 'NATURAL_LANDMARK', 'CULTURAL_VILLAGE'].includes(s)) {
+      return s as HeritageDestinationType;
+    }
+    if (s.includes('CHURCH') || s.includes('MONASTERY')) return 'RELIGIOUS_MONASTERY';
+    if (s.includes('PARK') || s.includes('MOUNTAIN') || s.includes('LAKE') || s.includes('NATURE')) return 'NATURAL_LANDMARK';
+    if (s.includes('RUIN')) return 'ANCIENT_RUIN';
+    if (s.includes('CULTURAL')) return 'CULTURAL_VILLAGE';
+    return 'HISTORICAL_PALACE';
+  }
+
+  private buildSlug(name: string, providedSlug?: string): string {
+    const base = (providedSlug || name || 'heritage-destination')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 96);
+    return base || `heritage-${Date.now()}`;
   }
 
   /**
-   * Super-admin: Update Heritage Site
+   * Super-admin: Create Heritage Site with Cloudinary image upload & PostgreSQL persistence
+   */
+  async adminCreateSite(data: any, adminId?: string) {
+    const siteId = crypto.randomUUID();
+    const rawImages: any[] = Array.isArray(data.destinationImages) && data.destinationImages.length > 0
+      ? data.destinationImages
+      : Array.isArray(data.images) && data.images.length > 0
+      ? data.images
+      : (Array.isArray(data.galleryImages) && data.galleryImages.length > 0
+          ? data.galleryImages.map((url: string, idx: number) => ({
+              imageUrl: url,
+              displayOrder: idx,
+              isPrimary: idx === 0,
+            }))
+          : (data.coverImageUrl || data.heroImage
+              ? [{ imageUrl: data.coverImageUrl || data.heroImage, displayOrder: 0, isPrimary: true }]
+              : []));
+
+    const { processed: uploadedImages, uploadedPublicIds } =
+      rawImages.length > 0
+        ? await this.uploadImagesToCloudinary(rawImages, `kings-taxi/heritage/${siteId}`)
+        : { processed: [], uploadedPublicIds: [] };
+
+    const primaryImage =
+      uploadedImages.find((img) => img.isPrimary)?.imageUrl ||
+      uploadedImages[0]?.imageUrl ||
+      data.coverImageUrl ||
+      data.heroImage ||
+      'https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800&auto=format&fit=crop&q=80';
+
+    const baseSlug = this.buildSlug(data.name, data.slug);
+    let uniqueSlug = baseSlug;
+    const existingSlug = await prisma.heritageSite
+      .findFirst({ where: { slug: baseSlug }, select: { id: true } })
+      .catch(() => null);
+    if (existingSlug) {
+      uniqueSlug = `${baseSlug}-${crypto.randomBytes(2).toString('hex')}`;
+    }
+
+    const fullDesc = (
+      data.fullDescription ||
+      data.description ||
+      data.shortDescription ||
+      data.name ||
+      ''
+    ).trim();
+    const shortDesc = (data.shortDescription || fullDesc || data.name || '').trim().slice(0, 250);
+    const status = data.status || 'PUBLISHED';
+
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        const site = await tx.heritageSite.create({
+          data: {
+            id: siteId,
+            name: data.name.trim(),
+            slug: uniqueSlug,
+            shortDescription: shortDesc,
+            fullDescription: fullDesc.length >= 10 ? fullDesc : `${shortDesc} — Heritage destination in ${data.city || 'Gondar'}.`,
+            region: data.region || 'Amhara Region',
+            city: data.city || 'Gondar',
+            specificLocation: data.specificLocation || data.address || `${data.city || 'Gondar'}, Ethiopia`,
+            latitude: typeof data.latitude === 'number' ? data.latitude : 12.6078,
+            longitude: typeof data.longitude === 'number' ? data.longitude : 37.4705,
+            destinationType: this.mapDestinationType(data.destinationType || data.category),
+            estimatedVisitDurationMinutes: Number(data.estimatedVisitDurationMinutes || 120),
+            historicalInformation: data.historicalInformation || data.historicalOverview || null,
+            culturalInformation: data.culturalInformation || data.culturalSignificance || null,
+            visitingRules: data.visitingRules || data.visitingHours || null,
+            coverImageUrl: primaryImage,
+            galleryImages: uploadedImages.map((img) => img.imageUrl),
+            highlights: Array.isArray(data.highlights) ? data.highlights : [],
+            entryFeeETB: Number(data.entryFeeETB ?? data.entranceFeeETB ?? 0),
+            requiresBoatTransport: Boolean(data.requiresBoatTransport),
+            unescoDesignated: Boolean(data.unescoDesignated ?? data.unescoWorldHeritage),
+            unescoYear: data.unescoYear || null,
+            featured: Boolean(data.featured),
+            displayOrder: Number(data.displayOrder || 0),
+            createdByAdminId: adminId || null,
+            status,
+            publishedAt: status === 'PUBLISHED' ? new Date() : null,
+          },
+        });
+
+        if (uploadedImages.length > 0 && tx.heritageDestinationImage) {
+          await Promise.all(
+            uploadedImages.map((img) =>
+              tx.heritageDestinationImage.create({
+                data: {
+                  siteId: site.id,
+                  imageUrl: img.imageUrl,
+                  publicId: img.publicId,
+                  caption: img.caption,
+                  displayOrder: img.displayOrder,
+                  isPrimary: img.isPrimary,
+                  fileFormat: img.fileFormat,
+                  fileSize: img.fileSize,
+                },
+              })
+            )
+          );
+        }
+
+        return tx.heritageSite.findUnique({
+          where: { id: site.id },
+          include: {
+            destinationImages: {
+              orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+            },
+          },
+        });
+      });
+
+      heritageEventBus.emitHeritage({
+        type: 'heritage.site.created',
+        siteId: created?.id || siteId,
+        status,
+      });
+      if (status === 'PUBLISHED') {
+        heritageEventBus.emitHeritage({
+          type: 'heritage.site.published',
+          siteId: created?.id || siteId,
+          status: 'PUBLISHED',
+        });
+      }
+
+      return created;
+    } catch (err: any) {
+      // Compensating cleanup for newly uploaded Cloudinary assets if DB persistence fails
+      for (const pid of uploadedPublicIds) {
+        await CloudinaryService.deleteAsset(pid, 'image').catch(() => false);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Super-admin: Update Heritage Site (with optional Cloudinary image replacement)
    */
   async adminUpdateSite(id: string, data: any) {
-    const updated = await prisma.heritageSite.update({
-      where: { id },
-      data,
-    });
-    heritageEventBus.emitHeritage({ type: 'heritage.site.updated', siteId: updated.id, status: updated.status });
-    return updated;
+    const rawImages: any[] | null =
+      Array.isArray(data.destinationImages) && data.destinationImages.length > 0
+        ? data.destinationImages
+        : Array.isArray(data.images) && data.images.length > 0
+        ? data.images
+        : null;
+
+    let uploadedImages: any[] = [];
+    let uploadedPublicIds: string[] = [];
+    if (rawImages) {
+      const res = await this.uploadImagesToCloudinary(rawImages, `kings-taxi/heritage/${id}`);
+      uploadedImages = res.processed;
+      uploadedPublicIds = res.uploadedPublicIds;
+    }
+
+    const updatePayload: any = {};
+    if (data.name !== undefined) updatePayload.name = data.name.trim();
+    if (data.shortDescription !== undefined) updatePayload.shortDescription = data.shortDescription.trim();
+    if (data.fullDescription !== undefined || data.description !== undefined) {
+      updatePayload.fullDescription = (data.fullDescription ?? data.description).trim();
+    }
+    if (data.region !== undefined) updatePayload.region = data.region;
+    if (data.city !== undefined) updatePayload.city = data.city;
+    if (data.specificLocation !== undefined || data.address !== undefined) {
+      updatePayload.specificLocation = data.specificLocation ?? data.address;
+    }
+    if (data.latitude !== undefined) updatePayload.latitude = data.latitude;
+    if (data.longitude !== undefined) updatePayload.longitude = data.longitude;
+    if (data.destinationType !== undefined || data.category !== undefined) {
+      updatePayload.destinationType = this.mapDestinationType(data.destinationType || data.category);
+    }
+    if (data.estimatedVisitDurationMinutes !== undefined) {
+      updatePayload.estimatedVisitDurationMinutes = Number(data.estimatedVisitDurationMinutes);
+    }
+    if (data.historicalInformation !== undefined || data.historicalOverview !== undefined) {
+      updatePayload.historicalInformation = data.historicalInformation ?? data.historicalOverview;
+    }
+    if (data.culturalInformation !== undefined || data.culturalSignificance !== undefined) {
+      updatePayload.culturalInformation = data.culturalInformation ?? data.culturalSignificance;
+    }
+    if (data.visitingRules !== undefined || data.visitingHours !== undefined) {
+      updatePayload.visitingRules = data.visitingRules ?? data.visitingHours;
+    }
+    if (data.entryFeeETB !== undefined || data.entranceFeeETB !== undefined) {
+      updatePayload.entryFeeETB = Number(data.entryFeeETB ?? data.entranceFeeETB);
+    }
+    if (data.unescoDesignated !== undefined || data.unescoWorldHeritage !== undefined) {
+      updatePayload.unescoDesignated = Boolean(data.unescoDesignated ?? data.unescoWorldHeritage);
+    }
+    if (data.featured !== undefined) updatePayload.featured = Boolean(data.featured);
+    if (data.status !== undefined) {
+      updatePayload.status = data.status;
+      if (data.status === 'PUBLISHED') updatePayload.publishedAt = new Date();
+    }
+    if (uploadedImages.length > 0) {
+      updatePayload.coverImageUrl =
+        uploadedImages.find((img) => img.isPrimary)?.imageUrl || uploadedImages[0].imageUrl;
+      updatePayload.galleryImages = uploadedImages.map((img) => img.imageUrl);
+    } else if (data.coverImageUrl !== undefined || data.heroImage !== undefined) {
+      updatePayload.coverImageUrl = data.coverImageUrl ?? data.heroImage;
+    }
+
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        if (uploadedImages.length > 0 && tx.heritageDestinationImage) {
+          await tx.heritageDestinationImage.deleteMany({ where: { siteId: id } });
+          await Promise.all(
+            uploadedImages.map((img) =>
+              tx.heritageDestinationImage.create({
+                data: {
+                  siteId: id,
+                  imageUrl: img.imageUrl,
+                  publicId: img.publicId,
+                  caption: img.caption,
+                  displayOrder: img.displayOrder,
+                  isPrimary: img.isPrimary,
+                  fileFormat: img.fileFormat,
+                  fileSize: img.fileSize,
+                },
+              })
+            )
+          );
+        }
+
+        return tx.heritageSite.update({
+          where: { id },
+          data: updatePayload,
+          include: {
+            destinationImages: {
+              orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+            },
+          },
+        });
+      });
+
+      heritageEventBus.emitHeritage({
+        type: 'heritage.site.updated',
+        siteId: updated.id,
+        status: updated.status,
+      });
+      return updated;
+    } catch (err: any) {
+      for (const pid of uploadedPublicIds) {
+        await CloudinaryService.deleteAsset(pid, 'image').catch(() => false);
+      }
+      throw err;
+    }
   }
 
   /**
@@ -446,7 +746,7 @@ export class HeritageSiteService {
   }
 
   /**
-   * Super-admin: Set/replace gallery images for a heritage destination site (strictly 2 to 4 images)
+   * Super-admin: Set/replace gallery images for a heritage destination site (1 to 8 images)
    */
   async setSiteImages(
     siteId: string,
@@ -460,58 +760,95 @@ export class HeritageSiteService {
       fileSize?: number;
     }[]
   ) {
-    if (!images || images.length < 2 || images.length > 4) {
-      throw new Error('A heritage destination must have between 2 and 4 images.');
+    if (!images || images.length < 1 || images.length > 8) {
+      throw new Error('A heritage destination must have between 1 and 8 images.');
     }
 
-    const hasPrimary = images.some((img) => img.isPrimary);
-    const normalized = images.map((img, idx) => ({
-      ...img,
-      displayOrder: img.displayOrder !== undefined ? img.displayOrder : idx,
-      isPrimary: hasPrimary ? !!img.isPrimary : idx === 0,
-    }));
+    const site = await prisma.heritageSite.findUnique({ where: { id: siteId } });
+    if (!site) throw new Error('SITE_NOT_FOUND: Heritage site does not exist');
+
+    const { processed, uploadedPublicIds } = await this.uploadImagesToCloudinary(
+      images,
+      `kings-taxi/heritage/${siteId}`
+    );
+
+    const primaryUrl = processed.find((img) => img.isPrimary)?.imageUrl || processed[0].imageUrl;
 
     try {
-      const site = await prisma.heritageSite.findUnique({ where: { id: siteId } });
-      if (!site) throw new Error('SITE_NOT_FOUND: Heritage site does not exist');
-
-      return await prisma.$transaction(async (tx) => {
+      const created = await prisma.$transaction(async (tx) => {
         await tx.heritageDestinationImage.deleteMany({ where: { siteId } });
 
-        const created = await Promise.all(
-          normalized.map((img, idx) =>
+        const rows = await Promise.all(
+          processed.map((img, idx) =>
             tx.heritageDestinationImage.create({
               data: {
                 siteId,
                 imageUrl: img.imageUrl,
-                publicId: img.publicId || null,
-                caption: img.caption || null,
+                publicId: img.publicId,
+                caption: img.caption,
                 displayOrder: img.displayOrder ?? idx,
                 isPrimary: img.isPrimary,
-                fileFormat: img.fileFormat || null,
-                fileSize: img.fileSize || null,
+                fileFormat: img.fileFormat,
+                fileSize: img.fileSize,
               },
             })
           )
         );
 
-        return created;
+        await tx.heritageSite.update({
+          where: { id: siteId },
+          data: {
+            coverImageUrl: primaryUrl,
+            galleryImages: processed.map((p) => p.imageUrl),
+          },
+        });
+
+        return rows;
       });
+
+      heritageEventBus.emitHeritage({ type: 'heritage.site.updated', siteId, status: site.status });
+      return created;
     } catch (err: any) {
-      return normalized.map((img, idx) => ({
-        id: `site_img_${idx}`,
-        siteId,
-        imageUrl: img.imageUrl,
-        publicId: img.publicId || null,
-        caption: img.caption || null,
-        displayOrder: img.displayOrder ?? idx,
-        isPrimary: img.isPrimary,
-        fileFormat: img.fileFormat || null,
-        fileSize: img.fileSize || null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
+      for (const pid of uploadedPublicIds) {
+        await CloudinaryService.deleteAsset(pid, 'image').catch(() => false);
+      }
+      throw err;
     }
+  }
+
+  /**
+   * Safe read-only DB & Cloudinary diagnostic (never exposes credentials)
+   */
+  async getDatabaseDiagnostics() {
+    const dbInfo: any[] = await prisma.$queryRawUnsafe(`
+      SELECT
+        current_database() AS database_name,
+        current_user AS database_user,
+        inet_server_addr()::text AS server_ip,
+        version() AS postgres_version
+    `);
+    const [siteCount, imageCount, bookingCount] = await Promise.all([
+      prisma.heritageSite.count(),
+      prisma.heritageDestinationImage.count(),
+      prisma.heritageTourBooking.count(),
+    ]);
+    return {
+      connected: true,
+      databaseName: dbInfo?.[0]?.database_name || null,
+      databaseUser: dbInfo?.[0]?.database_user || null,
+      serverIp: dbInfo?.[0]?.server_ip || null,
+      postgresVersion: dbInfo?.[0]?.postgres_version || null,
+      tables: {
+        heritage_sites: siteCount,
+        heritage_destination_images: imageCount,
+        heritage_tour_bookings: bookingCount,
+      },
+      cloudinaryConfigured: Boolean(
+        process.env.CLOUDINARY_CLOUD_NAME &&
+        process.env.CLOUDINARY_API_KEY &&
+        process.env.CLOUDINARY_API_SECRET
+      ),
+    };
   }
 }
 

@@ -88,6 +88,9 @@ heritageRouter.post(['/heritage/bookings/:bookingReference/cancel', '/bookings/:
 const adminAuth = [authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN'])];
 
 // Admin Sites
+heritageRouter.get('/admin/heritage/diagnostics', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminGetDiagnostics(req, res)
+);
 heritageRouter.get('/admin/heritage/sites', adminAuth, (req: Request, res: Response) =>
   heritageController.adminListSites(req, res)
 );

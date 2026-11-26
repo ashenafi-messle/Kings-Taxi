@@ -45,7 +45,10 @@ const { mockPrismaClient, resetDb, db } = vi.hoisted(() => {
         }
         return null;
       }),
-      findUnique: vi.fn(async ({ where }: any) => store.sites.get(where.id) || null),
+      findUnique: vi.fn(async ({ where }: any) => {
+        const s = store.sites.get(where.id);
+        return s ? { ...s, destinationImages: store.siteImages.get(s.id) || [] } : null;
+      }),
       create: vi.fn(async ({ data }: any) => {
         const id = data.id || `site_${store.sites.size + 1}`;
         const rec = { id, status: 'DRAFT', featured: false, galleryImages: [], ...data };
@@ -228,6 +231,7 @@ describe('Heritage Sites & Heritage Tours End-to-End Module', () => {
           slug: 'fasil-ghebbi',
           shortDescription: '17th-century castles',
           fullDescription: 'Full historical compound',
+          status: 'DRAFT',
           latitude: 12.6078,
           longitude: 37.4705,
         },
@@ -425,5 +429,56 @@ describe('Heritage Sites & Heritage Tours End-to-End Module', () => {
     const combined = written.join('');
     expect(combined).toContain('b_mine');
     expect(combined).not.toContain('b_other');
+  });
+
+  it('persists heritage site with Cloudinary-uploaded images and cleans up on DB failure', async () => {
+    const { CloudinaryService } = await import('../../src/integrations/cloudinary/cloudinary.service');
+    const uploadSpy = vi.spyOn(CloudinaryService, 'uploadAsset').mockResolvedValue({
+      url: 'http://res.cloudinary.com/demo/image/upload/v1/kings-taxi/heritage/site_1/pic.jpg',
+      secureUrl: 'https://res.cloudinary.com/demo/image/upload/v1/kings-taxi/heritage/site_1/pic.jpg',
+      publicId: 'kings-taxi/heritage/site_1/pic',
+      format: 'jpg',
+      bytes: 12345,
+      resourceType: 'image',
+    });
+    const deleteSpy = vi.spyOn(CloudinaryService, 'deleteAsset').mockResolvedValue(true);
+
+    try {
+      const created: any = await heritageSiteService.adminCreateSite(
+        {
+          name: 'Debre Berhan Selassie',
+          city: 'Gondar',
+          region: 'Amhara',
+          description: '17th century angel ceiling church',
+          entranceFeeETB: 1500,
+          unescoWorldHeritage: true,
+          destinationImages: [
+            { imageUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==', isPrimary: true, caption: 'Ceiling' },
+          ],
+        },
+        'adm_1'
+      );
+
+      expect(uploadSpy).toHaveBeenCalledTimes(1);
+      expect(created.coverImageUrl).toContain('https://res.cloudinary.com/');
+      expect(created.destinationImages).toHaveLength(1);
+      expect(created.destinationImages[0].publicId).toBe('kings-taxi/heritage/site_1/pic');
+
+      // Simulate DB failure after Cloudinary upload -> must trigger cleanup
+      mockPrismaClient.heritageSite.create.mockRejectedValueOnce(new Error('DB_WRITE_FAILED'));
+      await expect(
+        heritageSiteService.adminCreateSite(
+          {
+            name: 'Fail Site',
+            destinationImages: [{ imageUrl: 'data:image/png;base64,iVBORw0KGgo=', isPrimary: true }],
+          },
+          'adm_1'
+        )
+      ).rejects.toThrow('DB_WRITE_FAILED');
+      expect(deleteSpy).toHaveBeenCalledWith('kings-taxi/heritage/site_1/pic', 'image');
+    } finally {
+      uploadSpy.mockRestore();
+      deleteSpy.mockRestore();
+    }
   });
 });

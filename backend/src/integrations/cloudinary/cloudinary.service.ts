@@ -99,11 +99,30 @@ export class CloudinaryService {
     fileData: string,
     options: CloudinaryUploadOptions
   ): Promise<CloudinaryUploadResult> {
+    if (!fileData || typeof fileData !== 'string') {
+      throw new Error('INVALID_IMAGE_DATA: Image payload is required.');
+    }
+
+    if (fileData.startsWith('data:')) {
+      const mimeMatch = fileData.match(/^data:([^;]+);base64,/);
+      const mime = mimeMatch?.[1]?.toLowerCase() || '';
+      if (options.resourceType === 'image' && !['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(mime)) {
+        throw new Error(`UNSUPPORTED_IMAGE_FORMAT: Unsupported image MIME type '${mime}'. Allowed: JPEG, PNG, WEBP.`);
+      }
+      const approxBytes = Math.ceil((fileData.length * 3) / 4);
+      if (approxBytes > 10 * 1024 * 1024) {
+        throw new Error('IMAGE_TOO_LARGE: Image size exceeds 10MB upload limit.');
+      }
+    }
+
     if (!this.isConfigured && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
       this.initialize();
     }
 
     if (!this.isConfigured) {
+      if (env.NODE_ENV === 'production') {
+        throw new Error('CLOUDINARY_NOT_CONFIGURED: Cloudinary credentials are missing in production environment.');
+      }
       // Offline / dev fallback: return dummy or data representation
       const dummyId = options.publicId || `local_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
       logger.info({ folder: options.folder, dummyId }, '[CloudinaryService] Returning fallback upload metadata');
