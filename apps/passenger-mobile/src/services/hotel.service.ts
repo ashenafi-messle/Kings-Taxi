@@ -285,26 +285,32 @@ export class HotelService {
    * Get logged-in passenger's hotel bookings.
    */
   static async getPassengerBookings(): Promise<ApiResponse<HotelReservation[]>> {
-    const res = await requestWithAuth<any[]>('/hotel-bookings');
-    if (res.success && Array.isArray(res.data)) {
-      const mapped: HotelReservation[] = res.data.map((b) => ({
+    const res = await requestWithAuth<any>('/hotel-bookings');
+    const rawList: any[] | null = Array.isArray(res.data)
+      ? res.data
+      : Array.isArray(res.data?.bookings)
+      ? res.data.bookings
+      : null;
+
+    if (res.success && rawList !== null) {
+      const mapped: HotelReservation[] = rawList.map((b) => ({
         id: b.id,
         hotelId: b.hotelId,
-        hotelName: b.hotel?.name || 'Kings Luxury Hotel',
-        hotelCity: b.hotel?.city || 'Gondar',
-        hotelImage: b.hotel?.coverImage || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-        roomId: b.rooms?.[0]?.roomTypeId,
-        roomTitle: b.rooms?.[0]?.roomType?.name || 'Selected Suite',
+        hotelName: b.hotelName || b.hotel?.name || 'Kings Luxury Hotel',
+        hotelCity: b.hotelCity || b.hotel?.city || 'Gondar',
+        hotelImage: b.hotelImage || b.hotel?.coverImage || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+        roomId: b.bookingRooms?.[0]?.roomTypeId || b.rooms?.[0]?.roomTypeId,
+        roomTitle: b.roomName || b.bookingRooms?.[0]?.roomType?.name || b.rooms?.[0]?.roomType?.name || 'Selected Suite',
         checkInDate: typeof b.checkInDate === 'string' ? b.checkInDate.split('T')[0] : '2026-11-12',
         checkOutDate: typeof b.checkOutDate === 'string' ? b.checkOutDate.split('T')[0] : '2026-11-14',
         nightsCount: b.nightsCount || 2,
-        guestsCount: b.guestCount || 2,
-        totalPriceETB: Number(b.totalAmount || 0),
-        status: b.status || 'CONFIRMED',
+        guestsCount: b.guestCount || ((b.adults || 0) + (b.children || 0)) || 2,
+        totalPriceETB: Number(b.grandTotal ?? b.totalAmount ?? 0),
+        status: (b.bookingStatus || b.status || 'PENDING') as HotelReservation['status'],
         reservationCode: b.bookingReference,
         createdAt: b.createdAt || new Date().toISOString(),
-        hasAirportTransfer: Boolean(b.transferBooking),
-        airportTransferStatus: b.transferBooking?.status,
+        hasAirportTransfer: Boolean(b.airportTransfer || b.transferBooking),
+        airportTransferStatus: b.airportTransfer?.transferStatus || b.transferBooking?.status,
         airportTransferVehicle: b.transferBooking?.vehicleCategory,
       }));
       return { success: true, data: mapped };

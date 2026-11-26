@@ -721,7 +721,7 @@ export class HotelService {
   }
 
   static subscribeInventoryEvents(
-    hotelId: string,
+    hotelId: string | undefined,
     onEvent: (event: any) => void,
     onConnectionChange?: (connected: boolean) => void
   ): () => void {
@@ -733,7 +733,8 @@ export class HotelService {
       localStorage.getItem('kt_admin_access_token') ||
       localStorage.getItem('accessToken') ||
       '';
-    const qs = new URLSearchParams({ hotelId });
+    const qs = new URLSearchParams();
+    if (hotelId) qs.set('hotelId', hotelId);
     if (token) qs.set('token', token);
 
     const url = buildApiUrl(`/admin/hotels/inventory/events?${qs.toString()}`);
@@ -756,6 +757,7 @@ export class HotelService {
       }
     };
 
+    eventSource.addEventListener('inventory_sync', handlePayload);
     eventSource.addEventListener('inventory', handlePayload);
     eventSource.onmessage = handlePayload;
 

@@ -1,5 +1,5 @@
 export type BookingFilterType = 'ALL' | 'RIDE' | 'HOTEL' | 'LOUNGE' | 'HERITAGE';
-export type NormalizedBookingStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type NormalizedBookingStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'DECLINED' | 'CANCELLED';
 export type UnifiedPaymentStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
 
 export interface UnifiedBookingSummaryDetails {

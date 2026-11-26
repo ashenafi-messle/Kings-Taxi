@@ -5,7 +5,7 @@ import { heritageTourBookingService } from '../heritage/booking.service';
 import { fallbackHotelBookingsCache } from '../hospitality/booking.service';
 
 export type BookingType = 'RIDE' | 'HOTEL' | 'LOUNGE' | 'HERITAGE';
-export type NormalizedBookingStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type NormalizedBookingStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'DECLINED' | 'CANCELLED';
 export type UnifiedPaymentStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
 
 export interface PassengerBookingHistoryQuery {
@@ -145,6 +145,8 @@ export function normalizeBookingStatus(type: BookingType, rawStatus: string): No
   } else if (type === 'HOTEL') {
     if (s === 'COMPLETED') return 'COMPLETED';
     if (s === 'CONFIRMED') return 'CONFIRMED';
+    if (s === 'CHECKED_IN') return 'IN_PROGRESS';
+    if (s === 'DECLINED') return 'DECLINED';
     if (['CANCELLED', 'REJECTED', 'EXPIRED'].includes(s)) return 'CANCELLED';
     return 'PENDING';
   } else if (type === 'LOUNGE') {
@@ -172,6 +174,11 @@ export function resolveStatusFilter(type: BookingType, requestedStatus?: string)
     if (type === 'LOUNGE') return ['COMPLETED'];
     if (type === 'HERITAGE') return ['COMPLETED'];
   }
+  if (s === 'DECLINED') {
+    if (type === 'HOTEL') return ['DECLINED'];
+    if (type === 'HERITAGE') return ['REJECTED'];
+    return [];
+  }
   if (s === 'CANCELLED') {
     if (type === 'RIDE') return ['CANCELLED'];
     if (type === 'HOTEL') return ['CANCELLED', 'REJECTED', 'EXPIRED'];
@@ -180,7 +187,7 @@ export function resolveStatusFilter(type: BookingType, requestedStatus?: string)
   }
   if (s === 'IN_PROGRESS') {
     if (type === 'RIDE') return ['TRIP_STARTED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED'];
-    if (type === 'HOTEL') return [];
+    if (type === 'HOTEL') return ['CHECKED_IN'];
     if (type === 'LOUNGE') return [];
     if (type === 'HERITAGE') return ['IN_PROGRESS'];
   }

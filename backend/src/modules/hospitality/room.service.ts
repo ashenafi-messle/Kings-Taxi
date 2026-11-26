@@ -240,17 +240,24 @@ export class RoomService {
       orderBy: { basePricePerNight: 'asc' },
     });
 
-    return rooms.map((r) => ({
-      ...r,
-      basePricePerNight: Number(r.basePricePerNight),
-      photos: (r.images && r.images.length > 0)
-        ? r.images.map((img) => img.imageUrl)
-        : (hotel.coverImageUrl ? [hotel.coverImageUrl] : []),
-      rates: r.rates.map((rt) => ({
-        ...rt,
-        pricePerNight: Number(rt.pricePerNight),
-      })),
-    }));
+    const availabilityMap = await inventoryService.getRoomTypesAvailabilityMap(rooms);
+
+    return rooms.map((r) => {
+      const avail = availabilityMap.get(r.id) ?? r.totalInventory;
+      return {
+        ...r,
+        availableInventory: avail,
+        availableRooms: avail,
+        basePricePerNight: Number(r.basePricePerNight),
+        photos: (r.images && r.images.length > 0)
+          ? r.images.map((img) => img.imageUrl)
+          : (hotel.coverImageUrl ? [hotel.coverImageUrl] : []),
+        rates: r.rates.map((rt) => ({
+          ...rt,
+          pricePerNight: Number(rt.pricePerNight),
+        })),
+      };
+    });
   }
 
   /**
@@ -327,12 +334,12 @@ export class RoomService {
       // Read date-based inventory records across [checkInDate, checkOutDate)
       const inventoryRows = prisma.hotelRoomInventory
         ? await prisma.hotelRoomInventory.findMany({
-            where: {
-              hotelId,
-              roomTypeId: { in: roomTypes.map((r) => r.id) },
-              inventoryDate: { gte: checkInDate, lt: checkOutDate },
-            },
-          })
+          where: {
+            hotelId,
+            roomTypeId: { in: roomTypes.map((r) => r.id) },
+            inventoryDate: { gte: checkInDate, lt: checkOutDate },
+          },
+        })
         : [];
       const inventoryByRoomAndDate = new Map<string, typeof inventoryRows[number]>();
       for (const row of inventoryRows) {

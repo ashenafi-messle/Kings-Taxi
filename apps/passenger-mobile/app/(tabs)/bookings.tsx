@@ -10,9 +10,10 @@ import {
   Modal,
   ScrollView,
   Platform,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
   Car,
   Hotel,
@@ -133,6 +134,21 @@ export default function BookingsScreen() {
 
   useEffect(() => {
     loadBookings(activeTab, 1, false);
+  }, [activeTab, loadBookings]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBookings(activeTab, 1, false);
+    }, [activeTab, loadBookings])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        loadBookings(activeTab, 1, false);
+      }
+    });
+    return () => subscription.remove();
   }, [activeTab, loadBookings]);
 
   const handleRefresh = useCallback(() => {

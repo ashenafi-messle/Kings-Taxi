@@ -296,6 +296,7 @@ import { inventoryEventBus } from '../../src/modules/hospitality/inventoryEvents
 import { reservationExpirationWorker } from '../../src/modules/hospitality/expirationWorker';
 import { roomService } from '../../src/modules/hospitality/room.service';
 import { hospitalityController } from '../../src/modules/hospitality/hospitality.controller';
+import { normalizeBookingStatus } from '../../src/modules/passengers/passengerBookingHistory.service';
 import { parseCalendarDate } from '../../src/modules/hospitality/utils/addisDate';
 
 const HOTEL_ID = '11111111-1111-4111-8111-111111111111';
@@ -624,5 +625,43 @@ describe('Hotel Room Inventory Synchronization System', () => {
     expect(getBody().success).toBe(true);
     expect(getBody().data.roomTypes[0].totalRooms).toBe(5);
     expect(getBody().data.roomTypes[0].availableRooms).toBe(5);
+  });
+
+  it('computes per-room-type availableInventory independently after confirmation and normalizes DECLINED/CONFIRMED statuses', async () => {
+    const stdId = '33333333-3333-4333-8333-333333333333';
+    const dlxId = '44444444-4444-4444-8444-444444444444';
+
+    // Simulate 2 confirmed rooms on Standard Room only
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const dayAfter = new Date();
+    dayAfter.setUTCDate(dayAfter.getUTCDate() + 3);
+
+    await mockPrismaClient.hotelRoomInventory.upsert({
+      where: { roomTypeId_inventoryDate: { roomTypeId: stdId, inventoryDate: tomorrow } },
+      create: {
+        hotelId: HOTEL_ID,
+        roomTypeId: stdId,
+        inventoryDate: tomorrow,
+        totalRooms: 10,
+        reservedRooms: 0,
+        confirmedRooms: 2,
+        blockedRooms: 0,
+      },
+    });
+
+    const availMap = await inventoryService.getRoomTypesAvailabilityMap([
+      { id: stdId, totalInventory: 10 },
+      { id: dlxId, totalInventory: 5 },
+    ]);
+
+    expect(availMap.get(stdId)).toBe(8);
+    expect(availMap.get(dlxId)).toBe(5);
+
+    expect(normalizeBookingStatus('HOTEL', 'PENDING')).toBe('PENDING');
+    expect(normalizeBookingStatus('HOTEL', 'CONFIRMED')).toBe('CONFIRMED');
+    expect(normalizeBookingStatus('HOTEL', 'DECLINED')).toBe('DECLINED');
+    expect(normalizeBookingStatus('HOTEL', 'CANCELLED')).toBe('CANCELLED');
+    expect(normalizeBookingStatus('HOTEL', 'COMPLETED')).toBe('COMPLETED');
   });
 });

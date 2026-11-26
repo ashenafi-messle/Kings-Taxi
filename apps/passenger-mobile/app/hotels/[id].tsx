@@ -10,8 +10,9 @@ import {
   Linking,
   ActivityIndicator,
   Platform,
+  AppState,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import {
   MapPin,
   Phone,
@@ -145,6 +146,21 @@ export default function HotelDetailScreen() {
       cancelled = true;
     };
   }, [hotelId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHotel();
+    }, [loadHotel])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        loadHotel();
+      }
+    });
+    return () => subscription.remove();
+  }, [loadHotel]);
 
   if (isLoading && !hotel) {
     return (
@@ -423,10 +439,10 @@ export default function HotelDetailScreen() {
                       {formatETB(room.pricePerNight)}
                       <Text style={styles.perNight}> / {t('common:perNight')}</Text>
                     </Text>
-                    <Text style={styles.availabilityText}>
+                    <Text style={[styles.availabilityText, room.availableCount <= 0 && { color: theme.colors.danger }]}>
                       {room.availableCount > 0
                         ? `${room.availableCount} rooms available`
-                        : 'Available on request'}
+                        : 'Sold Out'}
                     </Text>
                   </View>
                 </TouchableOpacity>

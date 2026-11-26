@@ -2,7 +2,7 @@ import { Prisma, InventoryReservationStatus, InventoryTransactionType } from '@p
 import { prisma } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
 import { auditService } from '../../core/audit/audit.service';
-import { addCalendarDays, formatCalendarDate, parseCalendarDate, validateBookingDates } from './utils/addisDate';
+import { addCalendarDays, formatCalendarDate, parseCalendarDate, validateBookingDates, getAddisCurrentDateString } from './utils/addisDate';
 import { inventoryEventBus, InventoryEventType } from './inventoryEvents';
 
 export interface DateAvailability {
@@ -740,6 +740,80 @@ export class InventoryService {
     ]);
 
     return { hotelId, roomTypeId, dates, action, quantity };
+  }
+
+  /**
+   * Computes current available inventory per roomTypeId using upcoming HotelRoomInventory rows
+   * and confirmed/checked-in HotelBookingRoom records so Admin tables and Passenger room cards
+   * always reflect real-time database availability.
+   */
+  async getRoomTypesAvailabilityMap(
+    roomTypes: Array<{ id: string; totalInventory: number }>
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (!roomTypes || roomTypes.length === 0) {
+      return result;
+    }
+
+    const ids = roomTypes.map((r) => r.id);
+    const today = parseCalendarDate(getAddisCurrentDateString());
+
+    const [inventoryRows, confirmedBookingRooms] = await Promise.all([
+      prisma.hotelRoomInventory
+        ? prisma.hotelRoomInventory
+            .findMany({
+              where: {
+                roomTypeId: { in: ids },
+                inventoryDate: { gte: today },
+              },
+            })
+            .catch(() => [])
+        : Promise.resolve([]),
+      prisma.hotelBookingRoom
+        ? prisma.hotelBookingRoom
+            .findMany({
+              where: {
+                roomTypeId: { in: ids },
+                booking: {
+                  bookingStatus: { in: ['CONFIRMED', 'CHECKED_IN'] },
+                  checkOutDate: { gt: today },
+                },
+              },
+              select: {
+                roomTypeId: true,
+                quantity: true,
+              },
+            })
+            .catch(() => [])
+        : Promise.resolve([]),
+    ]);
+
+    const maxCommittedByRoom = new Map<string, number>();
+    for (const row of inventoryRows as any[]) {
+      const committed =
+        (row.reservedRooms || 0) + (row.confirmedRooms || 0) + (row.blockedRooms || 0);
+      const prev = maxCommittedByRoom.get(row.roomTypeId) || 0;
+      if (committed > prev) {
+        maxCommittedByRoom.set(row.roomTypeId, committed);
+      }
+    }
+
+    const confirmedSumByRoom = new Map<string, number>();
+    for (const br of confirmedBookingRooms as any[]) {
+      confirmedSumByRoom.set(
+        br.roomTypeId,
+        (confirmedSumByRoom.get(br.roomTypeId) || 0) + (br.quantity || 0)
+      );
+    }
+
+    for (const rt of roomTypes) {
+      const rowPeak = maxCommittedByRoom.get(rt.id) || 0;
+      const confirmedTotal = confirmedSumByRoom.get(rt.id) || 0;
+      const committed = Math.max(rowPeak, confirmedTotal);
+      result.set(rt.id, Math.max(0, (rt.totalInventory || 0) - committed));
+    }
+
+    return result;
   }
 }
 

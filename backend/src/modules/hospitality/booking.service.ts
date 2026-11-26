@@ -1064,7 +1064,34 @@ export class HospitalityBookingService {
         }
 
         // Confirm inventory reservation atomically across stay dates (rejects expired holds)
-        const confirmedItems = await inventoryService.confirmReservation(tx, id, adminId);
+        let confirmedItems = await inventoryService.confirmReservation(tx, id, adminId);
+
+        // If booking was created without a HotelInventoryReservation row, reserve + confirm atomically now
+        if (confirmedItems.length === 0 && booking.bookingRooms.length > 0 && (tx as any).hotelRoomInventory) {
+          const fallbackItems: Array<{ hotelId: string; roomTypeId: string; dates: string[] }> = [];
+          for (const lineItem of booking.bookingRooms) {
+            if (!lineItem.roomType) continue;
+            const resv = await inventoryService.reserveForBooking(tx, {
+              bookingId: id,
+              hotelId: booking.hotelId,
+              roomTypeId: lineItem.roomType.id,
+              checkInDate: booking.checkInDate,
+              checkOutDate: booking.checkOutDate,
+              quantity: lineItem.quantity,
+              expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+              actorId: adminId,
+            });
+            fallbackItems.push({
+              hotelId: booking.hotelId,
+              roomTypeId: lineItem.roomType.id,
+              dates: resv.dates,
+            });
+          }
+          confirmedItems = await inventoryService.confirmReservation(tx, id, adminId);
+          if (confirmedItems.length === 0) {
+            confirmedItems = fallbackItems;
+          }
+        }
 
         // Update booking to CONFIRMED
         const now = new Date();

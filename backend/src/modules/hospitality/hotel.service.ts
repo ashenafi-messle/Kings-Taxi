@@ -3,6 +3,7 @@ import { logger } from '../../core/logging/logger';
 import { HotelStatus, HotelCategory, HotelPublicationStatus, HotelVerificationStatus } from '@prisma/client';
 import { CreateHotelDto, UpdateHotelDto, CreateHotelImageDto } from './hospitality.types';
 import { HospitalityImageService } from './hospitalityImage.service';
+import { inventoryService } from './inventory.service';
 
 function isUuid(val?: string | null): boolean {
   return !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
@@ -1157,6 +1158,7 @@ export class HotelService {
       }
 
       const coverImage = hotel.coverImageUrl || hotel.images.find((img) => img.isCover)?.imageUrl || hotel.images[0]?.imageUrl || '';
+      const availabilityMap = await inventoryService.getRoomTypesAvailabilityMap(hotel.roomTypes);
 
       return {
         ...hotel,
@@ -1166,17 +1168,22 @@ export class HotelService {
         startingPriceETB: hotel.roomTypes[0] ? Number(hotel.roomTypes[0].basePricePerNight) : 0,
         currency: hotel.roomTypes[0]?.currency || 'ETB',
         amenities: hotel.amenities.map((a) => a.amenity),
-        roomTypes: hotel.roomTypes.map((r) => ({
-          ...r,
-          basePricePerNight: Number(r.basePricePerNight),
-          photos: (r.images && r.images.length > 0)
-            ? r.images.map((img) => img.imageUrl)
-            : [],
-          rates: r.rates.map((rt) => ({
-            ...rt,
-            pricePerNight: Number(rt.pricePerNight),
-          })),
-        })),
+        roomTypes: hotel.roomTypes.map((r) => {
+          const avail = availabilityMap.get(r.id) ?? r.totalInventory;
+          return {
+            ...r,
+            availableInventory: avail,
+            availableRooms: avail,
+            basePricePerNight: Number(r.basePricePerNight),
+            photos: (r.images && r.images.length > 0)
+              ? r.images.map((img) => img.imageUrl)
+              : [],
+            rates: r.rates.map((rt) => ({
+              ...rt,
+              pricePerNight: Number(rt.pricePerNight),
+            })),
+          };
+        }),
         transferRates: hotel.transferRates.map((t) => ({
           ...t,
           fixedPrice: Number(t.fixedPrice),
@@ -1237,8 +1244,23 @@ export class HotelService {
         prisma.hotel.count(),
       ]);
 
+      const allRoomTypes = hotels.flatMap((h) => h.roomTypes || []);
+      const availabilityMap = await inventoryService.getRoomTypesAvailabilityMap(allRoomTypes);
+
+      const enrichedHotels = hotels.map((h) => ({
+        ...h,
+        roomTypes: (h.roomTypes || []).map((rt) => {
+          const avail = availabilityMap.get(rt.id) ?? rt.totalInventory;
+          return {
+            ...rt,
+            availableInventory: avail,
+            availableRooms: avail,
+          };
+        }),
+      }));
+
       return {
-        hotels,
+        hotels: enrichedHotels,
         pagination: {
           page,
           limit,

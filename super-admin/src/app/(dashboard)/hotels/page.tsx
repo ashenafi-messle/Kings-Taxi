@@ -26,9 +26,10 @@ export default function HotelsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState('ALL');
+  const [sseConnected, setSseConnected] = useState(false);
 
-  const fetchHotels = async () => {
-    setIsLoading(true);
+  const fetchHotels = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     setError(null);
     try {
       const res = await HotelService.getHotels({
@@ -38,15 +39,43 @@ export default function HotelsPage() {
       setHotels(res.items);
     } catch (err: any) {
       console.error('Failed to load hotels:', err);
-      setError(err?.message || 'Unable to load partner hotels from the server.');
+      if (!silent) {
+        setError(err?.message || 'Unable to load partner hotels from the server.');
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchHotels();
   }, [cityFilter]);
+
+  useEffect(() => {
+    const unsubscribe = HotelService.subscribeInventoryEvents(
+      undefined,
+      () => {
+        fetchHotels(true);
+      },
+      (connected) => setSseConnected(connected)
+    );
+
+    const onFocus = () => fetchHotels(true);
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [cityFilter]);
+
+  useEffect(() => {
+    if (sseConnected) return;
+    const pollTimer = setInterval(() => {
+      fetchHotels(true);
+    }, 30000);
+    return () => clearInterval(pollTimer);
+  }, [sseConnected, cityFilter]);
 
   const columns: Column<Hotel>[] = [
     {
@@ -205,7 +234,7 @@ export default function HotelsPage() {
       {error && (
         <div className="alert alert-danger d-flex align-items-center justify-content-between py-2.5 px-3 mb-3 rounded-3 text-sm">
           <span>{error}</span>
-          <button type="button" className="btn btn-outline-danger btn-sm" onClick={fetchHotels}>
+          <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => fetchHotels(false)}>
             Retry
           </button>
         </div>

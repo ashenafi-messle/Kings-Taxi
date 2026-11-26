@@ -245,9 +245,11 @@ export class PassengerBookingsService {
     if (hotelsSettled.status === 'fulfilled' && hotelsSettled.value.success && Array.isArray(hotelsSettled.value.data)) {
       for (const h of hotelsSettled.value.data) {
         let normStatus: NormalizedBookingStatus = 'PENDING';
-        const rawStatus = (h.status || 'CONFIRMED').toUpperCase();
+        const rawStatus = (h.status || 'PENDING').toUpperCase();
         if (rawStatus === 'COMPLETED') normStatus = 'COMPLETED';
         else if (rawStatus === 'CONFIRMED') normStatus = 'CONFIRMED';
+        else if (rawStatus === 'CHECKED_IN') normStatus = 'IN_PROGRESS';
+        else if (rawStatus === 'DECLINED') normStatus = 'DECLINED';
         else if (['CANCELLED', 'REJECTED', 'EXPIRED'].includes(rawStatus)) normStatus = 'CANCELLED';
 
         const hotelId = h.id ? String(h.id) : `htl_${Math.random().toString(36).substring(2, 9)}`;
@@ -260,7 +262,7 @@ export class PassengerBookingsService {
           imageUrl: h.hotelImage || null,
           createdAt: h.createdAt || new Date().toISOString(),
           scheduledAt: h.checkInDate || new Date().toISOString(),
-          status: h.status || 'CONFIRMED',
+          status: rawStatus,
           normalizedStatus: normStatus,
           paymentStatus: 'SUCCESS',
           currency: 'ETB',

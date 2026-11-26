@@ -23,7 +23,13 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     if (s.includes('SEARCHING') || s.includes('PENDING') || s.includes('REQUESTED')) {
       return 'warning';
     }
-    if (s.includes('CANCELLED') || s.includes('FAILED')) {
+    if (
+      s.includes('CANCELLED') ||
+      s.includes('FAILED') ||
+      s.includes('DECLINED') ||
+      s.includes('REJECTED') ||
+      s.includes('EXPIRED')
+    ) {
       return 'danger';
     }
     if (s.includes('ASSIGNED') || s.includes('STARTED') || s.includes('ARRIVING')) {
