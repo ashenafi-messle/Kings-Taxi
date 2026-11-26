@@ -188,6 +188,36 @@ export class HeritageService {
 
   // --- Heritage Tour Bookings ---
 
+  private static mapBackendBookingToAdmin(b: any): HeritageTourBooking {
+    return {
+      id: b.id,
+      bookingReference: b.bookingReference,
+      passengerId: b.passengerId,
+      passengerName: b.passenger?.fullName || 'Passenger',
+      passengerPhone: b.passenger?.phoneNumber || '+251 91 100 0000',
+      passengerEmail: b.passenger?.email || 'passenger@example.et',
+      heritageSiteId: b.bookingSites?.[0]?.siteId || '',
+      heritageSiteName: b.bookingSites?.[0]?.siteNameSnapshot || b.package?.name || 'Heritage Destination',
+      destinationCity: b.bookingSites?.[0]?.site?.city || 'Gondar',
+      packageId: b.packageId,
+      packageName: b.package?.name || b.bookingSites?.[0]?.siteNameSnapshot || 'Custom Heritage Tour',
+      tourDate: typeof b.scheduledDate === 'string' ? b.scheduledDate.split('T')[0] : '',
+      scheduledTime: b.preferredStartTime || '09:00',
+      numberOfVisitors: (b.adults || 1) + (b.children || 0),
+      pickupLocation: b.pickupLocation || 'Gondar',
+      transportIncluded: Boolean(b.assignedVehicleId || b.vehicleOptionId),
+      vehicleCategory: b.assignedVehicle?.vehicleModel || b.vehicleOption?.displayName,
+      totalAmountETB: Number(b.totalAmount || 0),
+      paymentStatus: b.paymentStatus || 'PENDING',
+      bookingStatus: b.bookingStatus || 'PENDING',
+      declineReason: b.declineReason,
+      adminReviewNote: b.adminReviewNote,
+      reviewedAt: b.reviewedAt,
+      createdAt: b.createdAt || new Date().toISOString(),
+      updatedAt: b.updatedAt || new Date().toISOString(),
+    };
+  }
+
   static async getHeritageBookings(searchQuery?: string, status?: string): Promise<HeritageTourBooking[]> {
     const queryParams = new URLSearchParams();
     if (searchQuery) queryParams.set('search', searchQuery);
@@ -195,48 +225,21 @@ export class HeritageService {
 
     const res = await apiRequest<any>(`/admin/heritage/bookings?${queryParams.toString()}`);
     if (res.success && Array.isArray(res.data?.bookings)) {
-      return res.data.bookings.map((b: any) => ({
-        id: b.id,
-        bookingReference: b.bookingReference,
-        passengerId: b.passengerId,
-        passengerName: b.passenger?.fullName || 'Passenger',
-        passengerPhone: b.passenger?.phoneNumber || '+251 91 100 0000',
-        passengerEmail: b.passenger?.email || 'passenger@example.et',
-        heritageSiteId: b.bookingSites?.[0]?.siteId || '',
-        heritageSiteName: b.bookingSites?.[0]?.siteNameSnapshot || b.package?.name || 'Heritage Destination',
-        packageId: b.packageId,
-        packageName: b.package?.name || b.bookingSites?.[0]?.siteNameSnapshot || 'Custom Heritage Tour',
-        scheduledDate: typeof b.scheduledDate === 'string' ? b.scheduledDate.split('T')[0] : '',
-        preferredStartTime: b.preferredStartTime || '09:00',
-        adults: b.adults || 1,
-        children: b.children || 0,
-        pickupLocation: b.pickupLocation || 'Gondar',
-        totalAmountETB: Number(b.totalAmount || 0),
-        paymentStatus: b.paymentStatus || 'PENDING',
-        bookingStatus: b.bookingStatus || 'PENDING',
-        declineReason: b.declineReason,
-        adminReviewNote: b.adminReviewNote,
-        reviewedAt: b.reviewedAt,
-        createdAt: b.createdAt || new Date().toISOString(),
-        updatedAt: b.updatedAt || new Date().toISOString(),
-      }));
+      return res.data.bookings.map((b: any) => HeritageService.mapBackendBookingToAdmin(b));
     }
 
     throw new Error(res.error || 'Failed to fetch heritage tour bookings from database.');
   }
 
   static async getHeritageBookingById(id: string): Promise<HeritageTourBooking | null> {
-    try {
-      const res = await apiRequest<any>(`/heritage/admin/heritage/bookings/${id}`);
-      if (res.success && res.data) {
-        // Backend mapping
-      }
-    } catch {
-      // fallback
+    const res = await apiRequest<any>(`/admin/heritage/bookings/${id}`);
+    if (res.success && res.data) {
+      return HeritageService.mapBackendBookingToAdmin(res.data);
     }
-
-    await new Promise((r) => setTimeout(r, 150));
-    return heritageBookingsData.find((b) => b.id === id || b.bookingReference === id) || null;
+    if (!res.success && (res.error?.includes('404') || res.error?.toLowerCase().includes('not found'))) {
+      return null;
+    }
+    throw new Error(res.error || 'Failed to fetch heritage booking details.');
   }
 
   /**
@@ -246,47 +249,14 @@ export class HeritageService {
     bookingId: string,
     adminNote?: string
   ): Promise<{ success: boolean; data?: HeritageTourBooking; error?: string }> {
-    try {
-      const res = await apiRequest<any>(`/heritage/admin/heritage/bookings/${bookingId}/accept`, {
-        method: 'POST',
-        body: JSON.stringify({ adminNote }),
-      });
-      if (res.success && res.data) {
-        // Backend mapping
-      }
-    } catch {
-      // fallback
+    const res = await apiRequest<any>(`/admin/heritage/bookings/${bookingId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({ adminNote }),
+    });
+    if (res.success && res.data) {
+      return { success: true, data: res.data };
     }
-
-    await new Promise((r) => setTimeout(r, 300));
-    const index = heritageBookingsData.findIndex((b) => b.id === bookingId || b.bookingReference === bookingId);
-    if (index === -1) return { success: false, error: 'Tour booking record not found' };
-
-    const booking = heritageBookingsData[index];
-    if (booking.bookingStatus === 'CONFIRMED') {
-      return { success: false, error: 'This tour booking has already been accepted and confirmed.' };
-    }
-
-    const updated: HeritageTourBooking = {
-      ...booking,
-      bookingStatus: 'CONFIRMED',
-      confirmedAt: new Date().toISOString(),
-      reviewedAt: new Date().toISOString(),
-      adminReviewNote: adminNote || 'Tour schedule and visitor capacity confirmed by Super Admin.',
-      statusHistory: [
-        ...(booking.statusHistory || []),
-        {
-          status: 'CONFIRMED',
-          changedAt: new Date().toISOString(),
-          adminName: 'Super Admin',
-          note: adminNote || 'Accepted by Super Admin',
-        },
-      ],
-      updatedAt: new Date().toISOString(),
-    };
-
-    heritageBookingsData[index] = updated;
-    return { success: true, data: updated };
+    return { success: false, error: res.error || 'Failed to accept heritage tour booking.' };
   }
 
   /**
@@ -301,59 +271,28 @@ export class HeritageService {
       return { success: false, error: 'A specific decline reason is required when declining a tour booking request.' };
     }
 
-    try {
-      const res = await apiRequest<any>(`/heritage/admin/heritage/bookings/${bookingId}/decline`, {
-        method: 'POST',
-        body: JSON.stringify({ declineReason, adminNote }),
-      });
-      if (res.success && res.data) {
-        // Backend mapping
-      }
-    } catch {
-      // fallback
+    const res = await apiRequest<any>(`/admin/heritage/bookings/${bookingId}/decline`, {
+      method: 'POST',
+      body: JSON.stringify({ declineReason, adminNote }),
+    });
+    if (res.success && res.data) {
+      return { success: true, data: res.data };
     }
-
-    await new Promise((r) => setTimeout(r, 300));
-    const index = heritageBookingsData.findIndex((b) => b.id === bookingId || b.bookingReference === bookingId);
-    if (index === -1) return { success: false, error: 'Tour booking record not found' };
-
-    const booking = heritageBookingsData[index];
-    const updated: HeritageTourBooking = {
-      ...booking,
-      bookingStatus: 'DECLINED',
-      declineReason: declineReason.trim(),
-      adminReviewNote: adminNote,
-      reviewedAt: new Date().toISOString(),
-      statusHistory: [
-        ...(booking.statusHistory || []),
-        {
-          status: 'DECLINED',
-          changedAt: new Date().toISOString(),
-          adminName: 'Super Admin',
-          note: `Declined: ${declineReason.trim()}`,
-        },
-      ],
-      updatedAt: new Date().toISOString(),
-    };
-
-    heritageBookingsData[index] = updated;
-    return { success: true, data: updated };
+    return { success: false, error: res.error || 'Failed to decline heritage tour booking.' };
   }
 
   static async updateHeritageBookingStatus(
     bookingId: string,
     status: HeritageTourBooking['bookingStatus']
   ): Promise<HeritageTourBooking | null> {
-    await new Promise((r) => setTimeout(r, 200));
-    const index = heritageBookingsData.findIndex((b) => b.id === bookingId);
-    if (index === -1) return null;
-
-    heritageBookingsData[index] = {
-      ...heritageBookingsData[index],
-      bookingStatus: status,
-      updatedAt: new Date().toISOString(),
-    };
-    return heritageBookingsData[index];
+    const res = await apiRequest<any>(`/admin/heritage/bookings/${bookingId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+    if (res.success && res.data) {
+      return res.data;
+    }
+    throw new Error(res.error || 'Failed to update heritage booking status.');
   }
 
   static async getBookingAuditHistory(idOrRef: string): Promise<any[]> {
@@ -373,11 +312,14 @@ export class HeritageService {
     }
 
     const token =
+      localStorage.getItem('kt_admin_token') ||
       localStorage.getItem('kt_admin_access_token') ||
       localStorage.getItem('accessToken') ||
       '';
-    const qs = new URLSearchParams();
-    if (token) qs.set('token', token);
+    if (!token) {
+      return () => {};
+    }
+    const qs = new URLSearchParams({ token });
 
     const url = buildApiUrl(`/admin/heritage/events?${qs.toString()}`);
     const eventSource = new EventSource(url);

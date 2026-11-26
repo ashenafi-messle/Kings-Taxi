@@ -730,12 +730,15 @@ export class HotelService {
     }
 
     const token =
+      localStorage.getItem('kt_admin_token') ||
       localStorage.getItem('kt_admin_access_token') ||
       localStorage.getItem('accessToken') ||
       '';
-    const qs = new URLSearchParams();
+    if (!token) {
+      return () => {};
+    }
+    const qs = new URLSearchParams({ token });
     if (hotelId) qs.set('hotelId', hotelId);
-    if (token) qs.set('token', token);
 
     const url = buildApiUrl(`/admin/hotels/inventory/events?${qs.toString()}`);
     const eventSource = new EventSource(url);
