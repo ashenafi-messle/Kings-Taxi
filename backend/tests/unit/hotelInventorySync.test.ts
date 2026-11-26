@@ -663,5 +663,16 @@ describe('Hotel Room Inventory Synchronization System', () => {
     expect(normalizeBookingStatus('HOTEL', 'DECLINED')).toBe('DECLINED');
     expect(normalizeBookingStatus('HOTEL', 'CANCELLED')).toBe('CANCELLED');
     expect(normalizeBookingStatus('HOTEL', 'COMPLETED')).toBe('COMPLETED');
+
+    // Non-UUID hotel IDs (e.g., htl_skylight_addis) must fall back cleanly instead of throwing P2023 UUID error
+    const nonUuidAvail = await roomService.checkHotelAvailability(
+      'htl_skylight_addis',
+      '2026-12-28',
+      '2026-12-30',
+      2,
+      1
+    );
+    expect(nonUuidAvail.hotelId).toBe('htl_skylight_addis');
+    expect(Array.isArray(nonUuidAvail.roomTypes)).toBe(true);
   });
 });

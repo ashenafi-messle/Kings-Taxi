@@ -304,10 +304,26 @@ export class RoomService {
     const { nights, checkInDate, checkOutDate } = dateCheck;
 
     try {
+      let resolvedHotelId = hotelId;
+      if (!isUuid(hotelId)) {
+        const hotelBySlug = await prisma.hotel.findUnique({ where: { slug: hotelId }, select: { id: true } });
+        if (!hotelBySlug) {
+          return this.getBuiltinRoomAvailability(
+            hotelId,
+            checkInDate,
+            checkOutDate,
+            nights,
+            guestsCount,
+            roomsNeeded
+          );
+        }
+        resolvedHotelId = hotelBySlug.id;
+      }
+
       // Fetch active room types for this hotel
       const roomTypes = await prisma.hotelRoomType.findMany({
         where: {
-          hotelId,
+          hotelId: resolvedHotelId,
           status: 'ACTIVE',
         },
         include: {
@@ -323,10 +339,12 @@ export class RoomService {
 
       if (roomTypes.length === 0) {
         return {
-          hotelId,
+          hotelId: resolvedHotelId,
           checkInDate: formatCalendarDate(checkInDate),
           checkOutDate: formatCalendarDate(checkOutDate),
           nights,
+          roomsNeeded,
+          guestsCount,
           roomTypes: [],
         };
       }
@@ -335,7 +353,7 @@ export class RoomService {
       const inventoryRows = prisma.hotelRoomInventory
         ? await prisma.hotelRoomInventory.findMany({
           where: {
-            hotelId,
+            hotelId: resolvedHotelId,
             roomTypeId: { in: roomTypes.map((r) => r.id) },
             inventoryDate: { gte: checkInDate, lt: checkOutDate },
           },
@@ -349,7 +367,7 @@ export class RoomService {
       // Fallback check for legacy bookings that don't have HotelRoomInventory rows
       const overlappingBookings = await prisma.hotelBooking.findMany({
         where: {
-          hotelId,
+          hotelId: resolvedHotelId,
           bookingStatus: { in: ['CONFIRMED', 'PENDING'] },
           checkInDate: { lt: checkOutDate },
           checkOutDate: { gt: checkInDate },
