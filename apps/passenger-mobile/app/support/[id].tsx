@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,21 +11,29 @@ import {
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Socket } from 'socket.io-client';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Send,
   Lock,
-  Clock,
   User,
   Headphones,
   CheckCheck,
   AlertCircle,
+  ImagePlus,
+  RotateCcw,
+  Wifi,
+  WifiOff,
+  X,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { AppHeader } from '../../src/components';
 import {
   PassengerSupportService,
+  SupportAttachmentInput,
   SupportTicketDetail,
 } from '../../src/services/passengerSupport.service';
 
@@ -39,11 +47,17 @@ export default function TicketConversationScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [agentTyping, setAgentTyping] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<Array<SupportAttachmentInput & { previewUri: string }>>([]);
+  const socketRef = useRef<Socket | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  const fetchTicket = async () => {
+  const fetchTicket = useCallback(async () => {
     if (!id || id === 'index' || !UUID_REGEX.test(id)) {
       setLoading(false);
       return;
@@ -58,7 +72,7 @@ export default function TicketConversationScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     if (id === 'index') {
@@ -66,23 +80,164 @@ export default function TicketConversationScreen() {
       return;
     }
     fetchTicket();
-  }, [id]);
+  }, [id, fetchTicket, router]);
+
+  useEffect(() => {
+    if (!id || id === 'index' || !UUID_REGEX.test(id)) return;
+
+    const socket = PassengerSupportService.connectSocket({
+      onConnectionChange: (connected) => {
+        setSocketConnected(connected);
+        if (connected) {
+          socket?.emit('support:join_ticket', { ticketId: id });
+          fetchTicket();
+        }
+      },
+      onMessageCreated: (payload) => {
+        if (payload.ticketId !== id) return;
+        setTicket((prev) => {
+          if (!prev) return prev;
+          if (prev.messages.some((m) => m.id === payload.message.id)) return prev;
+          return {
+            ...prev,
+            status: payload.nextStatus || prev.status,
+            messages: [...prev.messages, payload.message],
+          };
+        });
+        if (payload.message.senderType === 'ADMIN') {
+          PassengerSupportService.markTicketRead(id).catch(() => {});
+        }
+        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150);
+      },
+      onMessageRead: (payload) => {
+        if (payload.ticketId !== id || payload.readerType !== 'ADMIN') return;
+        setTicket((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.senderType === 'PASSENGER' && !m.readAt ? { ...m, readAt: payload.readAt } : m
+            ),
+          };
+        });
+      },
+      onStatusChanged: (payload) => {
+        if (payload.ticketId !== id) return;
+        setTicket((prev) => (prev ? { ...prev, status: payload.status } : prev));
+      },
+      onTicketAssigned: (payload) => {
+        if (payload.ticketId !== id) return;
+        setTicket((prev) => (prev ? { ...prev, assignedAdminName: payload.assignedAdminName } : prev));
+      },
+      onTyping: (payload) => {
+        if (payload.ticketId !== id || payload.senderType !== 'ADMIN') return;
+        if (payload.isTyping) {
+          setAgentTyping(`${payload.senderName || 'Support'} is typing...`);
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => setAgentTyping(null), 3000);
+        } else {
+          setAgentTyping(null);
+        }
+      },
+    });
+
+    socketRef.current = socket;
+    if (socket?.connected) {
+      socket.emit('support:join_ticket', { ticketId: id });
+    }
+
+    return () => {
+      socket?.emit('support:leave_ticket', { ticketId: id });
+      socket?.disconnect();
+      socketRef.current = null;
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [id, fetchTicket]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchTicket();
   };
 
+  const handleReplyTextChange = (text: string) => {
+    setReplyText(text);
+    if (socketRef.current?.connected && id) {
+      socketRef.current.emit('support:typing', {
+        ticketId: id,
+        isTyping: text.trim().length > 0,
+      });
+    }
+  };
+
+  const handlePickAttachment = async () => {
+    if (pendingAttachments.length >= 3) {
+      setErrorMessage('Maximum 3 images per message.');
+      return;
+    }
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setErrorMessage('Photo permission is required to attach images.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      base64: true,
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]?.base64) return;
+    const asset = result.assets[0];
+    const mimeType =
+      asset.mimeType === 'image/png'
+        ? 'image/png'
+        : asset.mimeType === 'image/webp'
+        ? 'image/webp'
+        : 'image/jpeg';
+    setPendingAttachments((prev) => [
+      ...prev,
+      {
+        previewUri: asset.uri,
+        fileData: `data:${mimeType};base64,${asset.base64}`,
+        mimeType,
+        originalFilename: asset.fileName || `reply_${Date.now()}.jpg`,
+      },
+    ]);
+  };
+
+  const handleReopenTicket = async () => {
+    if (!id || !ticket) return;
+    setReopening(true);
+    setErrorMessage(null);
+    try {
+      const updated = await PassengerSupportService.reopenTicket(id);
+      setTicket(updated);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to reopen ticket');
+    } finally {
+      setReopening(false);
+    }
+  };
+
   const handleSendReply = async () => {
     if (!id || !ticket) return;
     const trimmed = replyText.trim();
-    if (!trimmed) return;
+    if (!trimmed && pendingAttachments.length === 0) return;
 
     setSendingReply(true);
+    setErrorMessage(null);
     try {
-      await PassengerSupportService.replyTicket(id, trimmed);
+      const msg = await PassengerSupportService.replyTicket(
+        id,
+        trimmed || 'Sent an attachment',
+        pendingAttachments.map(({ previewUri: _p, ...rest }) => rest)
+      );
       setReplyText('');
-      await fetchTicket();
+      setPendingAttachments([]);
+      socketRef.current?.emit('support:typing', { ticketId: id, isTyping: false });
+      setTicket((prev) => {
+        if (!prev) return prev;
+        if (prev.messages.some((m) => m.id === msg.id)) return prev;
+        return { ...prev, messages: [...prev.messages, msg] };
+      });
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 200);
@@ -148,20 +303,32 @@ export default function TicketConversationScreen() {
               <View style={styles.overviewCard}>
                 <View style={styles.overviewHeader}>
                   <Text style={styles.ticketNumberText}>{ticket.ticketNumber}</Text>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: getStatusBadge(ticket.status).bg },
-                    ]}
-                  >
-                    <Text
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={styles.livePill}>
+                      {socketConnected ? (
+                        <Wifi size={11} color="#15803D" />
+                      ) : (
+                        <WifiOff size={11} color="#6B7280" />
+                      )}
+                      <Text style={[styles.livePillText, { color: socketConnected ? '#15803D' : '#6B7280' }]}>
+                        {socketConnected ? 'Live' : 'Sync'}
+                      </Text>
+                    </View>
+                    <View
                       style={[
-                        styles.statusBadgeText,
-                        { color: getStatusBadge(ticket.status).text },
+                        styles.statusBadge,
+                        { backgroundColor: getStatusBadge(ticket.status).bg },
                       ]}
                     >
-                      {getStatusBadge(ticket.status).label}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.statusBadgeText,
+                          { color: getStatusBadge(ticket.status).text },
+                        ]}
+                      >
+                        {getStatusBadge(ticket.status).label}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
@@ -190,6 +357,24 @@ export default function TicketConversationScreen() {
                     <Text style={styles.resolutionTitle}>Resolution Summary:</Text>
                     <Text style={styles.resolutionBody}>{ticket.resolutionNotes}</Text>
                   </View>
+                ) : null}
+
+                {ticket.status === 'RESOLVED' ? (
+                  <TouchableOpacity
+                    style={styles.reopenBtn}
+                    onPress={handleReopenTicket}
+                    disabled={reopening}
+                    activeOpacity={0.8}
+                  >
+                    {reopening ? (
+                      <ActivityIndicator size="small" color="#92400E" />
+                    ) : (
+                      <>
+                        <RotateCcw size={14} color="#92400E" />
+                        <Text style={styles.reopenBtnText}>Issue not resolved? Reopen Ticket</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 ) : null}
               </View>
 
@@ -244,6 +429,18 @@ export default function TicketConversationScreen() {
 
                         <Text style={styles.msgBody}>{msg.message}</Text>
 
+                        {msg.attachments && msg.attachments.length > 0 ? (
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                            {msg.attachments.map((att) => (
+                              <Image
+                                key={att.id}
+                                source={{ uri: att.fileUrl }}
+                                style={styles.msgAttachmentThumb}
+                              />
+                            ))}
+                          </ScrollView>
+                        ) : null}
+
                         {isPassenger ? (
                           <View style={styles.readStatusRow}>
                             <CheckCheck
@@ -259,6 +456,9 @@ export default function TicketConversationScreen() {
                     </View>
                   );
                 })}
+                {agentTyping ? (
+                  <Text style={styles.typingIndicator}>{agentTyping}</Text>
+                ) : null}
               </View>
             </>
           ) : (
@@ -278,30 +478,55 @@ export default function TicketConversationScreen() {
               </Text>
             </View>
           ) : (
-            <View style={styles.composerBar}>
-              <TextInput
-                style={[styles.composerInput, { maxHeight: 100 }]}
-                placeholder="Write a reply to support..."
-                placeholderTextColor="#9CA3AF"
-                value={replyText}
-                onChangeText={setReplyText}
-                multiline
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!replyText.trim() || sendingReply) && styles.sendButtonDisabled,
-                ]}
-                onPress={handleSendReply}
-                disabled={!replyText.trim() || sendingReply}
-                activeOpacity={0.8}
-              >
-                {sendingReply ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Send size={18} color="#FFFFFF" />
-                )}
-              </TouchableOpacity>
+            <View>
+              {pendingAttachments.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pendingStrip}>
+                  {pendingAttachments.map((att, idx) => (
+                    <View key={`${att.previewUri}-${idx}`} style={styles.pendingThumbWrap}>
+                      <Image source={{ uri: att.previewUri }} style={styles.pendingThumb} />
+                      <TouchableOpacity
+                        style={styles.pendingRemove}
+                        onPress={() => setPendingAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                      >
+                        <X size={10} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : null}
+              <View style={styles.composerBar}>
+                <TouchableOpacity
+                  style={styles.attachIconBtn}
+                  onPress={handlePickAttachment}
+                  activeOpacity={0.8}
+                >
+                  <ImagePlus size={20} color="#A36B31" />
+                </TouchableOpacity>
+                <TextInput
+                  style={[styles.composerInput, { maxHeight: 100 }]}
+                  placeholder="Write a reply to support..."
+                  placeholderTextColor="#9CA3AF"
+                  value={replyText}
+                  onChangeText={handleReplyTextChange}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.sendButton,
+                    ((!replyText.trim() && pendingAttachments.length === 0) || sendingReply) &&
+                      styles.sendButtonDisabled,
+                  ]}
+                  onPress={handleSendReply}
+                  disabled={(!replyText.trim() && pendingAttachments.length === 0) || sendingReply}
+                  activeOpacity={0.8}
+                >
+                  {sendingReply ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Send size={18} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           )
         ) : null}
@@ -311,6 +536,93 @@ export default function TicketConversationScreen() {
 }
 
 const styles = StyleSheet.create({
+  livePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: '#F3F4F6',
+  },
+  livePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  reopenBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  reopenBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  msgAttachmentThumb: {
+    width: 110,
+    height: 84,
+    borderRadius: 8,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  typingIndicator: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: '#6B7280',
+    paddingHorizontal: 6,
+    marginTop: 4,
+  },
+  pendingStrip: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  pendingThumbWrap: {
+    position: 'relative',
+    marginRight: 8,
+    paddingTop: 4,
+  },
+  pendingThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  pendingRemove: {
+    position: 'absolute',
+    top: 0,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFBF2',
+    borderWidth: 1,
+    borderColor: '#E5D3B3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background,

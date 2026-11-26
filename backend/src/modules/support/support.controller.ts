@@ -3,9 +3,14 @@ import { supportService } from './support.service';
 import {
   createTicketSchema,
   addMessageSchema,
+  uploadAttachmentSchema,
   updateTicketStatusSchema,
+  assignTicketSchema,
+  updateTicketPrioritySchema,
+  reopenTicketSchema,
   passengerQuerySchema,
   adminQuerySchema,
+  messagesQuerySchema,
 } from './support.validation';
 import { renderAdminSupportDashboardHtml } from './adminSupportDashboard';
 import { ApiResponse } from '../../core/response/apiResponse';
@@ -39,7 +44,7 @@ function handleSupportError(res: Response, err: any, defaultMessage: string) {
     ApiResponse.error(
       res,
       'DEPENDENCY_UNAVAILABLE',
-      'PostgreSQL database server at 127.0.0.1:5433 is unreachable. Ensure the SSH tunnel is active.',
+      'PostgreSQL database server is unreachable. Please verify database connectivity.',
       503
     );
     return;
@@ -69,9 +74,6 @@ export class SupportController {
   // PASSENGER ENDPOINTS
   // ============================================================================
 
-  /**
-   * POST /api/v1/support/tickets
-   */
   async createTicket(req: Request, res: Response): Promise<void> {
     try {
       const passengerId = req.user?.sub;
@@ -99,9 +101,6 @@ export class SupportController {
     }
   }
 
-  /**
-   * GET /api/v1/support/tickets
-   */
   async listPassengerTickets(req: Request, res: Response): Promise<void> {
     try {
       const passengerId = req.user?.sub;
@@ -128,9 +127,6 @@ export class SupportController {
     }
   }
 
-  /**
-   * GET /api/v1/support/tickets/:id
-   */
   async getPassengerTicket(req: Request, res: Response): Promise<void> {
     try {
       const passengerId = req.user?.sub;
@@ -152,9 +148,33 @@ export class SupportController {
     }
   }
 
-  /**
-   * POST /api/v1/support/tickets/:id/messages
-   */
+  async getPassengerTicketMessages(req: Request, res: Response): Promise<void> {
+    try {
+      const passengerId = req.user?.sub;
+      if (!passengerId) {
+        ApiResponse.error(res, 'UNAUTHORIZED', 'Authentication required', 401);
+        return;
+      }
+
+      const ticketId = req.params.id;
+      if (!ticketId || !UUID_REGEX.test(ticketId)) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'A valid ticket UUID is required', 400);
+        return;
+      }
+
+      const parseResult = messagesQuerySchema.safeParse(req.query);
+      if (!parseResult.success) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'Invalid pagination parameters', 400);
+        return;
+      }
+
+      const result = await supportService.getPassengerTicketMessages(passengerId, ticketId, parseResult.data);
+      ApiResponse.success(res, result, 'Ticket messages retrieved successfully');
+    } catch (err: any) {
+      handleSupportError(res, err, 'Failed to retrieve ticket messages');
+    }
+  }
+
   async addPassengerMessage(req: Request, res: Response): Promise<void> {
     try {
       const passengerId = req.user?.sub;
@@ -191,13 +211,95 @@ export class SupportController {
     }
   }
 
+  async markPassengerTicketRead(req: Request, res: Response): Promise<void> {
+    try {
+      const passengerId = req.user?.sub;
+      if (!passengerId) {
+        ApiResponse.error(res, 'UNAUTHORIZED', 'Authentication required', 401);
+        return;
+      }
+
+      const ticketId = req.params.id;
+      if (!ticketId || !UUID_REGEX.test(ticketId)) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'A valid ticket UUID is required', 400);
+        return;
+      }
+
+      const result = await supportService.markTicketRead('PASSENGER', passengerId, ticketId);
+      ApiResponse.success(res, result, 'Messages marked as read');
+    } catch (err: any) {
+      handleSupportError(res, err, 'Failed to mark messages as read');
+    }
+  }
+
+  async uploadPassengerAttachment(req: Request, res: Response): Promise<void> {
+    try {
+      const passengerId = req.user?.sub;
+      if (!passengerId) {
+        ApiResponse.error(res, 'UNAUTHORIZED', 'Authentication required', 401);
+        return;
+      }
+
+      const ticketId = req.params.id;
+      if (!ticketId || !UUID_REGEX.test(ticketId)) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'A valid ticket UUID is required', 400);
+        return;
+      }
+
+      const parseResult = uploadAttachmentSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        ApiResponse.error(
+          res,
+          'VALIDATION_ERROR',
+          parseResult.error.errors[0]?.message || 'Invalid attachment',
+          400
+        );
+        return;
+      }
+
+      const attachment = await supportService.uploadTicketAttachment(
+        'PASSENGER',
+        passengerId,
+        ticketId,
+        parseResult.data
+      );
+      ApiResponse.success(res, attachment, 'Attachment uploaded successfully', 201);
+    } catch (err: any) {
+      handleSupportError(res, err, 'Failed to upload attachment');
+    }
+  }
+
+  async reopenPassengerTicket(req: Request, res: Response): Promise<void> {
+    try {
+      const passengerId = req.user?.sub;
+      if (!passengerId) {
+        ApiResponse.error(res, 'UNAUTHORIZED', 'Authentication required', 401);
+        return;
+      }
+
+      const ticketId = req.params.id;
+      if (!ticketId || !UUID_REGEX.test(ticketId)) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'A valid ticket UUID is required', 400);
+        return;
+      }
+
+      const parseResult = reopenTicketSchema.safeParse(req.body || {});
+      if (!parseResult.success) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'Invalid reopen request', 400);
+        return;
+      }
+
+      const updated = await supportService.reopenPassengerTicket(passengerId, ticketId, parseResult.data);
+      ApiResponse.success(res, updated, 'Ticket reopened successfully');
+    } catch (err: any) {
+      handleSupportError(res, err, 'Failed to reopen ticket');
+    }
+  }
+
   // ============================================================================
   // SUPER ADMIN ENDPOINTS
   // ============================================================================
 
-  /**
-   * GET /api/v1/support/admin/overview
-   */
   async getAdminOverview(_req: Request, res: Response): Promise<void> {
     try {
       const overview = await supportService.getAdminOverview();
@@ -207,9 +309,6 @@ export class SupportController {
     }
   }
 
-  /**
-   * GET /api/v1/support/admin/tickets
-   */
   async listAdminTickets(req: Request, res: Response): Promise<void> {
     try {
       const parseResult = adminQuerySchema.safeParse(req.query);
@@ -230,9 +329,6 @@ export class SupportController {
     }
   }
 
-  /**
-   * GET /api/v1/support/admin/tickets/:id
-   */
   async getAdminTicket(req: Request, res: Response): Promise<void> {
     try {
       const ticketId = req.params.id;
@@ -248,9 +344,27 @@ export class SupportController {
     }
   }
 
-  /**
-   * POST /api/v1/support/admin/tickets/:id/messages
-   */
+  async getAdminTicketMessages(req: Request, res: Response): Promise<void> {
+    try {
+      const ticketId = req.params.id;
+      if (!ticketId || !UUID_REGEX.test(ticketId)) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'A valid ticket UUID is required', 400);
+        return;
+      }
+
+      const parseResult = messagesQuerySchema.safeParse(req.query);
+      if (!parseResult.success) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'Invalid pagination parameters', 400);
+        return;
+      }
+
+      const result = await supportService.getAdminTicketMessages(ticketId, parseResult.data);
+      ApiResponse.success(res, result, 'Ticket messages retrieved successfully');
+    } catch (err: any) {
+      handleSupportError(res, err, 'Failed to retrieve ticket messages');
+    }
+  }
+
   async addAdminMessage(req: Request, res: Response): Promise<void> {
     try {
       const adminId = req.user?.sub || 'system-admin';
@@ -285,9 +399,80 @@ export class SupportController {
     }
   }
 
-  /**
-   * PATCH /api/v1/support/admin/tickets/:id/status
-   */
+  async assignAdminTicket(req: Request, res: Response): Promise<void> {
+    try {
+      const adminId = req.user?.sub || 'system-admin';
+      const adminName = (req.user as any)?.name || (req.user as any)?.email || 'Super Admin';
+
+      const ticketId = req.params.id;
+      if (!ticketId || !UUID_REGEX.test(ticketId)) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'A valid ticket UUID is required', 400);
+        return;
+      }
+
+      const parseResult = assignTicketSchema.safeParse(req.body || {});
+      if (!parseResult.success) {
+        ApiResponse.error(
+          res,
+          'VALIDATION_ERROR',
+          parseResult.error.errors[0]?.message || 'Invalid assignment data',
+          400
+        );
+        return;
+      }
+
+      const updated = await supportService.assignAdminTicket(adminId, adminName, ticketId, parseResult.data);
+      ApiResponse.success(res, updated, 'Ticket assigned successfully');
+    } catch (err: any) {
+      handleSupportError(res, err, 'Failed to assign ticket');
+    }
+  }
+
+  async updateTicketPriority(req: Request, res: Response): Promise<void> {
+    try {
+      const adminId = req.user?.sub || 'system-admin';
+      const adminName = (req.user as any)?.name || (req.user as any)?.email || 'Super Admin';
+
+      const ticketId = req.params.id;
+      if (!ticketId || !UUID_REGEX.test(ticketId)) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'A valid ticket UUID is required', 400);
+        return;
+      }
+
+      const parseResult = updateTicketPrioritySchema.safeParse(req.body);
+      if (!parseResult.success) {
+        ApiResponse.error(
+          res,
+          'VALIDATION_ERROR',
+          parseResult.error.errors[0]?.message || 'Invalid priority value',
+          400
+        );
+        return;
+      }
+
+      const updated = await supportService.updateTicketPriority(adminId, adminName, ticketId, parseResult.data);
+      ApiResponse.success(res, updated, 'Ticket priority updated successfully');
+    } catch (err: any) {
+      handleSupportError(res, err, 'Failed to update ticket priority');
+    }
+  }
+
+  async markAdminTicketRead(req: Request, res: Response): Promise<void> {
+    try {
+      const adminId = req.user?.sub || 'system-admin';
+      const ticketId = req.params.id;
+      if (!ticketId || !UUID_REGEX.test(ticketId)) {
+        ApiResponse.error(res, 'VALIDATION_ERROR', 'A valid ticket UUID is required', 400);
+        return;
+      }
+
+      const result = await supportService.markTicketRead('ADMIN', adminId, ticketId);
+      ApiResponse.success(res, result, 'Ticket messages marked as read');
+    } catch (err: any) {
+      handleSupportError(res, err, 'Failed to mark ticket as read');
+    }
+  }
+
   async updateTicketStatus(req: Request, res: Response): Promise<void> {
     try {
       const adminId = req.user?.sub || 'system-admin';
@@ -324,10 +509,6 @@ export class SupportController {
     }
   }
 
-  /**
-   * GET /admin/support or /api/v1/support/admin/dashboard
-   * Serves the HTML Super Admin Support Portal.
-   */
   renderDashboard(_req: Request, res: Response): void {
     const html = renderAdminSupportDashboardHtml();
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -336,4 +517,3 @@ export class SupportController {
 }
 
 export const supportController = new SupportController();
-

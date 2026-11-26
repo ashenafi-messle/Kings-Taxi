@@ -84,6 +84,16 @@ export default function SupportScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchTickets();
+      const socket = PassengerSupportService.connectSocket({
+        onMessageCreated: () => fetchTickets(),
+        onStatusChanged: () => fetchTickets(),
+        onTicketAssigned: () => fetchTickets(),
+        onTicketUpdated: () => fetchTickets(),
+        onUnreadCountUpdated: () => fetchTickets(),
+      });
+      return () => {
+        socket?.disconnect();
+      };
     }, [])
   );
 

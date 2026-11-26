@@ -5,6 +5,7 @@ import { logger } from './core/logging/logger';
 import { disconnectPrisma } from './core/database/prisma';
 import { ensureDatabaseSchema } from './core/database/schemaInitializer';
 import { reservationExpirationWorker } from './modules/hospitality/expirationWorker';
+import { initSupportSocket, closeSupportSocket } from './modules/support/supportSocket';
 
 const server = createServer(app);
 
@@ -20,6 +21,7 @@ async function bootstrap() {
   server.listen(env.PORT, HOST, () => {
     if (env.NODE_ENV !== 'test') {
       reservationExpirationWorker.start(60_000);
+      initSupportSocket(server);
     }
     logger.info(
       {
@@ -45,6 +47,7 @@ async function gracefulShutdown(signal: string) {
 
   logger.info(`[Shutdown] Received ${signal}. Starting graceful shutdown...`);
   reservationExpirationWorker.stop();
+  await closeSupportSocket().catch(() => {});
 
   // Stop accepting new connections
   server.close(async () => {

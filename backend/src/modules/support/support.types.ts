@@ -17,7 +17,40 @@ export type SupportTicketStatus =
 
 export type SupportPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
-export type SupportSenderType = 'PASSENGER' | 'ADMIN';
+export type SupportSenderType = 'PASSENGER' | 'ADMIN' | 'SYSTEM';
+
+export interface SupportAttachmentInput {
+  fileData: string;
+  mimeType?: 'image/jpeg' | 'image/jpg' | 'image/png' | 'image/webp';
+  originalFilename?: string;
+}
+
+export interface SupportAttachmentDTO {
+  id: string;
+  ticketId: string;
+  messageId: string | null;
+  uploadedByType: SupportSenderType;
+  uploadedById: string | null;
+  fileUrl: string;
+  cloudinaryPublicId: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  originalFilename: string | null;
+  createdAt: Date | string;
+}
+
+export interface SupportTicketAuditLogDTO {
+  id: string;
+  ticketId: string;
+  actorType: SupportSenderType;
+  actorId: string | null;
+  actorName: string;
+  action: string;
+  previousValue: Record<string, unknown> | null;
+  newValue: Record<string, unknown> | null;
+  note: string | null;
+  createdAt: Date | string;
+}
 
 export interface CreateSupportTicketInput {
   category: SupportCategory;
@@ -26,10 +59,12 @@ export interface CreateSupportTicketInput {
   bookingId?: string | null;
   bookingType?: string | null;
   priority?: SupportPriority;
+  attachments?: SupportAttachmentInput[];
 }
 
 export interface AddSupportMessageInput {
   message: string;
+  attachments?: SupportAttachmentInput[];
 }
 
 export interface UpdateTicketStatusInput {
@@ -37,6 +72,19 @@ export interface UpdateTicketStatusInput {
   resolutionNotes?: string | null;
   assignedAdminName?: string | null;
   priority?: SupportPriority;
+}
+
+export interface AssignTicketInput {
+  assignedAdminId?: string | null;
+  assignedAdminName?: string | null;
+}
+
+export interface UpdateTicketPriorityInput {
+  priority: SupportPriority;
+}
+
+export interface ReopenTicketInput {
+  reason?: string;
 }
 
 export interface PassengerTicketQuery {
@@ -50,7 +98,15 @@ export interface AdminTicketQuery {
   status?: SupportTicketStatus;
   category?: SupportCategory;
   priority?: SupportPriority;
+  assignedAdminId?: string;
+  unassignedOnly?: boolean;
+  unreadOnly?: boolean;
   search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface TicketMessagesQuery {
   page?: number;
   limit?: number;
 }
@@ -62,6 +118,8 @@ export interface SupportOverviewStats {
   waitingForPassenger: number;
   resolved: number;
   closed: number;
+  unassigned: number;
+  urgent: number;
   unreadPassengerMessages: number;
 }
 
@@ -76,6 +134,7 @@ export interface SupportMessageDTO {
   readAt: Date | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
+  attachments?: SupportAttachmentDTO[];
 }
 
 export interface SupportTicketSummaryDTO {
@@ -86,6 +145,7 @@ export interface SupportTicketSummaryDTO {
   subject: string;
   status: SupportTicketStatus;
   priority: SupportPriority;
+  assignedAdminId: string | null;
   assignedAdminName: string | null;
   bookingId: string | null;
   bookingType: string | null;
@@ -94,6 +154,7 @@ export interface SupportTicketSummaryDTO {
   closedAt: Date | string | null;
   unreadCount: number;
   latestMessage?: string;
+  attachmentCount?: number;
   createdAt: Date | string;
   updatedAt: Date | string;
   passenger?: {
@@ -107,4 +168,6 @@ export interface SupportTicketSummaryDTO {
 export interface SupportTicketDetailDTO extends SupportTicketSummaryDTO {
   resolutionNotes: string | null;
   messages: SupportMessageDTO[];
+  attachments?: SupportAttachmentDTO[];
+  auditLogs?: SupportTicketAuditLogDTO[];
 }

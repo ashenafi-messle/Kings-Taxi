@@ -204,6 +204,7 @@ enum SupportTicketStatus {
 enum SupportSenderType {
   PASSENGER
   ADMIN
+  SYSTEM
 }
 
 enum CancellationActor {
@@ -791,6 +792,8 @@ model SupportTicket {
   // Relationships
   passenger          Passenger           @relation(fields: [passengerId], references: [id], onDelete: Cascade)
   messages           SupportMessage[]
+  attachments        SupportAttachment[]
+  auditLogs          SupportTicketAuditLog[]
 
   @@index([passengerId, status])
   @@index([status])
@@ -817,11 +820,54 @@ model SupportMessage {
   // Relationships
   ticket      SupportTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   passenger   Passenger?        @relation(fields: [passengerId], references: [id], onDelete: SetNull)
+  attachments SupportAttachment[]
 
   @@index([ticketId, createdAt])
   @@index([senderType, readAt])
   @@index([createdAt])
   @@map("support_messages")
+}
+
+model SupportAttachment {
+  id                 String            @id @default(uuid()) @db.Uuid
+  ticketId           String            @map("ticket_id") @db.Uuid
+  messageId          String?           @map("message_id") @db.Uuid
+  uploadedByType     SupportSenderType @default(PASSENGER) @map("uploaded_by_type")
+  uploadedById       String?           @map("uploaded_by_id") @db.Uuid
+  fileUrl            String            @map("file_url") @db.Text
+  cloudinaryPublicId String            @map("cloudinary_public_id") @db.VarChar(255)
+  mimeType           String            @map("mime_type") @db.VarChar(64)
+  fileSizeBytes      Int               @map("file_size_bytes")
+  originalFilename   String?           @map("original_filename") @db.VarChar(255)
+
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket             SupportTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message            SupportMessage?   @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([messageId])
+  @@map("support_attachments")
+}
+
+model SupportTicketAuditLog {
+  id            String            @id @default(uuid()) @db.Uuid
+  ticketId      String            @map("ticket_id") @db.Uuid
+  actorType     SupportSenderType @default(ADMIN) @map("actor_type")
+  actorId       String?           @map("actor_id") @db.Uuid
+  actorName     String            @map("actor_name") @db.VarChar(128)
+  action        String            @db.VarChar(64)
+  previousValue Json?             @map("previous_value")
+  newValue      Json?             @map("new_value")
+  note          String?           @db.Text
+
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket        SupportTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@index([action])
+  @@map("support_ticket_audit_logs")
 }
 
 // ------------------------------------------------------------------------------

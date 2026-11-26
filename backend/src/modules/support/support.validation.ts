@@ -21,6 +21,19 @@ export const SUPPORT_STATUSES = [
 
 export const SUPPORT_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 
+export const SUPPORT_ATTACHMENT_MIME_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+] as const;
+
+export const attachmentInputSchema = z.object({
+  fileData: z.string().min(20, 'Attachment image data is invalid'),
+  mimeType: z.enum(SUPPORT_ATTACHMENT_MIME_TYPES).optional(),
+  originalFilename: z.string().max(255).optional(),
+});
+
 export const createTicketSchema = z.object({
   category: z.enum(SUPPORT_CATEGORIES, {
     errorMap: () => ({ message: 'Invalid support category' }),
@@ -38,6 +51,7 @@ export const createTicketSchema = z.object({
   bookingId: z.string().uuid('Invalid booking UUID').optional().nullable(),
   bookingType: z.string().max(32).optional().nullable(),
   priority: z.enum(SUPPORT_PRIORITIES).optional().default('MEDIUM'),
+  attachments: z.array(attachmentInputSchema).max(5, 'Maximum 5 attachments allowed').optional(),
 });
 
 export const addMessageSchema = z.object({
@@ -46,6 +60,14 @@ export const addMessageSchema = z.object({
     .min(1, 'Message cannot be empty')
     .max(5000, 'Message cannot exceed 5000 characters')
     .trim(),
+  attachments: z.array(attachmentInputSchema).max(5, 'Maximum 5 attachments allowed').optional(),
+});
+
+export const uploadAttachmentSchema = z.object({
+  fileData: z.string().min(20, 'Attachment image data is invalid'),
+  mimeType: z.enum(SUPPORT_ATTACHMENT_MIME_TYPES).optional(),
+  originalFilename: z.string().max(255).optional(),
+  messageId: z.string().uuid('Invalid message UUID').optional(),
 });
 
 export const updateTicketStatusSchema = z.object({
@@ -55,6 +77,21 @@ export const updateTicketStatusSchema = z.object({
   resolutionNotes: z.string().max(2000).optional().nullable(),
   assignedAdminName: z.string().max(128).optional().nullable(),
   priority: z.enum(SUPPORT_PRIORITIES).optional(),
+});
+
+export const assignTicketSchema = z.object({
+  assignedAdminId: z.string().uuid('Invalid admin UUID').optional().nullable(),
+  assignedAdminName: z.string().max(128).trim().optional().nullable(),
+});
+
+export const updateTicketPrioritySchema = z.object({
+  priority: z.enum(SUPPORT_PRIORITIES, {
+    errorMap: () => ({ message: 'Invalid ticket priority' }),
+  }),
+});
+
+export const reopenTicketSchema = z.object({
+  reason: z.string().max(500).trim().optional(),
 });
 
 export const passengerQuerySchema = z.object({
@@ -68,8 +105,15 @@ export const adminQuerySchema = z.object({
   status: z.enum(SUPPORT_STATUSES).optional(),
   category: z.enum(SUPPORT_CATEGORIES).optional(),
   priority: z.enum(SUPPORT_PRIORITIES).optional(),
+  assignedAdminId: z.string().uuid().optional(),
+  unassignedOnly: z.coerce.boolean().optional(),
+  unreadOnly: z.coerce.boolean().optional(),
   search: z.string().trim().optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(25),
 });
 
+export const messagesQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+});

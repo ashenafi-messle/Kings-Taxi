@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,23 +8,27 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import {
   LifeBuoy,
   Send,
   AlertCircle,
-  Tag,
-  FileQuestion,
+  ImagePlus,
+  X,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import { AppHeader } from '../../src/components';
 import {
   PassengerSupportService,
+  SupportAttachmentInput,
   SupportCategory,
   SupportPriority,
 } from '../../src/services/passengerSupport.service';
+import { PassengerBookingsService } from '../../src/services/passengerBookings.service';
+import { UnifiedBookingItem } from '../../src/types';
 
 interface CategoryOption {
   value: SupportCategory;
@@ -90,9 +94,60 @@ export default function CreateSupportTicketScreen() {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [bookingRef, setBookingRef] = useState('');
+  const [bookingType, setBookingType] = useState<string | undefined>(undefined);
+  const [recentBookings, setRecentBookings] = useState<UnifiedBookingItem[]>([]);
+  const [attachments, setAttachments] = useState<Array<SupportAttachmentInput & { previewUri: string }>>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    PassengerBookingsService.getBookingsHistory({ limit: 6 })
+      .then((res) => {
+        if (res.success && res.data?.items) {
+          setRecentBookings(res.data.items);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handlePickImage = async () => {
+    if (attachments.length >= 4) {
+      setErrorMessage('Maximum 4 screenshots can be attached.');
+      return;
+    }
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setErrorMessage('Photo library permission is required to attach screenshots.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      base64: true,
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      setErrorMessage('Could not read image data. Please try another image.');
+      return;
+    }
+    const mimeType =
+      asset.mimeType === 'image/png'
+        ? 'image/png'
+        : asset.mimeType === 'image/webp'
+        ? 'image/webp'
+        : 'image/jpeg';
+    setAttachments((prev) => [
+      ...prev,
+      {
+        previewUri: asset.uri,
+        fileData: `data:${mimeType};base64,${asset.base64}`,
+        mimeType,
+        originalFilename: asset.fileName || `support_${Date.now()}.jpg`,
+      },
+    ]);
+  };
 
   const handleSubmit = async () => {
     setErrorMessage(null);
@@ -109,6 +164,9 @@ export default function CreateSupportTicketScreen() {
       return;
     }
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const trimmedBooking = bookingRef.trim();
+
     setSubmitting(true);
     try {
       const createdTicket = await PassengerSupportService.createTicket({
@@ -116,7 +174,9 @@ export default function CreateSupportTicketScreen() {
         priority,
         subject: trimmedSubject,
         message: trimmedMessage,
-        bookingId: bookingRef.trim() || undefined,
+        bookingId: uuidRegex.test(trimmedBooking) ? trimmedBooking : undefined,
+        bookingType: bookingType || (uuidRegex.test(trimmedBooking) ? 'BOOKING' : undefined),
+        attachments: attachments.map(({ previewUri: _p, ...rest }) => rest),
       });
 
       // Navigate to the newly created ticket conversation
@@ -235,13 +295,48 @@ export default function CreateSupportTicketScreen() {
 
         {/* 4. Booking Reference (Optional) */}
         <View style={styles.formGroup}>
-          <Text style={styles.groupLabel}>4. Related Booking Reference (Optional)</Text>
+          <Text style={styles.groupLabel}>4. Link a Recent Ride or Booking (Optional)</Text>
+          {recentBookings.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+              {recentBookings.map((b) => {
+                const selected = bookingRef === b.id;
+                return (
+                  <TouchableOpacity
+                    key={b.id}
+                    style={[
+                      styles.bookingChip,
+                      selected && styles.bookingChipSelected,
+                    ]}
+                    onPress={() => {
+                      if (selected) {
+                        setBookingRef('');
+                        setBookingType(undefined);
+                      } else {
+                        setBookingRef(b.id);
+                        setBookingType(b.type);
+                      }
+                    }}
+                  >
+                    <Text style={[styles.bookingChipTitle, selected && { color: '#FFFFFF' }]} numberOfLines={1}>
+                      {b.type} • {b.title}
+                    </Text>
+                    <Text style={[styles.bookingChipSub, selected && { color: '#FDE68A' }]} numberOfLines={1}>
+                      {b.reference}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : null}
           <TextInput
             style={styles.textInput}
-            placeholder="e.g. Trip UUID or booking confirmation code"
+            placeholder="Or paste Ride / Booking UUID"
             placeholderTextColor="#9CA3AF"
             value={bookingRef}
-            onChangeText={setBookingRef}
+            onChangeText={(val) => {
+              setBookingRef(val);
+              if (!val.trim()) setBookingType(undefined);
+            }}
             autoCapitalize="none"
           />
         </View>
@@ -263,6 +358,32 @@ export default function CreateSupportTicketScreen() {
             maxLength={5000}
             textAlignVertical="top"
           />
+        </View>
+
+        {/* 6. Optional Screenshot Attachments */}
+        <View style={styles.formGroup}>
+          <Text style={styles.groupLabel}>6. Screenshots / Receipts (Optional)</Text>
+          <View style={styles.attachmentRow}>
+            <TouchableOpacity style={styles.attachBtn} onPress={handlePickImage} activeOpacity={0.8}>
+              <ImagePlus size={18} color="#A36B31" />
+              <Text style={styles.attachBtnText}>Add Image ({attachments.length}/4)</Text>
+            </TouchableOpacity>
+          </View>
+          {attachments.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+              {attachments.map((att, idx) => (
+                <View key={`${att.previewUri}-${idx}`} style={styles.thumbWrap}>
+                  <Image source={{ uri: att.previewUri }} style={styles.thumbImg} />
+                  <TouchableOpacity
+                    style={styles.thumbRemove}
+                    onPress={() => setAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                  >
+                    <X size={12} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
         </View>
 
         {/* Submit Button */}
@@ -287,6 +408,72 @@ export default function CreateSupportTicketScreen() {
 }
 
 const styles = StyleSheet.create({
+  bookingChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    maxWidth: 210,
+  },
+  bookingChipSelected: {
+    backgroundColor: '#A36B31',
+    borderColor: '#A36B31',
+  },
+  bookingChipTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  bookingChipSub: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  attachmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  attachBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5D3B3',
+    backgroundColor: '#FFFBF2',
+  },
+  attachBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#78350F',
+  },
+  thumbWrap: {
+    position: 'relative',
+    marginRight: 10,
+  },
+  thumbImg: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  thumbRemove: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background,
