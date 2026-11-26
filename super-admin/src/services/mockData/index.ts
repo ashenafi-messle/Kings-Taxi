@@ -7,6 +7,5 @@ export * from './heritage.mock';
 export * from './heritageBookings.mock';
 export * from './rides.mock';
 export * from './support.mock';
-export * from './notifications.mock';
 export * from './admins.mock';
 export * from './settings.mock';

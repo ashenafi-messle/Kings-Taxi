@@ -4,10 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import {
   Menu,
-  Bell,
   Search,
-  CheckCircle2,
-  AlertTriangle,
   User,
   Settings,
   LogOut,
@@ -31,7 +28,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   isCollapsed,
   onToggleCollapse,
 }) => {
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [currentAdmin, setCurrentAdmin] = useState<{ name: string; email: string; role: string } | null>(null);
 
@@ -120,7 +116,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Global Search + Notifications + Profile */}
+        {/* Right Side: Global Search + Profile */}
         <div className="d-flex align-items-center gap-2">
           {/* Quick Search (Visible on md+) */}
           <div className="position-relative d-none d-md-block" style={{ width: 220 }}>
@@ -150,108 +146,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             <span>Live Radar</span>
           </Link>
 
-          {/* Notifications Dropdown */}
-          <div className="position-relative">
-            <button
-              type="button"
-              className="btn btn-light position-relative p-2 rounded-circle border-0 shadow-none"
-              onClick={() => {
-                setShowNotifications(!showNotifications);
-                setShowProfileMenu(false);
-              }}
-              aria-label="Notifications"
-              style={{ backgroundColor: '#F2E9D5' }}
-            >
-              <Bell size={18} style={{ color: '#252525' }} />
-              <span
-                className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                style={{ fontSize: '0.625rem', padding: '0.2rem 0.4rem' }}
-              >
-                3
-              </span>
-            </button>
-
-            {showNotifications && (
-              <div
-                className="position-absolute end-0 mt-2 rounded-3 shadow-lg p-0"
-                style={{
-                  width: '320px',
-                  maxWidth: '90vw',
-                  backgroundColor: '#FFFDF7',
-                  border: '1px solid #E8E3D8',
-                  zIndex: 1050,
-                }}
-              >
-                <div
-                  className="d-flex align-items-center justify-content-between p-3 border-bottom"
-                  style={{ backgroundColor: '#F2E9D5', borderColor: '#E8E3D8' }}
-                >
-                  <span className="fw-bold text-obsidian small">Operational Alerts</span>
-                  <Link
-                    href="/notifications"
-                    className="text-gold text-decoration-none small fw-semibold"
-                    onClick={() => setShowNotifications(false)}
-                  >
-                    View all
-                  </Link>
-                </div>
-
-                <div className="list-group list-group-flush" style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                  <div className="list-group-item list-group-item-action p-2.5 border-bottom" style={{ backgroundColor: 'transparent', borderColor: '#F0EBE1' }}>
-                    <div className="d-flex gap-2">
-                      <AlertTriangle size={16} className="text-warning flex-shrink-0 mt-0.5" />
-                      <div>
-                        <div className="fw-semibold text-obsidian" style={{ fontSize: '0.8125rem' }}>
-                          Driver Document Pending
-                        </div>
-                        <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                          Yonas Mengistu submitted new vehicle inspection papers for review.
-                        </div>
-                        <div className="text-muted mt-1" style={{ fontSize: '0.7rem' }}>
-                          10m ago
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="list-group-item list-group-item-action p-2.5 border-bottom" style={{ backgroundColor: 'transparent', borderColor: '#F0EBE1' }}>
-                    <div className="d-flex gap-2">
-                      <CheckCircle2 size={16} className="text-success flex-shrink-0 mt-0.5" />
-                      <div>
-                        <div className="fw-semibold text-obsidian" style={{ fontSize: '0.8125rem' }}>
-                          VIP Hotel Booking Confirmed
-                        </div>
-                        <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                          Goha Hotel: Royal Suite booked for 4 nights (ETB 52,000).
-                        </div>
-                        <div className="text-muted mt-1" style={{ fontSize: '0.7rem' }}>
-                          32m ago
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="list-group-item list-group-item-action p-2.5" style={{ backgroundColor: 'transparent' }}>
-                    <div className="d-flex gap-2">
-                      <Radio size={16} className="text-gold flex-shrink-0 mt-0.5" />
-                      <div>
-                        <div className="fw-semibold text-obsidian" style={{ fontSize: '0.8125rem' }}>
-                          Telebirr Settlement Processed
-                        </div>
-                        <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                          Daily automated driver payout batch completed without errors.
-                        </div>
-                        <div className="text-muted mt-1" style={{ fontSize: '0.7rem' }}>
-                          1h ago
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Profile Dropdown */}
           <div className="position-relative">
             <button
@@ -259,7 +153,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
               className="btn btn-light d-flex align-items-center gap-2 p-1 pe-2 rounded-pill border shadow-none"
               onClick={() => {
                 setShowProfileMenu(!showProfileMenu);
-                setShowNotifications(false);
               }}
               style={{
                 backgroundColor: '#F2E9D5',

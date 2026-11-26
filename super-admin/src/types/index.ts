@@ -6,7 +6,6 @@ export * from './hotel.types';
 export * from './heritage.types';
 export * from './trip.types';
 export * from './support.types';
-export * from './notification.types';
 export * from './settings.types';
 export * from './dashboard.types';
 

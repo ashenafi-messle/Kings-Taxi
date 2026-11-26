@@ -16,7 +16,6 @@ import {
   Landmark,
   Compass,
   HelpCircle,
-  Bell,
   UserCog,
   Settings,
   LogOut,
@@ -77,7 +76,6 @@ const navGroups: NavGroup[] = [
     groupTitle: 'PLATFORM MANAGEMENT',
     items: [
       { label: 'Support & Disputes', href: '/support', icon: HelpCircle, badge: '3', badgeVariant: 'danger' },
-      { label: 'Notifications', href: '/notifications', icon: Bell },
       { label: 'Administrators', href: '/administrators', icon: UserCog },
       { label: 'System Settings', href: '/settings', icon: Settings },
     ],
