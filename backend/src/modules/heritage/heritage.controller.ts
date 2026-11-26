@@ -16,6 +16,7 @@ import { heritageTourGuideService } from './guide.service';
 import { heritageTourVehicleOptionService } from './vehicleOption.service';
 import { heritageTourBookingService } from './booking.service';
 import { CloudinaryService } from '../../integrations/cloudinary/cloudinary.service';
+import { subscribeAdminHeritageEvents, subscribePassengerHeritageEvents } from './heritageEvents';
 
 export class HeritageController {
   // ============================================================================
@@ -40,6 +41,76 @@ export class HeritageController {
         message: err.message || 'Failed to list heritage sites',
       });
     }
+  }
+
+  async listFeaturedSites(_req: Request, res: Response) {
+    try {
+      const sites = await heritageSiteService.getFeaturedSites();
+      return res.status(200).json({
+        success: true,
+        data: sites,
+        count: sites.length,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Failed to retrieve featured heritage sites',
+      });
+    }
+  }
+
+  async listAvailableFleetVehicles(req: Request, res: Response) {
+    try {
+      const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+      const passengers = req.query.passengers ? Number(req.query.passengers) : 1;
+      const vehicles = await heritageTourVehicleOptionService.listAvailableFleetVehicles({
+        date,
+        passengers,
+      });
+      return res.status(200).json({
+        success: true,
+        data: vehicles,
+        count: vehicles.length,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Failed to retrieve available fleet vehicles',
+      });
+    }
+  }
+
+  async checkAvailability(req: Request, res: Response) {
+    try {
+      const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+      const passengers = req.query.passengers ? Number(req.query.passengers) : 1;
+      const vehicles = await heritageTourVehicleOptionService.listAvailableFleetVehicles({
+        date,
+        passengers,
+      });
+      return res.status(200).json({
+        success: true,
+        data: {
+          date: date || null,
+          passengers,
+          availableVehiclesCount: vehicles.length,
+          vehicles,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Failed to check heritage tour availability',
+      });
+    }
+  }
+
+  publicHeritageEvents(req: Request, res: Response) {
+    subscribePassengerHeritageEvents(req, res);
+  }
+
+  adminHeritageEvents(req: Request, res: Response) {
+    subscribeAdminHeritageEvents(req, res);
   }
 
   /**
@@ -556,17 +627,15 @@ export class HeritageController {
   async adminDeclineBooking(req: Request, res: Response) {
     try {
       const adminId = req.user?.sub || 'adm_system';
-      const { declineReason, adminNote } = req.body;
-      if (!declineReason || !declineReason.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'A decline reason is mandatory when declining a tour booking request.',
-        });
-      }
+      const { declineReason, adminNote } = req.body || {};
+      const finalReason =
+        typeof declineReason === 'string' && declineReason.trim()
+          ? declineReason.trim()
+          : 'Declined by administrator';
       const declined = await heritageTourBookingService.adminDeclineBooking(
         req.params.idOrRef,
         adminId,
-        declineReason,
+        finalReason,
         adminNote
       );
       return res.status(200).json({
@@ -576,6 +645,49 @@ export class HeritageController {
       });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  async adminUpdateSiteStatus(req: Request, res: Response) {
+    try {
+      const status = String(req.body?.status || '').toUpperCase();
+      if (status === 'PUBLISHED') {
+        const site = await heritageSiteService.adminPublishSite(req.params.id);
+        return res.status(200).json({ success: true, data: site });
+      }
+      if (status === 'UNPUBLISHED' || status === 'DRAFT') {
+        const site = await heritageSiteService.adminUnpublishSite(req.params.id);
+        return res.status(200).json({ success: true, data: site });
+      }
+      const updated = await heritageSiteService.adminUpdateSite(req.params.id, { status });
+      return res.status(200).json({ success: true, data: updated });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  async adminCancelBooking(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.sub || 'adm_system';
+      const reason = req.body?.cancellationReason || req.body?.reason || 'Cancelled by administrator';
+      const cancelled = await heritageTourBookingService.cancelBooking(
+        adminId,
+        req.params.idOrRef,
+        reason,
+        true
+      );
+      return res.status(200).json({ success: true, data: cancelled });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  async adminGetBookingHistory(req: Request, res: Response) {
+    try {
+      const history = await heritageTourBookingService.getBookingAuditHistory(req.params.idOrRef);
+      return res.status(200).json({ success: true, data: history });
+    } catch (err: any) {
+      return res.status(404).json({ success: false, message: err.message });
     }
   }
 

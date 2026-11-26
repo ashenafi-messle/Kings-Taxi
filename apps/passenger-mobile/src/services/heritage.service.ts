@@ -169,13 +169,105 @@ const FALLBACK_GUIDES: TourGuide[] = [
   },
 ];
 
+function mapBackendSiteToMobile(s: any): HeritageSite {
+  const destImgs = Array.isArray(s.destinationImages)
+    ? s.destinationImages.map((img: any) => (typeof img === 'string' ? img : img.imageUrl)).filter(Boolean)
+    : [];
+  const rawGallery = Array.isArray(s.galleryImages) ? s.galleryImages.filter(Boolean) : [];
+  const gallery = destImgs.length > 0 ? destImgs : rawGallery;
+  const heroImage =
+    s.coverImageUrl ||
+    s.heroImage ||
+    gallery[0] ||
+    'https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800&auto=format&fit=crop&q=80';
+  const durationMins = Number(s.estimatedVisitDurationMinutes || 120);
+  const hours = Math.max(1, Math.round((durationMins / 60) * 10) / 10);
+
+  const visitingInfo = s.visitingRules || s.visitingHours || 'Open daily for guided tours';
+  const resolvedGallery = gallery.length > 0 ? gallery : [heroImage];
+  const highlightsList = Array.isArray(s.highlights)
+    ? s.highlights
+    : Array.isArray(s.keyHighlights)
+    ? s.keyHighlights
+    : [];
+
+  return {
+    id: s.id,
+    slug: s.slug,
+    name: s.name,
+    region: s.region || s.city || 'Amhara Region',
+    city: s.city || 'Gondar',
+    location: s.specificLocation || s.location || s.city || 'Gondar',
+    specificLocation: s.specificLocation || s.city || 'Gondar',
+    shortDescription: s.shortDescription || '',
+    historicalOverview: s.historicalInformation || s.fullDescription || s.shortDescription || '',
+    culturalSignificance: s.culturalInformation || s.fullDescription || '',
+    visitingHours: visitingInfo,
+    visitingRules: visitingInfo,
+    heroImage,
+    gallery: resolvedGallery,
+    galleryImages: resolvedGallery,
+    recommendedDuration: s.recommendedDuration || `${hours} ${hours === 1 ? 'Hour' : 'Hours'}`,
+    estimatedVisitDurationMinutes: durationMins,
+    entryFeeETB: Number(s.entryFeeETB ?? 0),
+    highlights: highlightsList,
+    keyHighlights: highlightsList,
+    unescoDesignated: Boolean(s.unescoDesignated),
+    unescoYear: s.unescoYear || undefined,
+    requiresBoatTransport: Boolean(s.requiresBoatTransport),
+    destinationType: s.destinationType,
+    featured: Boolean(s.featured),
+  } as HeritageSite;
+}
+
 export class HeritageService {
+  /**
+   * Retrieve published heritage sites from backend with optional filters
+   */
+  static async getSites(params?: {
+    search?: string;
+    region?: string;
+    city?: string;
+    featured?: boolean;
+  }): Promise<ApiResponse<HeritageSite[]>> {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.region) q.set('region', params.region);
+    if (params?.city) q.set('city', params.city);
+    if (params?.featured) q.set('featuredOnly', 'true');
+    const qs = q.toString();
+
+    const res = await requestWithAuth<any[]>(qs ? `/heritage/sites?${qs}` : '/heritage/sites');
+    if (res.success && Array.isArray(res.data)) {
+      return {
+        success: true,
+        data: res.data.map(mapBackendSiteToMobile),
+      };
+    }
+    return {
+      success: false,
+      data: [],
+      error: res.error || 'Failed to load heritage destinations',
+    };
+  }
+
+  static async getFeaturedSites(): Promise<ApiResponse<HeritageSite[]>> {
+    const res = await requestWithAuth<any[]>('/heritage/sites/featured');
+    if (res.success && Array.isArray(res.data)) {
+      return {
+        success: true,
+        data: res.data.map(mapBackendSiteToMobile),
+      };
+    }
+    return this.getSites({ featured: true });
+  }
+
   /**
    * Backward-compatible helper: get all sites
    */
   static async getAllSites(): Promise<ApiResponse<HeritageSite[]>> {
-    const res = await requestWithAuth<HeritageSite[]>('/heritage/sites');
-    if (res.success && res.data && res.data.length > 0) {
+    const res = await this.getSites();
+    if (res.success && res.data.length > 0) {
       return res;
     }
     return {
@@ -185,18 +277,36 @@ export class HeritageService {
   }
 
   /**
-   * Backward-compatible helper: get site by id
+   * Get single site details from backend
    */
   static async getSiteById(id: string): Promise<ApiResponse<HeritageSite | null>> {
-    const res = await requestWithAuth<HeritageSite>(`/heritage/sites/${id}`);
+    const res = await requestWithAuth<any>(`/heritage/sites/${id}`);
     if (res.success && res.data) {
-      return res;
+      return {
+        success: true,
+        data: mapBackendSiteToMobile(res.data),
+      };
     }
-    const fallback = mockHeritageSites.find((s) => s.id === id) || null;
+    const fallback = mockHeritageSites.find((s) => s.id === id || (s as any).slug === id) || null;
     return {
       success: Boolean(fallback),
       data: fallback,
+      error: res.error,
     };
+  }
+
+  /**
+   * Retrieve registered, eligible fleet vehicles available for a tour date & passenger count
+   */
+  static async getAvailableFleetVehicles(
+    date?: string,
+    passengers?: number
+  ): Promise<ApiResponse<any[]>> {
+    const q = new URLSearchParams();
+    if (date) q.set('date', date);
+    if (passengers) q.set('passengers', String(passengers));
+    const qs = q.toString();
+    return requestWithAuth<any[]>(qs ? `/heritage/vehicles/available?${qs}` : '/heritage/vehicles/available');
   }
 
   /**

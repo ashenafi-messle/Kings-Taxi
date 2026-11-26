@@ -3,7 +3,6 @@ import {
   TouchableOpacity,
   View,
   Text,
-  Image,
   StyleSheet,
   ViewStyle,
 } from 'react-native';
@@ -11,6 +10,8 @@ import { MapPin, Award } from 'lucide-react-native';
 import { theme } from '../theme';
 import { HeritageSite } from '../types';
 import { useTranslation } from '../i18n';
+import { formatETB } from '../utils/currency';
+import { RoomImageCarousel } from './RoomImageCarousel';
 
 export interface HeritageCardProps {
   site: HeritageSite;
@@ -24,21 +25,25 @@ export const HeritageCard: React.FC<HeritageCardProps> = ({
   style,
 }) => {
   const { t } = useTranslation(['heritage', 'common']);
+  const gallery: string[] =
+    (site as any).galleryImages && (site as any).galleryImages.length > 0
+      ? (site as any).galleryImages
+      : site.heroImage
+      ? [site.heroImage]
+      : [];
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      onPress={onPress}
-      style={[styles.card, style]}
-    >
-      <Image source={{ uri: site.heroImage }} style={styles.image} />
-      {site.unescoDesignated && (
-        <View style={styles.unescoBadge}>
-          <Award size={12} color={theme.colors.brightGold} />
-          <Text style={styles.unescoText}>{t('categories.unesco')}</Text>
-        </View>
-      )}
-      <View style={styles.content}>
+    <View style={[styles.card, style]}>
+      <View style={styles.carouselWrap}>
+        <RoomImageCarousel images={gallery} roomTitle={site.name} height={170} />
+        {site.unescoDesignated && (
+          <View style={styles.unescoBadge} pointerEvents="none">
+            <Award size={12} color={theme.colors.brightGold} />
+            <Text style={styles.unescoText}>{t('categories.unesco')}</Text>
+          </View>
+        )}
+      </View>
+      <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.content}>
         <View style={styles.titleRow}>
           <Text style={styles.name}>{site.name}</Text>
           <View style={styles.regionRow}>
@@ -50,11 +55,13 @@ export const HeritageCard: React.FC<HeritageCardProps> = ({
           {site.shortDescription}
         </Text>
         <View style={styles.footerRow}>
-          <Text style={styles.duration}>{t('recommendedDuration')}: {site.recommendedDuration}</Text>
+          <Text style={styles.duration}>
+            {site.recommendedDuration} • {site.entryFeeETB > 0 ? formatETB(site.entryFeeETB) : 'Free Entry'}
+          </Text>
           <Text style={styles.exploreLink}>{t('common:viewDetails')} →</Text>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 };
 
@@ -67,6 +74,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderGold,
     marginBottom: theme.spacing.md,
     ...theme.shadows.cardGold,
+  },
+  carouselWrap: {
+    position: 'relative',
   },
   image: {
     width: '100%',

@@ -1,5 +1,6 @@
 import { prisma } from '../../core/database/prisma';
 import { HeritageDestinationType } from './heritage.types';
+import { heritageEventBus } from './heritageEvents';
 
 export interface HeritageSiteFallback {
   id: string;
@@ -217,11 +218,25 @@ export class HeritageSiteService {
 
       const sites = await prisma.heritageSite.findMany({
         where,
+        include: {
+          destinationImages: {
+            orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+          },
+        },
         orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
       });
 
       if (sites.length > 0) {
-        return sites;
+        return sites.map((s: any) => {
+          const destImgs = (s.destinationImages || []).map((img: any) => img.imageUrl).filter(Boolean);
+          const gallery = destImgs.length > 0 ? destImgs : (s.galleryImages || []);
+          const cover = s.coverImageUrl || gallery[0] || '';
+          return {
+            ...s,
+            coverImageUrl: cover,
+            galleryImages: gallery.length > 0 ? gallery : (cover ? [cover] : []),
+          };
+        });
       }
     } catch {
       // Database offline or table empty, proceed to resilient fallback
@@ -269,6 +284,10 @@ export class HeritageSiteService {
     return results;
   }
 
+  async getFeaturedSites() {
+    return this.listSites({ featuredOnly: true });
+  }
+
   /**
    * Get single site by ID or slug
    */
@@ -285,7 +304,7 @@ export class HeritageSiteService {
     const targetSlug = ALIAS_MAP[slugOrId] || slugOrId;
 
     try {
-      const site = await prisma.heritageSite.findFirst({
+      const site: any = await prisma.heritageSite.findFirst({
         where: {
           OR: [
             { id: slugOrId },
@@ -295,9 +314,23 @@ export class HeritageSiteService {
           ],
           ...(isAdmin ? {} : { status: 'PUBLISHED' }),
         },
+        include: {
+          destinationImages: {
+            orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+          },
+        },
       });
 
-      if (site) return site;
+      if (site) {
+        const destImgs = (site.destinationImages || []).map((img: any) => img.imageUrl).filter(Boolean);
+        const gallery = destImgs.length > 0 ? destImgs : (site.galleryImages || []);
+        const cover = site.coverImageUrl || gallery[0] || '';
+        return {
+          ...site,
+          coverImageUrl: cover,
+          galleryImages: gallery.length > 0 ? gallery : (cover ? [cover] : []),
+        };
+      }
     } catch {
       // Database offline, check fallback
     }
@@ -322,57 +355,80 @@ export class HeritageSiteService {
    * Super-admin: Create Heritage Site
    */
   async adminCreateSite(data: any, adminId?: string) {
-    return prisma.heritageSite.create({
+    const created = await prisma.heritageSite.create({
       data: {
         ...data,
         createdByAdminId: adminId,
         status: data.status || 'DRAFT',
       },
     });
+    heritageEventBus.emitHeritage({ type: 'heritage.site.created', siteId: created.id, status: created.status });
+    return created;
   }
 
   /**
    * Super-admin: Update Heritage Site
    */
   async adminUpdateSite(id: string, data: any) {
-    return prisma.heritageSite.update({
+    const updated = await prisma.heritageSite.update({
       where: { id },
       data,
     });
+    heritageEventBus.emitHeritage({ type: 'heritage.site.updated', siteId: updated.id, status: updated.status });
+    return updated;
   }
 
   /**
-   * Super-admin: Delete Heritage Site
+   * Super-admin: Delete Heritage Site (archives safely if bookings exist)
    */
   async adminDeleteSite(id: string) {
-    return prisma.heritageSite.delete({
+    const bookingCount = prisma.heritageTourBookingSite
+      ? await prisma.heritageTourBookingSite.count({ where: { siteId: id } }).catch(() => 0)
+      : 0;
+
+    if (bookingCount > 0) {
+      const archived = await prisma.heritageSite.update({
+        where: { id },
+        data: { status: 'ARCHIVED', featured: false },
+      });
+      heritageEventBus.emitHeritage({ type: 'heritage.site.unpublished', siteId: id, status: 'ARCHIVED' });
+      return archived;
+    }
+
+    const deleted = await prisma.heritageSite.delete({
       where: { id },
     });
+    heritageEventBus.emitHeritage({ type: 'heritage.site.unpublished', siteId: id, status: 'DELETED' });
+    return deleted;
   }
 
   /**
    * Super-admin: Publish Site
    */
   async adminPublishSite(id: string) {
-    return prisma.heritageSite.update({
+    const published = await prisma.heritageSite.update({
       where: { id },
       data: {
         status: 'PUBLISHED',
         publishedAt: new Date(),
       },
     });
+    heritageEventBus.emitHeritage({ type: 'heritage.site.published', siteId: id, status: 'PUBLISHED' });
+    return published;
   }
 
   /**
    * Super-admin: Unpublish Site
    */
   async adminUnpublishSite(id: string) {
-    return prisma.heritageSite.update({
+    const unpublished = await prisma.heritageSite.update({
       where: { id },
       data: {
         status: 'UNPUBLISHED',
       },
     });
+    heritageEventBus.emitHeritage({ type: 'heritage.site.unpublished', siteId: id, status: 'UNPUBLISHED' });
+    return unpublished;
   }
 
   /**

@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Compass, Hotel as HotelIcon, Landmark, Route } from 'lucide-react-native';
 import { theme } from '../../src/theme';
 import {
@@ -16,7 +17,9 @@ import {
   HeritageCard,
   EmptyState,
 } from '../../src/components';
-import { mockHotels, mockHeritageSites } from '../../src/mocks';
+import { HotelService } from '../../src/services/hotel.service';
+import { HeritageService } from '../../src/services/heritage.service';
+import { Hotel, HeritageSite } from '../../src/types';
 import { useTranslation } from '../../src/i18n';
 
 type CategoryFilter = 'all' | 'hotels' | 'heritage' | 'tours';
@@ -26,14 +29,41 @@ export default function ExploreScreen() {
   const { t } = useTranslation(['heritage', 'hotels', 'home', 'common']);
   const [selectedFilter, setSelectedFilter] = useState<CategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [heritageSites, setHeritageSites] = useState<HeritageSite[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredHotels = mockHotels.filter(
+  const loadExploreData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [hotelsRes, sitesRes] = await Promise.all([
+        HotelService.searchHotels(),
+        HeritageService.getAllSites(),
+      ]);
+      if (hotelsRes.success && Array.isArray(hotelsRes.data)) {
+        setHotels(hotelsRes.data);
+      }
+      if (sitesRes.success && Array.isArray(sitesRes.data)) {
+        setHeritageSites(sitesRes.data);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadExploreData();
+    }, [loadExploreData])
+  );
+
+  const filteredHotels = hotels.filter(
     (h) =>
       h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       h.city.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredHeritage = mockHeritageSites.filter(
+  const filteredHeritage = heritageSites.filter(
     (s) =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.region.toLowerCase().includes(searchQuery.toLowerCase())

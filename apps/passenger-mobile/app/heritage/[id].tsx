@@ -1,27 +1,25 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Image,
-  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import {
   MapPin,
   Clock,
   Award,
-  Calendar,
   Sparkles,
   Ticket,
-  ChevronRight,
   Car,
 } from 'lucide-react-native';
 import { theme } from '../../src/theme';
-import { AppHeader, PrimaryButton, SecondaryButton } from '../../src/components';
-import { mockHeritageSites } from '../../src/mocks';
+import { AppHeader, PrimaryButton, RoomImageCarousel } from '../../src/components';
+import { HeritageService } from '../../src/services/heritage.service';
+import { HeritageSite } from '../../src/types';
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
 
@@ -29,8 +27,59 @@ export default function HeritageDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { t } = useTranslation(['heritage', 'common', 'navigation']);
+  const siteId = Array.isArray(id) ? id[0] || '' : id || '';
+  const [site, setSite] = useState<HeritageSite | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const site = mockHeritageSites.find((s) => s.id === id) || mockHeritageSites[0];
+  const loadSite = useCallback(async () => {
+    if (!siteId) return;
+    setIsLoading(true);
+    try {
+      const res = await HeritageService.getSiteById(siteId);
+      if (res.success && res.data) {
+        setSite(res.data);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [siteId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSite();
+    }, [loadSite])
+  );
+
+  if (isLoading && !site) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <AppHeader title="Heritage Destination" showBack />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={theme.colors.antiqueGold} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!site) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <AppHeader title="Destination Not Found" showBack />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Text style={styles.bodyText}>Heritage destination is currently unavailable.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const galleryImages: string[] =
+    (site as any).galleryImages && (site as any).galleryImages.length > 0
+      ? (site as any).galleryImages
+      : [site.heroImage];
+  const highlightsList: string[] =
+    (site as any).highlights || site.keyHighlights || [];
+  const visitingInfo =
+    (site as any).visitingRules || site.visitingHours || 'Open daily for guided tours';
 
   const handleStartContractWithSite = () => {
     router.push({
@@ -46,8 +95,7 @@ export default function HeritageDetailScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Image */}
-        <Image source={{ uri: site.heroImage }} style={styles.heroImage} />
+        <RoomImageCarousel images={galleryImages} roomTitle={site.name} height={240} />
 
         {/* Identity & UNESCO Pill */}
         <View style={styles.headerCard}>
@@ -97,23 +145,25 @@ export default function HeritageDetailScreen() {
         </View>
 
         {/* Key Highlights */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{t('highlights')}</Text>
-          <View style={styles.highlightsWrap}>
-            {site.keyHighlights.map((hl, index) => (
-              <View key={index} style={styles.highlightItem}>
-                <Sparkles size={14} color={theme.colors.primaryDark} />
-                <Text style={styles.highlightText}>{hl}</Text>
-              </View>
-            ))}
+        {highlightsList.length > 0 && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>{t('highlights')}</Text>
+            <View style={styles.highlightsWrap}>
+              {highlightsList.map((hl, index) => (
+                <View key={index} style={styles.highlightItem}>
+                  <Sparkles size={14} color={theme.colors.primaryDark} />
+                  <Text style={styles.highlightText}>{hl}</Text>
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Visiting Guidelines */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>{t('visitorInfo')}</Text>
           <Text style={styles.bodyText}>
-            {site.visitingHours}. {t('guidedTourAvailable')}.
+            {visitingInfo}. {t('guidedTourAvailable')}.
           </Text>
         </View>
 
@@ -146,11 +196,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: theme.spacing.xxl,
-  },
-  heroImage: {
-    width: '100%',
-    height: 230,
-    backgroundColor: theme.colors.surfaceMuted,
   },
   headerCard: {
     backgroundColor: theme.colors.surface,

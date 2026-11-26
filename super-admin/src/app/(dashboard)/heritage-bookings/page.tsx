@@ -77,6 +77,15 @@ export default function HeritageBookingsPage() {
 
   useEffect(() => {
     fetchBookings();
+    const unsubscribe = HeritageService.subscribeHeritageEvents(() => {
+      fetchBookings();
+    });
+    const onFocus = () => fetchBookings();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', onFocus);
+    };
   }, []);
 
   // Tab count badges

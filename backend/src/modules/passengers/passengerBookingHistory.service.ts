@@ -159,6 +159,7 @@ export function normalizeBookingStatus(type: BookingType, rawStatus: string): No
     if (s === 'COMPLETED') return 'COMPLETED';
     if (['CONFIRMED', 'GUIDE_ASSIGNED', 'VEHICLE_ASSIGNED'].includes(s)) return 'CONFIRMED';
     if (s === 'IN_PROGRESS') return 'IN_PROGRESS';
+    if (s === 'DECLINED') return 'DECLINED';
     if (['CANCELLED', 'REJECTED'].includes(s)) return 'CANCELLED';
     return 'PENDING';
   }
@@ -176,7 +177,7 @@ export function resolveStatusFilter(type: BookingType, requestedStatus?: string)
   }
   if (s === 'DECLINED') {
     if (type === 'HOTEL') return ['DECLINED'];
-    if (type === 'HERITAGE') return ['REJECTED'];
+    if (type === 'HERITAGE') return ['DECLINED', 'REJECTED'];
     return [];
   }
   if (s === 'CANCELLED') {

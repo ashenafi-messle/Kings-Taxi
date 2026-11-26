@@ -13,6 +13,7 @@ import { heritageTourVehicleOptionService } from './vehicleOption.service';
 import { heritageTourPricingService } from './pricing.service';
 import { notificationService } from '../notifications/notification.service';
 import { auditService } from '../../core/audit/audit.service';
+import { heritageEventBus } from './heritageEvents';
 
 // In-memory fallback cache for development/offline test resiliency
 const fallbackBookingsCache: Map<string, any> = new Map();
@@ -162,10 +163,10 @@ export class HeritageTourBookingService {
       pricing,
       vehicleOption: vehicleOption
         ? {
-            id: vehicleOption.id,
-            displayName: vehicleOption.displayName,
-            seatingCapacity: vehicleOption.seatingCapacity,
-          }
+          id: vehicleOption.id,
+          displayName: vehicleOption.displayName,
+          seatingCapacity: vehicleOption.seatingCapacity,
+        }
         : undefined,
       guideRequested: requestGuide,
       guideLanguage: dto.preferredGuideLanguage || 'English',
@@ -185,6 +186,8 @@ export class HeritageTourBookingService {
       adults: number;
       children: number;
       vehicleOptionId?: string;
+      assignedVehicleId?: string;
+      idempotencyKey?: string;
       requestGuide?: boolean;
       preferredGuideLanguage?: string;
       selectedGuideId?: string;
@@ -197,6 +200,15 @@ export class HeritageTourBookingService {
   ) {
     if (!passengerId) {
       throw new Error('Passenger authentication is required.');
+    }
+
+    if (dto.idempotencyKey) {
+      const existing = await prisma.heritageTourBooking
+        .findUnique({ where: { idempotencyKey: dto.idempotencyKey } })
+        .catch(() => null);
+      if (existing && existing.passengerId === passengerId) {
+        return this.getBookingByReference(passengerId, existing.bookingReference, true);
+      }
     }
 
     // 1. Get authoritative quote
@@ -250,7 +262,15 @@ export class HeritageTourBookingService {
     const paymentRef = `TX-HTB-${today}-${randCode}`;
 
     try {
-      await prisma.$transaction(async (tx) => {
+      const createdBooking = await prisma.$transaction(async (tx) => {
+        if (dto.assignedVehicleId) {
+          await heritageTourVehicleOptionService.validateFleetVehicleEligibility(tx, {
+            vehicleId: dto.assignedVehicleId,
+            scheduledDate: new Date(dto.scheduledDate),
+            totalPassengers: dto.adults + (dto.children || 0),
+          });
+        }
+
         // A. Insert Booking Record
         const booking = await tx.heritageTourBooking.create({
           data: {
@@ -259,8 +279,9 @@ export class HeritageTourBookingService {
             passengerId,
             packageId: dto.packageId || null,
             vehicleOptionId: quote.vehicleOption?.id || null,
+            assignedVehicleId: dto.assignedVehicleId || null,
             assignedGuideId: dto.selectedGuideId || null,
-            bookingStatus: 'REQUESTED',
+            bookingStatus: 'PENDING',
             paymentStatus: 'PENDING',
             scheduledDate: new Date(dto.scheduledDate),
             preferredStartTime: dto.preferredStartTime || '09:00',
@@ -270,6 +291,7 @@ export class HeritageTourBookingService {
             pickupLatitude: dto.pickupLatitude || null,
             pickupLongitude: dto.pickupLongitude || null,
             specialRequests: dto.specialRequests || null,
+            idempotencyKey: dto.idempotencyKey || null,
             baseAmount: new Prisma.Decimal(quote.pricing.baseAmount),
             vehicleAmount: new Prisma.Decimal(quote.pricing.vehicleAmount),
             guideAmount: new Prisma.Decimal(quote.pricing.guideAmount),
@@ -338,11 +360,42 @@ export class HeritageTourBookingService {
           },
         });
 
+        // F. Record immutable audit log
+        if ((tx as any).heritageTourBookingAuditLog) {
+          await (tx as any).heritageTourBookingAuditLog.create({
+            data: {
+              bookingId,
+              adminActorId: null,
+              previousStatus: null,
+              newStatus: 'PENDING',
+              action: 'BOOKING_CREATED',
+              notes: 'Submitted by passenger',
+            },
+          });
+        }
+
         return booking;
+      });
+
+      heritageEventBus.emitHeritage({
+        type: 'heritage.booking.created',
+        bookingId: createdBooking.id,
+        bookingReference: createdBooking.bookingReference,
+        passengerId,
+        status: createdBooking.bookingStatus,
       });
 
       return this.getBookingByReference(passengerId, bookingReference, true);
     } catch (err: any) {
+      const msg = String(err.message || '');
+      if (
+        msg.startsWith('VEHICLE_') ||
+        msg.startsWith('SITE_') ||
+        msg.includes('not found') ||
+        msg.includes('exceeds')
+      ) {
+        throw err;
+      }
       if (process.env.NODE_ENV === 'production') {
         logger.error(
           { err: err.message, passengerId },
@@ -679,6 +732,16 @@ export class HeritageTourBookingService {
           }
         }
 
+        // Validate assigned fleet vehicle eligibility & scheduling conflicts atomically
+        if (booking.assignedVehicleId) {
+          await heritageTourVehicleOptionService.validateFleetVehicleEligibility(tx, {
+            vehicleId: booking.assignedVehicleId,
+            scheduledDate: booking.scheduledDate,
+            totalPassengers: booking.adults + booking.children,
+            excludeBookingId: booking.id,
+          });
+        }
+
         const now = new Date();
         const confirmed = await tx.heritageTourBooking.update({
           where: { id: booking.id },
@@ -692,36 +755,79 @@ export class HeritageTourBookingService {
           include: {
             package: true,
             passenger: true,
+            assignedVehicle: true,
             payment: true,
           },
         });
 
+        if ((tx as any).heritageTourBookingAuditLog) {
+          await (tx as any).heritageTourBookingAuditLog.create({
+            data: {
+              bookingId: booking.id,
+              adminActorId: adminId,
+              previousStatus: booking.bookingStatus,
+              newStatus: 'CONFIRMED',
+              action: 'ADMIN_CONFIRM',
+              notes: adminNote || 'Confirmed by Super Admin',
+            },
+          });
+        }
+
         return confirmed;
       });
 
-      // Audit and passenger notification
-      await auditService.record({
-        actorId: adminId,
-        actorType: 'ADMIN',
-        action: 'ADMIN_ACCEPT_HERITAGE_BOOKING',
-        entityType: 'HeritageTourBooking',
-        entityId: updated.id,
-        metadata: {
-          bookingReference: updated.bookingReference,
-          packageTitle: updated.package?.name,
-          adminNote,
-        },
+      heritageEventBus.emitHeritage({
+        type: 'heritage.booking.confirmed',
+        bookingId: updated.id,
+        bookingReference: updated.bookingReference,
+        passengerId: updated.passengerId,
+        status: 'CONFIRMED',
+      });
+      heritageEventBus.emitHeritage({
+        type: 'heritage.booking.updated',
+        bookingId: updated.id,
+        bookingReference: updated.bookingReference,
+        passengerId: updated.passengerId,
+        status: 'CONFIRMED',
       });
 
-      await notificationService.sendHeritageBookingAcceptedNotification({
-        passengerId: updated.passengerId,
-        bookingReference: updated.bookingReference,
-        siteName: updated.package?.name || 'Gondar Heritage Destination',
-        tourDate: updated.scheduledDate,
-      });
+      // Audit and passenger notification (non-blocking)
+      try {
+        await auditService.record({
+          actorId: adminId,
+          actorType: 'ADMIN',
+          action: 'ADMIN_ACCEPT_HERITAGE_BOOKING',
+          entityType: 'HeritageTourBooking',
+          entityId: updated.id,
+          metadata: {
+            bookingReference: updated.bookingReference,
+            packageTitle: updated.package?.name,
+            adminNote,
+          },
+        });
+
+        await notificationService.sendHeritageBookingAcceptedNotification({
+          passengerId: updated.passengerId,
+          bookingReference: updated.bookingReference,
+          siteName: updated.package?.name || 'Gondar Heritage Destination',
+          tourDate: updated.scheduledDate,
+        });
+      } catch (notifyErr: any) {
+        logger.warn({ err: notifyErr?.message }, '[Heritage] Post-confirm notification failed safely');
+      }
 
       return updated;
     } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (
+        msg.includes('already been accepted') ||
+        msg.includes('Cannot accept booking') ||
+        msg.includes('not found') ||
+        msg.includes('exceeds') ||
+        msg.startsWith('VEHICLE_')
+      ) {
+        throw err;
+      }
       logger.warn({ err: err.message }, '[HeritageTourBookingService] DB offline or error, updating fallback cache');
       let b = fallbackBookingsCache.get(idOrRef);
       if (!b) {
@@ -777,6 +883,14 @@ export class HeritageTourBookingService {
           throw new Error(`Heritage tour booking '${idOrRef}' not found.`);
         }
 
+        if (booking.bookingStatus === 'DECLINED') {
+          return booking as any; // Idempotent
+        }
+
+        if (booking.bookingStatus === 'COMPLETED') {
+          throw new Error('Cannot decline a completed heritage tour booking.');
+        }
+
         const now = new Date();
         const declined = await tx.heritageTourBooking.update({
           where: { id: booking.id },
@@ -794,33 +908,75 @@ export class HeritageTourBookingService {
           },
         });
 
+        if ((tx as any).heritageTourBookingAuditLog) {
+          await (tx as any).heritageTourBookingAuditLog.create({
+            data: {
+              bookingId: booking.id,
+              adminActorId: adminId,
+              previousStatus: booking.bookingStatus,
+              newStatus: 'DECLINED',
+              action: 'ADMIN_DECLINE',
+              notes: declineReason.trim(),
+            },
+          });
+        }
+
         return declined;
       });
 
-      await auditService.record({
-        actorId: adminId,
-        actorType: 'ADMIN',
-        action: 'ADMIN_DECLINE_HERITAGE_BOOKING',
-        entityType: 'HeritageTourBooking',
-        entityId: updated.id,
-        metadata: {
-          bookingReference: updated.bookingReference,
-          declineReason,
-          adminNote,
-        },
+      heritageEventBus.emitHeritage({
+        type: 'heritage.booking.declined',
+        bookingId: updated.id,
+        bookingReference: updated.bookingReference,
+        passengerId: updated.passengerId,
+        status: 'DECLINED',
+      });
+      heritageEventBus.emitHeritage({
+        type: 'heritage.booking.updated',
+        bookingId: updated.id,
+        bookingReference: updated.bookingReference,
+        passengerId: updated.passengerId,
+        status: 'DECLINED',
       });
 
-      await notificationService.sendHeritageBookingDeclinedNotification(
-        {
-          passengerId: updated.passengerId,
-          bookingReference: updated.bookingReference,
-          siteName: updated.package?.name || 'Gondar Heritage Destination',
-        },
-        declineReason
-      );
+      try {
+        await auditService.record({
+          actorId: adminId,
+          actorType: 'ADMIN',
+          action: 'ADMIN_DECLINE_HERITAGE_BOOKING',
+          entityType: 'HeritageTourBooking',
+          entityId: updated.id,
+          metadata: {
+            bookingReference: updated.bookingReference,
+            declineReason,
+            adminNote,
+          },
+        });
+
+        await notificationService.sendHeritageBookingDeclinedNotification(
+          {
+            passengerId: updated.passengerId,
+            bookingReference: updated.bookingReference,
+            siteName: updated.package?.name || 'Gondar Heritage Destination',
+          },
+          declineReason
+        );
+      } catch (notifyErr: any) {
+        logger.warn({ err: notifyErr?.message }, '[Heritage] Post-decline notification failed safely');
+      }
 
       return updated;
     } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (
+        msg.includes('already been accepted') ||
+        msg.includes('Cannot accept booking') ||
+        msg.includes('not found') ||
+        msg.includes('exceeds') ||
+        msg.startsWith('VEHICLE_')
+      ) {
+        throw err;
+      }
       logger.warn({ err: err.message }, '[HeritageTourBookingService] DB offline or error, updating fallback cache');
       let b = fallbackBookingsCache.get(idOrRef);
       if (!b) {
@@ -895,6 +1051,27 @@ export class HeritageTourBookingService {
       }
       throw new Error(`Booking '${idOrRef}' not found.`);
     }
+  }
+
+  /**
+   * Super-admin: Retrieve immutable audit log history for a heritage tour booking
+   */
+  async getBookingAuditHistory(idOrRef: string) {
+    const isRef = idOrRef.startsWith('HRT-') || idOrRef.startsWith('HTB-');
+    const booking = await prisma.heritageTourBooking.findFirst({
+      where: isRef ? { bookingReference: idOrRef } : { id: idOrRef },
+      select: { id: true },
+    });
+    if (!booking) {
+      throw new Error(`Heritage tour booking '${idOrRef}' not found.`);
+    }
+    if (!(prisma as any).heritageTourBookingAuditLog) {
+      return [];
+    }
+    return (prisma as any).heritageTourBookingAuditLog.findMany({
+      where: { bookingId: booking.id },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 }
 

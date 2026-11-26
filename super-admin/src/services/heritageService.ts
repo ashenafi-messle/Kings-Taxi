@@ -1,6 +1,6 @@
 import { HeritageSite, HeritageTourBooking, HeritageFilterParams, PaginatedResult } from '../types';
 import { mockHeritageSites, mockHeritageBookings } from './mockData';
-import { apiRequest } from './apiClient';
+import { apiRequest, buildApiUrl } from './apiClient';
 
 let heritageSitesData: HeritageSite[] = [...mockHeritageSites];
 let heritageBookingsData: HeritageTourBooking[] = [...mockHeritageBookings];
@@ -275,5 +275,56 @@ export class HeritageService {
       updatedAt: new Date().toISOString(),
     };
     return heritageBookingsData[index];
+  }
+
+  static async getBookingAuditHistory(idOrRef: string): Promise<any[]> {
+    const res = await apiRequest<any[]>(`/admin/heritage/bookings/${idOrRef}/history`);
+    if (res.success && Array.isArray(res.data)) {
+      return res.data;
+    }
+    return [];
+  }
+
+  static subscribeHeritageEvents(
+    onEvent: (event: any) => void,
+    onConnectionChange?: (connected: boolean) => void
+  ): () => void {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+      return () => {};
+    }
+
+    const token =
+      localStorage.getItem('kt_admin_access_token') ||
+      localStorage.getItem('accessToken') ||
+      '';
+    const qs = new URLSearchParams();
+    if (token) qs.set('token', token);
+
+    const url = buildApiUrl(`/admin/heritage/events?${qs.toString()}`);
+    const eventSource = new EventSource(url);
+
+    eventSource.onopen = () => {
+      onConnectionChange?.(true);
+    };
+    eventSource.onerror = () => {
+      onConnectionChange?.(false);
+    };
+
+    const handlePayload = (e: MessageEvent) => {
+      try {
+        const parsed = JSON.parse(e.data);
+        onEvent(parsed);
+      } catch {
+        // Ignore keepalive frames
+      }
+    };
+
+    eventSource.addEventListener('heritage_sync', handlePayload);
+    eventSource.onmessage = handlePayload;
+
+    return () => {
+      eventSource.close();
+      onConnectionChange?.(false);
+    };
   }
 }

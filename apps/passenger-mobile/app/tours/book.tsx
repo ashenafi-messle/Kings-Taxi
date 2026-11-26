@@ -51,15 +51,17 @@ export default function TourBookingScreen() {
 
   // Check if passenger arrived from a specific popular destination
   const siteId = params.siteId as string | undefined;
-  const selectedSite: HeritageSite | null = siteId
-    ? mockHeritageSites.find((s) => s.id === siteId || (s as any).slug === siteId) || null
-    : null;
+  const [selectedSite, setSelectedSite] = useState<HeritageSite | null>(() =>
+    siteId ? mockHeritageSites.find((s) => s.id === siteId || (s as any).slug === siteId) || null : null
+  );
 
   // Loading & Data States
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [packages, setPackages] = useState<TourPackage[]>([]);
   const [vehicles, setVehicles] = useState<TourVehicleOption[]>([]);
+  const [fleetVehicles, setFleetVehicles] = useState<any[]>([]);
+  const [selectedFleetVehicleId, setSelectedFleetVehicleId] = useState<string>('');
   const [guides, setGuides] = useState<TourGuide[]>([]);
 
   // Selection States
@@ -95,15 +97,22 @@ export default function TourBookingScreen() {
     async function loadData() {
       setLoading(true);
       try {
-        const [pkgRes, vehRes, guideRes] = await Promise.all([
+        const [siteRes, pkgRes, vehRes, guideRes, fleetRes] = await Promise.all([
+          siteId ? HeritageService.getSiteById(siteId) : Promise.resolve({ success: false, data: null }),
           HeritageService.getPackages(),
           HeritageService.getVehicleOptions(),
           HeritageService.getGuides(),
+          HeritageService.getAvailableFleetVehicles(scheduledDate, adults + children),
         ]);
+
+        const resolvedSite = siteRes.success && siteRes.data ? siteRes.data : selectedSite;
+        if (siteRes.success && siteRes.data) {
+          setSelectedSite(siteRes.data);
+        }
 
         if (pkgRes.success && pkgRes.data) {
           setPackages(pkgRes.data);
-          if (!selectedSite && !selectedPackageId && pkgRes.data.length > 0) {
+          if (!resolvedSite && !selectedPackageId && pkgRes.data.length > 0) {
             setSelectedPackageId(pkgRes.data[0].id);
           }
         }
@@ -112,6 +121,13 @@ export default function TourBookingScreen() {
           setVehicles(vehRes.data);
           if (vehRes.data.length > 0) {
             setSelectedVehicleId(vehRes.data[0].id);
+          }
+        }
+
+        if (fleetRes.success && Array.isArray(fleetRes.data)) {
+          setFleetVehicles(fleetRes.data);
+          if (fleetRes.data.length > 0) {
+            setSelectedFleetVehicleId(fleetRes.data[0].id);
           }
         }
 
@@ -125,7 +141,7 @@ export default function TourBookingScreen() {
       }
     }
     loadData();
-  }, [selectedSite]);
+  }, [siteId, scheduledDate, adults, children]);
 
   // Fetch Authoritative Quote whenever parameters change
   useEffect(() => {
@@ -207,13 +223,14 @@ export default function TourBookingScreen() {
         adults,
         children,
         vehicleOptionId: selectedVehicleId,
+        ...(selectedFleetVehicleId ? { assignedVehicleId: selectedFleetVehicleId } : {}),
+        idempotencyKey: `htb-${siteId || selectedPackageId}-${scheduledDate}-${adults + children}-${selectedFleetVehicleId || selectedVehicleId}`,
         requestGuide,
         preferredGuideLanguage: guideLanguage,
         pickupLocation: pickupLocation.trim(),
         paymentMethod,
         specialRequests: specialRequests.trim() || undefined,
       };
-
       if (selectedSite) {
         bookingPayload.siteIds = [selectedSite.id];
       } else if (selectedPackageId) {
@@ -538,6 +555,42 @@ export default function TourBookingScreen() {
           <Text style={styles.sectionSubtitle}>
             Total party: {totalPax} guests. Please select a vehicle with sufficient seating.
           </Text>
+
+          {fleetVehicles.length > 0 && (
+            <View style={{ marginBottom: 12 }}>
+              <Text style={[styles.counterLabel, { marginBottom: 6 }]}>
+                Registered Fleet Vehicles Available ({fleetVehicles.length})
+              </Text>
+              {fleetVehicles.map((fv) => {
+                const isFleetSelected = fv.id === selectedFleetVehicleId;
+                return (
+                  <TouchableOpacity
+                    key={fv.id}
+                    style={[
+                      styles.vehicleOptionCard,
+                      isFleetSelected && styles.vehicleOptionSelected,
+                      { marginBottom: 8 },
+                    ]}
+                    onPress={() => setSelectedFleetVehicleId(fv.id)}
+                  >
+                    <View style={styles.vehicleHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.counterLabel}>
+                          {fv.vehicleModel} ({fv.plateNumber})
+                        </Text>
+                        <Text style={styles.counterSub}>
+                          {fv.vehicleType} • Up to {fv.seatingCapacity} passengers • {fv.vehicleColor}
+                        </Text>
+                      </View>
+                      {isFleetSelected && (
+                        <CheckCircle2 size={18} color={theme.colors.heritageAccent} />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
 
           {vehicles.map((v) => {
             const isSelected = v.id === selectedVehicleId;

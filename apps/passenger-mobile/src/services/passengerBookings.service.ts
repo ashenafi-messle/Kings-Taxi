@@ -319,10 +319,11 @@ export class PassengerBookingsService {
     if (toursSettled.status === 'fulfilled' && toursSettled.value.success && Array.isArray(toursSettled.value.data)) {
       for (const t of toursSettled.value.data) {
         let normStatus: NormalizedBookingStatus = 'PENDING';
-        const rawStatus = (t.bookingStatus || 'CONFIRMED').toUpperCase();
+        const rawStatus = (t.bookingStatus || 'PENDING').toUpperCase();
         if (rawStatus === 'COMPLETED') normStatus = 'COMPLETED';
         else if (['CONFIRMED', 'GUIDE_ASSIGNED', 'VEHICLE_ASSIGNED'].includes(rawStatus)) normStatus = 'CONFIRMED';
         else if (rawStatus === 'IN_PROGRESS') normStatus = 'IN_PROGRESS';
+        else if (rawStatus === 'DECLINED') normStatus = 'DECLINED';
         else if (['CANCELLED', 'REJECTED'].includes(rawStatus)) normStatus = 'CANCELLED';
 
         const title = t.packageName || 'Gondar Heritage Tour';

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { heritageController } from './heritage.controller';
 import { authenticateToken, requireRole } from '../../core/middleware/auth.middleware';
 
@@ -9,11 +9,38 @@ export const heritageRouter = Router();
 // ============================================================================
 
 // Destination Sites
+heritageRouter.get(['/heritage/sites/featured', '/sites/featured'], (req: Request, res: Response) =>
+  heritageController.listFeaturedSites(req, res)
+);
 heritageRouter.get(['/heritage/sites', '/sites'], (req: Request, res: Response) =>
   heritageController.listSites(req, res)
 );
 heritageRouter.get(['/heritage/sites/:slugOrId', '/sites/:slugOrId'], (req: Request, res: Response) =>
   heritageController.getSiteDetails(req, res)
+);
+
+// Fleet Vehicle Availability & Real-Time Heritage SSE
+heritageRouter.get('/heritage/vehicles/available', (req: Request, res: Response) =>
+  heritageController.listAvailableFleetVehicles(req, res)
+);
+heritageRouter.get('/heritage/availability', (req: Request, res: Response) =>
+  heritageController.checkAvailability(req, res)
+);
+heritageRouter.get(
+  '/heritage/events',
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.headers.authorization && typeof req.query.token === 'string' && req.query.token.trim()) {
+      req.headers.authorization = `Bearer ${req.query.token.trim()}`;
+    }
+    next();
+  },
+  (req: Request, res: Response, next: NextFunction) => {
+    if (req.headers.authorization) {
+      return authenticateToken(req, res, next);
+    }
+    next();
+  },
+  (req: Request, res: Response) => heritageController.publicHeritageEvents(req, res)
 );
 
 // Tour Packages
@@ -44,7 +71,7 @@ heritageRouter.post(['/heritage/quotes', '/quotes'], (req: Request, res: Respons
 heritageRouter.post(['/heritage/bookings', '/bookings'], authenticateToken, (req: Request, res: Response) =>
   heritageController.createBooking(req, res)
 );
-heritageRouter.get(['/heritage/bookings', '/bookings'], authenticateToken, (req: Request, res: Response) =>
+heritageRouter.get(['/heritage/bookings/my', '/heritage/bookings', '/bookings'], authenticateToken, (req: Request, res: Response) =>
   heritageController.getPassengerBookings(req, res)
 );
 heritageRouter.get(['/heritage/bookings/:bookingReference', '/bookings/:bookingReference'], authenticateToken, (req: Request, res: Response) =>
@@ -137,17 +164,43 @@ heritageRouter.patch('/admin/heritage/vehicle-options/:id', adminAuth, (req: Req
 );
 
 // Admin Bookings & Assignments
+heritageRouter.get(
+  '/admin/heritage/events',
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.headers.authorization && typeof req.query.token === 'string' && req.query.token.trim()) {
+      req.headers.authorization = `Bearer ${req.query.token.trim()}`;
+    }
+    next();
+  },
+  adminAuth,
+  (req: Request, res: Response) => heritageController.adminHeritageEvents(req, res)
+);
+heritageRouter.patch('/admin/heritage/sites/:id/status', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminUpdateSiteStatus(req, res)
+);
 heritageRouter.get('/admin/heritage/bookings', adminAuth, (req: Request, res: Response) =>
   heritageController.adminListBookings(req, res)
 );
 heritageRouter.get('/admin/heritage/bookings/:idOrRef', adminAuth, (req: Request, res: Response) =>
   heritageController.adminGetBooking(req, res)
 );
+heritageRouter.get('/admin/heritage/bookings/:idOrRef/history', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminGetBookingHistory(req, res)
+);
 heritageRouter.post('/admin/heritage/bookings/:idOrRef/accept', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminAcceptBooking(req, res)
+);
+heritageRouter.patch('/admin/heritage/bookings/:idOrRef/confirm', adminAuth, (req: Request, res: Response) =>
   heritageController.adminAcceptBooking(req, res)
 );
 heritageRouter.post('/admin/heritage/bookings/:idOrRef/decline', adminAuth, (req: Request, res: Response) =>
   heritageController.adminDeclineBooking(req, res)
+);
+heritageRouter.patch('/admin/heritage/bookings/:idOrRef/decline', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminDeclineBooking(req, res)
+);
+heritageRouter.patch('/admin/heritage/bookings/:idOrRef/cancel', adminAuth, (req: Request, res: Response) =>
+  heritageController.adminCancelBooking(req, res)
 );
 heritageRouter.patch('/admin/heritage/bookings/:idOrRef/status', adminAuth, (req: Request, res: Response) =>
   heritageController.adminUpdateBookingStatus(req, res)

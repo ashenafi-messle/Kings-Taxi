@@ -133,6 +133,113 @@ export class HeritageTourVehicleOptionService {
       data,
     });
   }
+
+  /**
+   * Retrieve real registered fleet vehicles eligible for heritage tours on a given date and passenger count.
+   */
+  async listAvailableFleetVehicles(params: { date?: string; passengers?: number } = {}) {
+    const passengers = Math.max(1, Number(params.passengers) || 1);
+    try {
+      const vehicles = await prisma.vehicle.findMany({
+        where: {
+          isActive: true,
+          status: { in: ['ACTIVE', 'AVAILABLE'] },
+          verificationStatus: 'VERIFIED',
+          seatingCapacity: { gte: passengers },
+        },
+        orderBy: [{ seatingCapacity: 'asc' }, { vehicleModel: 'asc' }],
+      });
+
+      let bookedVehicleIds = new Set<string>();
+      if (params.date) {
+        const targetDate = new Date(params.date);
+        const bookings = await prisma.heritageTourBooking.findMany({
+          where: {
+            scheduledDate: targetDate,
+            assignedVehicleId: { not: null },
+            bookingStatus: {
+              in: ['CONFIRMED', 'REQUESTED', 'PENDING', 'GUIDE_ASSIGNED', 'VEHICLE_ASSIGNED', 'IN_PROGRESS'],
+            },
+          },
+          select: { assignedVehicleId: true },
+        });
+        bookedVehicleIds = new Set(
+          bookings.map((b) => b.assignedVehicleId).filter((v): v is string => Boolean(v))
+        );
+      }
+
+      return vehicles
+        .filter((v) => !bookedVehicleIds.has(v.id))
+        .map((v) => ({
+          id: v.id,
+          make: v.make,
+          vehicleModel: v.vehicleModel,
+          vehicleType: v.vehicleType,
+          plateNumber: v.plateNumber,
+          seatingCapacity: v.seatingCapacity,
+          vehicleColor: v.vehicleColor,
+          year: v.manufacturingYear,
+          imageUrl: v.imageUrl || null,
+          isAvailable: true,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Transactional validation of a registered Fleet Vehicle for heritage tour assignment.
+   * Prevents disabled vehicles, insufficient capacity, maintenance conflicts, and double-booking on the same date.
+   */
+  async validateFleetVehicleEligibility(
+    tx: any,
+    params: {
+      vehicleId: string;
+      scheduledDate: Date;
+      totalPassengers: number;
+      excludeBookingId?: string;
+    }
+  ) {
+    const { vehicleId, scheduledDate, totalPassengers, excludeBookingId } = params;
+    const vehicle = await tx.vehicle.findUnique({
+      where: { id: vehicleId },
+    });
+
+    if (!vehicle) {
+      throw new Error('VEHICLE_NOT_FOUND: Selected fleet vehicle does not exist.');
+    }
+    if (vehicle.status === 'UNDER_MAINTENANCE') {
+      throw new Error(`VEHICLE_UNDER_MAINTENANCE: Vehicle '${vehicle.vehicleModel}' is currently under maintenance.`);
+    }
+    if (!vehicle.isActive || !['ACTIVE', 'AVAILABLE'].includes(vehicle.status) || vehicle.verificationStatus !== 'VERIFIED') {
+      throw new Error(`VEHICLE_INACTIVE: Vehicle '${vehicle.vehicleModel}' is currently inactive or unavailable.`);
+    }
+    if (vehicle.seatingCapacity < totalPassengers) {
+      throw new Error(
+        `VEHICLE_CAPACITY_EXCEEDED: Vehicle '${vehicle.vehicleModel}' seats ${vehicle.seatingCapacity} passengers, but ${totalPassengers} were requested.`
+      );
+    }
+
+    const conflicting = await tx.heritageTourBooking.findFirst({
+      where: {
+        assignedVehicleId: vehicleId,
+        scheduledDate,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+        bookingStatus: {
+          in: ['CONFIRMED', 'REQUESTED', 'PENDING', 'GUIDE_ASSIGNED', 'VEHICLE_ASSIGNED', 'IN_PROGRESS'],
+        },
+      },
+      select: { id: true, bookingReference: true },
+    });
+
+    if (conflicting) {
+      throw new Error(
+        `VEHICLE_SCHEDULING_CONFLICT: Vehicle '${vehicle.vehicleModel}' is already reserved on this date (${conflicting.bookingReference}).`
+      );
+    }
+
+    return vehicle;
+  }
 }
 
 export const heritageTourVehicleOptionService = new HeritageTourVehicleOptionService();
