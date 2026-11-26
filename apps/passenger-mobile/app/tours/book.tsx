@@ -44,6 +44,19 @@ import {
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
 
+const ETHIOPIAN_DEPARTURE_TIMES = [
+  { value: '08:00', label: '2:00 Morning' },
+  { value: '09:00', label: '3:00 Morning' },
+  { value: '10:00', label: '4:00 Morning' },
+  { value: '11:00', label: '5:00 Morning' },
+  { value: '12:00', label: '6:00 Noon' },
+  { value: '13:00', label: '7:00 Afternoon' },
+  { value: '14:00', label: '8:00 Afternoon' },
+  { value: '15:00', label: '9:00 Afternoon' },
+  { value: '16:00', label: '10:00 Afternoon' },
+  { value: '17:00', label: '11:00 Afternoon' },
+];
+
 export default function TourBookingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -477,21 +490,23 @@ export default function TourBookingScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Preferred Morning Departure Time</Text>
-            <View style={styles.timeOptionsRow}>
-              {['08:00', '08:30', '09:00', '09:30', '10:00'].map((time) => (
+            <Text style={styles.inputLabel}>
+              Departure Time (Ethiopian Time: 2:00 Morning – 11:00 Afternoon)
+            </Text>
+            <View style={[styles.timeOptionsRow, { flexWrap: 'wrap', gap: 8 }]}>
+              {ETHIOPIAN_DEPARTURE_TIMES.map((slot) => (
                 <TouchableOpacity
-                  key={time}
-                  style={[styles.timePill, preferredStartTime === time && styles.timePillSelected]}
-                  onPress={() => setPreferredStartTime(time)}
+                  key={slot.value}
+                  style={[styles.timePill, preferredStartTime === slot.value && styles.timePillSelected]}
+                  onPress={() => setPreferredStartTime(slot.value)}
                 >
                   <Text
                     style={[
                       styles.timePillText,
-                      preferredStartTime === time && styles.timePillTextSelected,
+                      preferredStartTime === slot.value && styles.timePillTextSelected,
                     ]}
                   >
-                    {time}
+                    {slot.label}
                   </Text>
                 </TouchableOpacity>
               ))}
