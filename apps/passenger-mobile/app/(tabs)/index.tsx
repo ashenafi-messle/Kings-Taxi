@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
   Crown,
   MapPin,
@@ -33,10 +33,11 @@ import {
   KingsTaxiBrandShowcase,
 } from '../../src/components';
 import { useAuthStore, useRideStore } from '../../src/stores';
-import { mockLocations, mockHeritageSites, mockHotels } from '../../src/mocks';
+import { mockLocations } from '../../src/mocks';
 import { useTranslation } from '../../src/i18n';
 import { PassengerBookingsService } from '../../src/services/passengerBookings.service';
-import { PassengerRecentActivity } from '../../src/types';
+import { HeritageService } from '../../src/services/heritage.service';
+import { PassengerRecentActivity, HeritageSite } from '../../src/types';
 
 function formatRelativeTime(dateString?: string): string {
   if (!dateString) return '';
@@ -69,6 +70,26 @@ export default function HomeScreen() {
   const [activities, setActivities] = useState<PassengerRecentActivity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [activitiesError, setActivitiesError] = useState<string | null>(null);
+  const [popularSites, setPopularSites] = useState<HeritageSite[]>([]);
+  const [sitesLoading, setSitesLoading] = useState(true);
+
+  const loadPopularDestinations = useCallback(async () => {
+    setSitesLoading(true);
+    try {
+      const res = await HeritageService.getSites();
+      if (res.success && Array.isArray(res.data)) {
+        setPopularSites(res.data);
+      }
+    } finally {
+      setSitesLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPopularDestinations();
+    }, [loadPopularDestinations])
+  );
 
   // Unauthenticated access guard: redirect to welcome only when session initialization is resolved
   useEffect(() => {
@@ -409,22 +430,34 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScroll}
         >
-          {mockHeritageSites.slice(0, 5).map((site) => (
-            <TouchableOpacity
-              key={site.id}
-              activeOpacity={0.85}
-              onPress={() => router.push({ pathname: '/heritage/[id]', params: { id: site.id } })}
-              style={styles.horizontalHeritageCard}
-            >
-              <Image source={{ uri: site.heroImage }} style={styles.heritageImage} />
-              <View style={styles.heritageCardBody}>
-                <Text style={styles.heritageCardTitle} numberOfLines={1}>
-                  {site.name}
-                </Text>
-                <Text style={styles.heritageCardRegion}>{site.region}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {sitesLoading && popularSites.length === 0 ? (
+            <View style={{ padding: 24, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={theme.colors.antiqueGold} />
+            </View>
+          ) : popularSites.length === 0 ? (
+            <View style={styles.activityEmptyBox}>
+              <Text style={styles.activityEmptyText}>
+                No published heritage destinations available yet.
+              </Text>
+            </View>
+          ) : (
+            popularSites.slice(0, 8).map((site) => (
+              <TouchableOpacity
+                key={site.id}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/heritage/[id]', params: { id: site.id } })}
+                style={styles.horizontalHeritageCard}
+              >
+                <Image source={{ uri: site.heroImage }} style={styles.heritageImage} />
+                <View style={styles.heritageCardBody}>
+                  <Text style={styles.heritageCardTitle} numberOfLines={1}>
+                    {site.name}
+                  </Text>
+                  <Text style={styles.heritageCardRegion}>{site.region}</Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
         </ScrollView>
 
         {/* Trust & Safety Assurance Banner */}
