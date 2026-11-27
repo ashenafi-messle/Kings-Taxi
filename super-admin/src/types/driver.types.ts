@@ -88,6 +88,19 @@ export interface Driver {
   assignedVehicleId?: string;
   assignedVehiclePlate?: string;
   assignedVehicleModel?: string;
+  assignedVehicle?: {
+    id: string;
+    plateNumber: string;
+    make?: string;
+    vehicleModel: string;
+    vehicleColor?: string;
+    vehicleType?: string;
+    status?: string;
+    verificationStatus?: string;
+    assignmentStatus?: string;
+    assignedAt?: string | null;
+    assignedBy?: string | null;
+  } | null;
   currentLocation?: {
     latitude: number;
     longitude: number;

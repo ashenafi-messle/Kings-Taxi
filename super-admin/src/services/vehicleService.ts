@@ -13,6 +13,7 @@ export class VehicleService {
     if (params.search) query.set('search', params.search);
     if (params.category && params.category !== 'ALL') query.set('category', params.category);
     if (params.status && params.status !== 'ALL') query.set('status', params.status);
+    if (params.isAssigned && params.isAssigned !== 'ALL') query.set('isAssigned', params.isAssigned);
     if (params.page) query.set('page', String(params.page));
     if (params.limit) query.set('limit', String(params.limit));
 
@@ -415,5 +416,38 @@ export class VehicleService {
    */
   static async downloadDocumentBlob(documentId: string): Promise<BlobResult> {
     return apiFetchBlob(`/admin/documents/${documentId}/download`);
+  }
+
+  static async getAssignableVehicles(params: { search?: string; page?: number; limit?: number } = {}): Promise<{
+    items: Array<{
+      id: string;
+      plateNumber: string;
+      vinNumber?: string | null;
+      make: string;
+      model: string;
+      year: number;
+      color: string;
+      vehicleType: string;
+      categoryName: string;
+      capacity: number;
+      status: string;
+      verificationStatus: string;
+      isAssigned: boolean;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const query = new URLSearchParams();
+    if (params.search?.trim()) query.set('search', params.search.trim());
+    if (params.page) query.set('page', String(params.page));
+    if (params.limit) query.set('limit', String(params.limit));
+
+    const res = await apiRequest<any>(`/admin/vehicles/assignable?${query.toString()}`);
+    if (res.success && res.data) {
+      return res.data;
+    }
+    return { items: [], total: 0, page: 1, limit: 20, totalPages: 1 };
   }
 }

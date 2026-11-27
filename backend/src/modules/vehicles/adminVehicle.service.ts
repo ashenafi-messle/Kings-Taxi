@@ -6,9 +6,12 @@ import {
   VehicleType,
   AccountStatus,
   DriverVerificationStatus,
+  DriverAvailabilityStatus,
+  ActorType,
 } from '@prisma/client';
 import { AppError } from '../../core/errors/appError';
 import { logger } from '../../core/logging/logger';
+import { ACTIVE_RIDE_BOOKING_STATUSES, emitAvailabilityChanged } from '../realtime/rideSocket';
 import {
   validateAndUploadDocument,
   cleanupUploadedAssets,
@@ -198,6 +201,7 @@ export class AdminVehicleService {
         { vehicleModel: { contains: q, mode: 'insensitive' } },
         { make: { contains: q, mode: 'insensitive' } },
         { driver: { fullName: { contains: q, mode: 'insensitive' } } },
+        { assignments: { some: { isActive: true, driver: { fullName: { contains: q, mode: 'insensitive' } } } } },
       ];
     }
 
@@ -312,6 +316,9 @@ export class AdminVehicleService {
         assignedDriverId: activeDriver?.id,
         assignedDriverName: activeDriver?.fullName,
         assignedDriverPhone: activeDriver?.phoneNumber,
+        assignmentStatus: activeDriver ? 'ASSIGNED' : 'UNASSIGNED',
+        assignedAt: v.assignments?.[0]?.assignedAt ? v.assignments[0].assignedAt.toISOString() : null,
+        assignedBy: v.assignments?.[0]?.assignedBy || null,
         documentsCount: v.documents?.length || 0,
         lastMaintenanceDate: v.maintenances?.[0]?.serviceDate ? v.maintenances[0].serviceDate.toISOString().split('T')[0] : undefined,
         createdAt: v.createdAt.toISOString(),
@@ -764,78 +771,199 @@ export class AdminVehicleService {
   }
 
   /**
+   * Searchable, paginated list of operationally eligible, unassigned vehicles.
+   */
+  async getAssignableVehicles(params: { search?: string; page?: number; limit?: number } = {}) {
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(50, Math.max(1, Number(params.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      isActive: true,
+      verificationStatus: VehicleVerificationStatus.VERIFIED,
+      status: { in: [VehicleOperationalStatus.AVAILABLE, VehicleOperationalStatus.ACTIVE] },
+      driverId: null,
+      assignments: { none: { isActive: true } },
+    };
+
+    if (params.search && params.search.trim()) {
+      const q = params.search.trim();
+      where.OR = [
+        { plateNumber: { contains: q, mode: 'insensitive' } },
+        { make: { contains: q, mode: 'insensitive' } },
+        { vehicleModel: { contains: q, mode: 'insensitive' } },
+        { vinNumber: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, items] = await Promise.all([
+      prisma.vehicle.count({ where }),
+      prisma.vehicle.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ plateNumber: 'asc' }],
+        select: {
+          id: true,
+          plateNumber: true,
+          vinNumber: true,
+          make: true,
+          vehicleModel: true,
+          manufacturingYear: true,
+          vehicleColor: true,
+          vehicleType: true,
+          categoryName: true,
+          seatingCapacity: true,
+          status: true,
+          verificationStatus: true,
+        },
+      }),
+    ]);
+
+    return {
+      items: items.map((v) => ({
+        id: v.id,
+        plateNumber: v.plateNumber,
+        vinNumber: v.vinNumber || null,
+        make: v.make,
+        model: v.vehicleModel,
+        year: v.manufacturingYear,
+        color: v.vehicleColor,
+        vehicleType: v.vehicleType,
+        categoryName: v.categoryName || getCategoryDisplayName(v.vehicleType),
+        capacity: v.seatingCapacity,
+        status: v.status,
+        verificationStatus: v.verificationStatus,
+        isAssigned: false,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  /**
    * Atomic Driver-to-Vehicle Assignment
    */
-  async assignDriverToVehicle(vehicleId: string, driverId: string, adminIdentifier: string, notes?: string) {
+  async assignDriverToVehicle(
+    vehicleId: string,
+    driverId: string,
+    adminIdentifier: string,
+    notes?: string,
+    options: { allowReplaceDriverVehicle?: boolean; actorId?: string } = { allowReplaceDriverVehicle: true }
+  ) {
+    if (!vehicleId?.trim() || !driverId?.trim()) {
+      throw new AppError('Invalid driver or vehicle identifier.', 400, 'VALIDATION_ERROR');
+    }
+
+    const allowReplace = options.allowReplaceDriverVehicle ?? true;
+    const now = new Date();
+
     return prisma.$transaction(async (tx) => {
       // 1. Validate vehicle
       const vehicle = await tx.vehicle.findUnique({ where: { id: vehicleId } });
-      if (!vehicle) throw new AppError('Vehicle not found', 404);
+      if (!vehicle) throw new AppError('Vehicle not found', 404, 'VEHICLE_NOT_FOUND');
 
+      if (vehicle.isActive === false) {
+        throw new AppError('Cannot assign an inactive vehicle.', 400, 'VEHICLE_INACTIVE');
+      }
+      if (vehicle.verificationStatus && vehicle.verificationStatus !== VehicleVerificationStatus.VERIFIED) {
+        throw new AppError('Vehicle must be VERIFIED before assignment.', 400, 'VEHICLE_NOT_VERIFIED');
+      }
       if (
-        vehicle.status === VehicleOperationalStatus.UNDER_MAINTENANCE ||
-        vehicle.status === VehicleOperationalStatus.SUSPENDED ||
-        vehicle.status === VehicleOperationalStatus.RETIRED
+        vehicle.status !== VehicleOperationalStatus.AVAILABLE &&
+        vehicle.status !== VehicleOperationalStatus.ACTIVE
       ) {
-        throw new AppError(`Cannot assign vehicle with status '${vehicle.status}'. Vehicle must be AVAILABLE or ACTIVE.`, 400);
+        throw new AppError(
+          `Cannot assign vehicle with status '${vehicle.status}'. Vehicle must be AVAILABLE or ACTIVE.`,
+          409,
+          'VEHICLE_UNAVAILABLE'
+        );
+      }
+
+      // Verify vehicle has no conflicting active assignment to another driver
+      const vehicleActiveAssignment = await (tx as any).vehicleAssignment.findFirst({
+        where: { vehicleId, isActive: true },
+      });
+      if (
+        (vehicle.driverId && vehicle.driverId !== driverId) ||
+        (vehicleActiveAssignment && vehicleActiveAssignment.driverId !== driverId)
+      ) {
+        throw new AppError('Selected vehicle is already assigned to another driver.', 409, 'VEHICLE_ALREADY_ASSIGNED');
       }
 
       // 2. Validate driver
       const driver = await tx.driver.findUnique({ where: { id: driverId } });
-      if (!driver) throw new AppError('Driver not found', 404);
+      if (!driver || driver.deletedAt) throw new AppError('Driver not found', 404, 'DRIVER_NOT_FOUND');
 
       if (driver.verificationStatus !== DriverVerificationStatus.APPROVED) {
-        throw new AppError('Driver must be APPROVED before being assigned to a vehicle.', 400);
+        throw new AppError('Driver must be APPROVED before being assigned to a vehicle.', 400, 'DRIVER_NOT_APPROVED');
+      }
+      if (driver.accountStatus && driver.accountStatus !== AccountStatus.ACTIVE) {
+        throw new AppError('Driver account must be ACTIVE before vehicle assignment.', 400, 'DRIVER_NOT_ACTIVE');
       }
 
-      if (driver.accountStatus === AccountStatus.SUSPENDED) {
-        throw new AppError('Cannot assign a suspended driver to a vehicle.', 400);
-      }
-
-      // 3. Deactivate any existing active assignment for this driver on any other vehicle
-      await (tx as any).vehicleAssignment.updateMany({
+      // 3. Check driver's existing active assignment
+      const driverActiveAssignment = await (tx as any).vehicleAssignment.findFirst({
         where: { driverId, isActive: true },
-        data: {
-          isActive: false,
-          unassignedAt: new Date(),
-          unassignedBy: adminIdentifier,
-          notes: 'Reassigned to another vehicle',
-        },
       });
 
-      // Also null out driverId on any other vehicle this driver was assigned to
-      await tx.vehicle.updateMany({
-        where: { driverId, id: { not: vehicleId } },
-        data: {
-          driverId: null,
-          status: VehicleOperationalStatus.AVAILABLE,
-        },
-      });
+      if (driverActiveAssignment && driverActiveAssignment.vehicleId !== vehicleId) {
+        if (!allowReplace) {
+          throw new AppError(
+            'Driver already has an active vehicle assignment. Use Change Vehicle instead.',
+            409,
+            'DRIVER_ALREADY_ASSIGNED'
+          );
+        }
 
-      // 4. Deactivate any existing active assignment for this vehicle
-      await (tx as any).vehicleAssignment.updateMany({
-        where: { vehicleId, isActive: true },
-        data: {
-          isActive: false,
-          unassignedAt: new Date(),
-          unassignedBy: adminIdentifier,
-          notes: 'Driver replaced by administrator',
-        },
-      });
+        const activeBookings = (await tx.booking?.count?.({
+          where: { driverId, bookingStatus: { in: ACTIVE_RIDE_BOOKING_STATUSES } },
+        })) ?? 0;
+        if (activeBookings > 0) {
+          throw new AppError(
+            'Cannot change vehicle while driver has an active ride or pending ride request.',
+            409,
+            'ACTIVE_RIDE_CONFLICT'
+          );
+        }
 
-      // 5. Create new active assignment
-      await (tx as any).vehicleAssignment.create({
-        data: {
-          vehicleId,
-          driverId,
-          assignedBy: adminIdentifier,
-          assignedAt: new Date(),
-          isActive: true,
-          notes: notes || 'Assigned by administrator',
-        },
-      });
+        await (tx as any).vehicleAssignment.updateMany({
+          where: { driverId, isActive: true },
+          data: {
+            isActive: false,
+            unassignedAt: now,
+            unassignedBy: adminIdentifier,
+            notes: notes || 'Reassigned to another vehicle',
+          },
+        });
 
-      // 6. Update vehicle status and assigned driverId
+        await tx.vehicle.updateMany({
+          where: { driverId, id: { not: vehicleId } },
+          data: {
+            driverId: null,
+            status: VehicleOperationalStatus.AVAILABLE,
+          },
+        });
+      }
+
+      // 4. Create new active assignment if not already active on this exact pair
+      let assignment = driverActiveAssignment?.vehicleId === vehicleId ? driverActiveAssignment : null;
+      if (!assignment) {
+        assignment = await (tx as any).vehicleAssignment.create({
+          data: {
+            vehicleId,
+            driverId,
+            assignedBy: adminIdentifier,
+            assignedAt: now,
+            isActive: true,
+            notes: notes || (driverActiveAssignment ? 'Vehicle changed by administrator' : 'Assigned by administrator'),
+          },
+        });
+      }
+
+      // 5. Update vehicle status and assigned driverId
       const updatedVehicle = await tx.vehicle.update({
         where: { id: vehicleId },
         data: {
@@ -844,31 +972,195 @@ export class AdminVehicleService {
         },
       });
 
+      // 6. Audit Log
+      await tx.auditLog?.create?.({
+        data: {
+          driverId,
+          actorId: options.actorId || null,
+          actorType: ActorType.ADMIN,
+          action: driverActiveAssignment ? 'DRIVER_VEHICLE_CHANGED' : 'DRIVER_VEHICLE_ASSIGNED',
+          entityType: 'VehicleAssignment',
+          entityId: assignment.id,
+          metadata: {
+            vehicleId,
+            plateNumber: vehicle.plateNumber,
+            previousVehicleId: driverActiveAssignment?.vehicleId || null,
+            assignedBy: adminIdentifier,
+          },
+        },
+      });
+
       logger.info({ vehicleId, driverId, admin: adminIdentifier }, '[AdminVehicleService] Driver assigned successfully');
-      return updatedVehicle;
+      return {
+        ...updatedVehicle,
+        assignment,
+      };
     });
   }
 
   /**
-   * Atomic Driver Unassignment
+   * Atomic Driver Vehicle Change (from Driver Management)
    */
-  async unassignDriverFromVehicle(vehicleId: string, adminIdentifier: string, notes?: string) {
-    return prisma.$transaction(async (tx) => {
-      const vehicle = await tx.vehicle.findUnique({ where: { id: vehicleId } });
-      if (!vehicle) throw new AppError('Vehicle not found', 404);
+  async changeDriverVehicle(
+    driverId: string,
+    newVehicleId: string,
+    adminIdentifier: string,
+    notes?: string,
+    actorId?: string
+  ) {
+    return this.assignDriverToVehicle(newVehicleId, driverId, adminIdentifier, notes, {
+      allowReplaceDriverVehicle: true,
+      actorId,
+    });
+  }
 
-      // Deactivate all active assignments for this vehicle
+  /**
+   * Atomic Unassignment by Driver ID (from Driver Management)
+   */
+  async unassignDriverVehicle(
+    driverId: string,
+    adminIdentifier: string,
+    notes?: string,
+    actorId?: string
+  ) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(driverId || '')) {
+      throw new AppError('Invalid driver identifier.', 400, 'VALIDATION_ERROR');
+    }
+
+    const now = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const driver = await tx.driver.findFirst({
+        where: { id: driverId, deletedAt: null },
+        include: { subcities: { select: { subcityId: true } } },
+      });
+      if (!driver) throw new AppError('Driver not found', 404, 'DRIVER_NOT_FOUND');
+
+      const activeBookings = await tx.booking.count({
+        where: { driverId, bookingStatus: { in: ACTIVE_RIDE_BOOKING_STATUSES } },
+      });
+      if (activeBookings > 0) {
+        throw new AppError(
+          'Cannot unassign vehicle while driver has an active ride or pending ride request.',
+          409,
+          'ACTIVE_RIDE_CONFLICT'
+        );
+      }
+
+      const activeAssignment = await (tx as any).vehicleAssignment.findFirst({
+        where: { driverId, isActive: true },
+        include: { vehicle: { select: { id: true, plateNumber: true } } },
+      });
+
       await (tx as any).vehicleAssignment.updateMany({
-        where: { vehicleId, isActive: true },
+        where: { driverId, isActive: true },
         data: {
           isActive: false,
-          unassignedAt: new Date(),
+          unassignedAt: now,
           unassignedBy: adminIdentifier,
           notes: notes || 'Unassigned by administrator',
         },
       });
 
-      // Reset vehicle status to AVAILABLE and clear driverId
+      await tx.vehicle.updateMany({
+        where: { driverId },
+        data: {
+          driverId: null,
+          status: VehicleOperationalStatus.AVAILABLE,
+        },
+      });
+
+      let wentOffline = false;
+      if (
+        driver.availabilityStatus === DriverAvailabilityStatus.AVAILABLE ||
+        driver.availabilityStatus === DriverAvailabilityStatus.ONLINE
+      ) {
+        await tx.driver.update({
+          where: { id: driverId },
+          data: { availabilityStatus: DriverAvailabilityStatus.OFFLINE },
+        });
+        wentOffline = true;
+      }
+
+      await tx.auditLog.create({
+        data: {
+          driverId,
+          actorId: actorId || null,
+          actorType: ActorType.ADMIN,
+          action: 'DRIVER_VEHICLE_UNASSIGNED',
+          entityType: 'VehicleAssignment',
+          entityId: activeAssignment?.id || driverId,
+          metadata: {
+            vehicleId: activeAssignment?.vehicleId || null,
+            plateNumber: activeAssignment?.vehicle?.plateNumber || null,
+            unassignedBy: adminIdentifier,
+          },
+        },
+      });
+
+      const subcityIds = Array.from(
+        new Set([
+          ...(driver.primarySubcityId ? [driver.primarySubcityId] : []),
+          ...driver.subcities.map((s) => s.subcityId),
+        ])
+      );
+
+      return {
+        driverId,
+        unassignedVehicleId: activeAssignment?.vehicleId || null,
+        wentOffline,
+        subcityIds,
+      };
+    });
+
+    if (result.wentOffline) {
+      emitAvailabilityChanged({
+        driverId,
+        availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+        subcityIds: result.subcityIds,
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Atomic Driver Unassignment by Vehicle ID
+   */
+  async unassignDriverFromVehicle(vehicleId: string, adminIdentifier: string, notes?: string, actorId?: string) {
+    const now = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const vehicle = await tx.vehicle.findUnique({ where: { id: vehicleId } });
+      if (!vehicle) throw new AppError('Vehicle not found', 404);
+
+      const activeAssignment = await (tx as any).vehicleAssignment.findFirst({
+        where: { vehicleId, isActive: true },
+      });
+      const affectedDriverId = activeAssignment?.driverId || vehicle.driverId || null;
+
+      if (affectedDriverId) {
+        const activeBookings = (await tx.booking?.count?.({
+          where: { driverId: affectedDriverId, bookingStatus: { in: ACTIVE_RIDE_BOOKING_STATUSES } },
+        })) ?? 0;
+        if (activeBookings > 0) {
+          throw new AppError(
+            'Cannot unassign vehicle while assigned driver has an active ride or pending request.',
+            409,
+            'ACTIVE_RIDE_CONFLICT'
+          );
+        }
+      }
+
+      await (tx as any).vehicleAssignment.updateMany({
+        where: { vehicleId, isActive: true },
+        data: {
+          isActive: false,
+          unassignedAt: now,
+          unassignedBy: adminIdentifier,
+          notes: notes || 'Unassigned by administrator',
+        },
+      });
+
       const updated = await tx.vehicle.update({
         where: { id: vehicleId },
         data: {
@@ -877,9 +1169,154 @@ export class AdminVehicleService {
         },
       });
 
+      let wentOffline = false;
+      let subcityIds: string[] = [];
+      if (affectedDriverId) {
+        const drv = await tx.driver.findFirst({
+          where: { id: affectedDriverId, deletedAt: null },
+          include: { subcities: { select: { subcityId: true } } },
+        });
+        if (
+          drv &&
+          (drv.availabilityStatus === DriverAvailabilityStatus.AVAILABLE ||
+            drv.availabilityStatus === DriverAvailabilityStatus.ONLINE)
+        ) {
+          await tx.driver.update({
+            where: { id: affectedDriverId },
+            data: { availabilityStatus: DriverAvailabilityStatus.OFFLINE },
+          });
+          wentOffline = true;
+          subcityIds = Array.from(
+            new Set([
+              ...(drv.primarySubcityId ? [drv.primarySubcityId] : []),
+              ...drv.subcities.map((s) => s.subcityId),
+            ])
+          );
+        }
+
+        await tx.auditLog?.create?.({
+          data: {
+            driverId: affectedDriverId,
+            actorId: actorId || null,
+            actorType: ActorType.ADMIN,
+            action: 'DRIVER_VEHICLE_UNASSIGNED',
+            entityType: 'VehicleAssignment',
+            entityId: activeAssignment?.id || vehicleId,
+            metadata: {
+              vehicleId,
+              plateNumber: vehicle.plateNumber,
+              unassignedBy: adminIdentifier,
+            },
+          },
+        });
+      }
+
       logger.info({ vehicleId, admin: adminIdentifier }, '[AdminVehicleService] Driver unassigned successfully');
-      return updated;
+      return { updated, affectedDriverId, wentOffline, subcityIds };
     });
+
+    if (result.wentOffline && result.affectedDriverId) {
+      emitAvailabilityChanged({
+        driverId: result.affectedDriverId,
+        availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+        subcityIds: result.subcityIds,
+      });
+    }
+
+    return result.updated;
+  }
+
+  /**
+   * Get current active vehicle assignment for a driver
+   */
+  async getDriverActiveVehicle(driverId: string) {
+    const active = await (prisma as any).vehicleAssignment.findFirst({
+      where: { driverId, isActive: true },
+      include: {
+        vehicle: true,
+      },
+    });
+    if (!active) return null;
+    return {
+      assignmentId: active.id,
+      isActive: active.isActive,
+      assignedAt: active.assignedAt.toISOString(),
+      assignedBy: active.assignedBy,
+      notes: active.notes,
+      vehicle: {
+        id: active.vehicle.id,
+        plateNumber: active.vehicle.plateNumber,
+        make: active.vehicle.make,
+        model: active.vehicle.vehicleModel,
+        year: active.vehicle.manufacturingYear,
+        color: active.vehicle.vehicleColor,
+        vehicleType: active.vehicle.vehicleType,
+        categoryName: active.vehicle.categoryName || getCategoryDisplayName(active.vehicle.vehicleType),
+        status: active.vehicle.status,
+        verificationStatus: active.vehicle.verificationStatus,
+      },
+    };
+  }
+
+  /**
+   * Get vehicle assignment history for a driver
+   */
+  async getDriverVehicleHistory(driverId: string, page = 1, limit = 20) {
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
+    const skip = (safePage - 1) * safeLimit;
+
+    const [total, items] = await Promise.all([
+      (prisma as any).vehicleAssignment.count({ where: { driverId } }),
+      (prisma as any).vehicleAssignment.findMany({
+        where: { driverId },
+        skip,
+        take: safeLimit,
+        orderBy: { assignedAt: 'desc' },
+        include: {
+          vehicle: {
+            select: {
+              id: true,
+              plateNumber: true,
+              make: true,
+              vehicleModel: true,
+              vehicleColor: true,
+              vehicleType: true,
+              status: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items: items.map((a: any) => ({
+        id: a.id,
+        vehicleId: a.vehicleId,
+        driverId: a.driverId,
+        isActive: a.isActive,
+        assignedBy: a.assignedBy,
+        assignedAt: a.assignedAt.toISOString(),
+        unassignedBy: a.unassignedBy,
+        unassignedAt: a.unassignedAt ? a.unassignedAt.toISOString() : null,
+        notes: a.notes,
+        vehicle: a.vehicle
+          ? {
+              id: a.vehicle.id,
+              plateNumber: a.vehicle.plateNumber,
+              make: a.vehicle.make,
+              model: a.vehicle.vehicleModel,
+              color: a.vehicle.vehicleColor,
+              vehicleType: a.vehicle.vehicleType,
+              status: a.vehicle.status,
+            }
+          : null,
+      })),
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit) || 1,
+    };
   }
 
   /**

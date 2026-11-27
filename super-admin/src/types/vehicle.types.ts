@@ -72,6 +72,9 @@ export interface Vehicle {
   assignedDriverId?: string;
   assignedDriverName?: string;
   assignedDriverPhone?: string;
+  assignmentStatus?: 'ASSIGNED' | 'UNASSIGNED';
+  assignedAt?: string | null;
+  assignedBy?: string | null;
   
   // Insurance & Compliance
   insurancePolicyNumber?: string;
@@ -94,6 +97,7 @@ export interface VehicleFilterParams {
   search?: string;
   category?: string;
   status?: string;
+  isAssigned?: string;
   page?: number;
   limit?: number;
 }

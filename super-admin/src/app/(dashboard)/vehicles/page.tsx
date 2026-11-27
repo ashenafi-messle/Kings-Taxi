@@ -29,6 +29,7 @@ export default function VehiclesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [assignmentFilter, setAssignmentFilter] = useState('ALL');
   const [reviewingVehicle, setReviewingVehicle] = useState<Vehicle | null>(null);
 
   const fetchVehicles = async () => {
@@ -38,6 +39,7 @@ export default function VehiclesPage() {
         VehicleService.getVehicles({
           category: categoryFilter,
           status: statusFilter,
+          isAssigned: assignmentFilter,
           limit: 100,
         }),
         VehicleService.getStatistics(),
@@ -53,7 +55,7 @@ export default function VehiclesPage() {
 
   useEffect(() => {
     fetchVehicles();
-  }, [categoryFilter, statusFilter]);
+  }, [categoryFilter, statusFilter, assignmentFilter]);
 
   const handleReviewDocument = async (
     documentId: string,
@@ -110,7 +112,10 @@ export default function VehiclesPage() {
         v.assignedDriverName ? (
           <div>
             <div className="text-sm fw-medium text-obsidian">{v.assignedDriverName}</div>
-            <div className="text-muted text-xs">Active operator</div>
+            <div className="text-muted text-xs">
+              {v.assignedDriverPhone || 'Active operator'}
+              {v.assignedAt ? ` • ${formatDate(v.assignedAt)}` : ''}
+            </div>
           </div>
         ) : (
           <span className="text-muted small fst-italic">Unassigned</span>
@@ -273,6 +278,16 @@ export default function VehiclesPage() {
                 { value: 'ACTIVE', label: 'Active' },
                 { value: 'MAINTENANCE', label: 'In Maintenance' },
                 { value: 'INACTIVE', label: 'Inactive' },
+              ]}
+            />
+            <FilterDropdown
+              label="Assignment"
+              value={assignmentFilter}
+              onChange={setAssignmentFilter}
+              options={[
+                { value: 'ALL', label: 'All Assignments' },
+                { value: 'true', label: 'Assigned' },
+                { value: 'false', label: 'Unassigned' },
               ]}
             />
           </div>

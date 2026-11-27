@@ -140,6 +140,21 @@ export class AdminVehicleController {
     }
   }
 
+  async getAssignableVehicles(req: Request, res: Response): Promise<void> {
+    try {
+      const { search, page, limit } = req.query;
+      const result = await adminVehicleService.getAssignableVehicles({
+        search: search as string,
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 20,
+      });
+      ApiResponse.success(res, result, 'Assignable vehicles retrieved successfully');
+    } catch (err: any) {
+      logger.error({ err: err.message }, '[AdminVehicleController] Failed to list assignable vehicles');
+      ApiResponse.serverError(res, 'Unable to retrieve assignable vehicles');
+    }
+  }
+
   async assignDriver(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;

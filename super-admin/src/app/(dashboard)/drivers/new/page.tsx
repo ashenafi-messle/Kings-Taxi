@@ -250,9 +250,8 @@ export default function NewDriverPage() {
             <div className="card-body p-4">
               {resultBanner && createdDriver && (
                 <div
-                  className={`alert ${
-                    resultBanner.type === 'success' ? 'alert-success' : 'alert-warning'
-                  } d-flex align-items-start gap-2.5 py-3 px-3 mb-4 rounded-3 text-sm`}
+                  className={`alert ${resultBanner.type === 'success' ? 'alert-success' : 'alert-warning'
+                    } d-flex align-items-start gap-2.5 py-3 px-3 mb-4 rounded-3 text-sm`}
                 >
                   {resultBanner.type === 'success' ? (
                     <CheckCircle2 size={18} className="flex-shrink-0 mt-0.5 text-success" />
@@ -347,9 +346,8 @@ export default function NewDriverPage() {
                       value={formData.phone}
                       onChange={handleChange}
                       placeholder="+251 91 234 5678"
-                      className={`form-control form-control-sm py-2 shadow-none font-monospace ${
-                        error.includes('phone') ? 'is-invalid border-danger' : ''
-                      }`}
+                      className={`form-control form-control-sm py-2 shadow-none font-monospace ${error.includes('phone') ? 'is-invalid border-danger' : ''
+                        }`}
                     />
                     {error.includes('phone') && (
                       <div className="invalid-feedback text-xs d-block mt-1">
@@ -369,9 +367,8 @@ export default function NewDriverPage() {
                       value={formData.email}
                       onChange={handleChange}
                       placeholder="driver@example.com"
-                      className={`form-control form-control-sm py-2 shadow-none ${
-                        error.includes('email') ? 'is-invalid border-danger' : ''
-                      }`}
+                      className={`form-control form-control-sm py-2 shadow-none ${error.includes('email') ? 'is-invalid border-danger' : ''
+                        }`}
                     />
                     {error.includes('email') && (
                       <div className="invalid-feedback text-xs d-block mt-1">
@@ -429,8 +426,8 @@ export default function NewDriverPage() {
                         {subcitiesLoading
                           ? 'Loading subcities...'
                           : filteredSubcities.length > 0
-                          ? 'Select initial operating subcity...'
-                          : 'No active subcities configured'}
+                            ? 'Select initial operating subcity...'
+                            : 'No active subcities configured'}
                       </option>
                       {filteredSubcities.map((sub) => (
                         <option key={sub.id} value={sub.id}>

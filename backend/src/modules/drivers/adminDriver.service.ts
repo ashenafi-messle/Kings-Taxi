@@ -481,7 +481,15 @@ export class AdminDriverService {
       assignedVehicleId: assignedVehicle?.id,
       assignedVehiclePlate: assignedVehicle?.plateNumber,
       assignedVehicleModel: assignedVehicle ? `${assignedVehicle.make || ''} ${assignedVehicle.vehicleModel}`.trim() : undefined,
-      assignedVehicle,
+      assignedVehicle: assignedVehicle
+        ? {
+            ...assignedVehicle,
+            assignmentId: activeAssignment?.id || null,
+            assignmentStatus: activeAssignment ? 'ACTIVE' : 'LEGACY_DIRECT',
+            assignedAt: activeAssignment?.assignedAt ? activeAssignment.assignedAt.toISOString() : null,
+            assignedBy: activeAssignment?.assignedBy || null,
+          }
+        : null,
       rating: driver.rating,
       totalRides: driver.totalTrips,
       completedRides: completedTripsCount,

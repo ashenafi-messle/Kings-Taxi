@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { adminDriverService } from './adminDriver.service';
+import { adminVehicleService } from '../vehicles/adminVehicle.service';
 import { ApiResponse } from '../../core/response/apiResponse';
 import { logger } from '../../core/logging/logger';
 import { AppError } from '../../core/errors/appError';
@@ -210,6 +211,111 @@ export class AdminDriverController {
     } catch (err: any) {
       logger.error({ err: err.message }, '[AdminDriverController] Failed to retrieve eligible drivers');
       ApiResponse.serverError(res, 'Unable to retrieve eligible drivers');
+    }
+  }
+
+  async getAssignedVehicle(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const result = await adminVehicleService.getDriverActiveVehicle(id);
+      ApiResponse.success(res, result, 'Driver assigned vehicle retrieved successfully');
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        ApiResponse.error(res, err.code || 'FETCH_ERROR', err.message, err.statusCode);
+        return;
+      }
+      logger.error({ err: err.message }, '[AdminDriverController] Failed to retrieve assigned vehicle');
+      ApiResponse.serverError(res, 'Unable to retrieve assigned vehicle');
+    }
+  }
+
+  async getVehicleHistory(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? Number(req.query.page) : 1;
+      const limit = req.query.limit ? Number(req.query.limit) : 20;
+      const result = await adminVehicleService.getDriverVehicleHistory(id, page, limit);
+      ApiResponse.success(res, result, 'Driver vehicle assignment history retrieved successfully');
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        ApiResponse.error(res, err.code || 'FETCH_ERROR', err.message, err.statusCode);
+        return;
+      }
+      logger.error({ err: err.message }, '[AdminDriverController] Failed to retrieve vehicle assignment history');
+      ApiResponse.serverError(res, 'Unable to retrieve vehicle assignment history');
+    }
+  }
+
+  async assignVehicle(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { vehicleId, notes } = req.body || {};
+      const adminIdentifier = req.user?.email || req.user?.sub || 'Super Admin';
+
+      if (!vehicleId) {
+        ApiResponse.badRequest(res, 'vehicleId is required');
+        return;
+      }
+
+      const result = await adminVehicleService.assignDriverToVehicle(vehicleId, id, adminIdentifier, notes, {
+        allowReplaceDriverVehicle: false,
+        actorId: req.user?.sub,
+      });
+      ApiResponse.success(res, result, 'Vehicle assigned to driver successfully');
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        ApiResponse.error(res, err.code || 'ASSIGNMENT_ERROR', err.message, err.statusCode);
+        return;
+      }
+      logger.error({ err: err.message }, '[AdminDriverController] Failed to assign vehicle to driver');
+      ApiResponse.serverError(res, 'Unable to assign vehicle to driver');
+    }
+  }
+
+  async changeVehicle(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { vehicleId, notes } = req.body || {};
+      const adminIdentifier = req.user?.email || req.user?.sub || 'Super Admin';
+
+      if (!vehicleId) {
+        ApiResponse.badRequest(res, 'vehicleId is required');
+        return;
+      }
+
+      const result = await adminVehicleService.changeDriverVehicle(
+        id,
+        vehicleId,
+        adminIdentifier,
+        notes,
+        req.user?.sub
+      );
+      ApiResponse.success(res, result, 'Driver vehicle changed successfully');
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        ApiResponse.error(res, err.code || 'CHANGE_VEHICLE_ERROR', err.message, err.statusCode);
+        return;
+      }
+      logger.error({ err: err.message }, '[AdminDriverController] Failed to change driver vehicle');
+      ApiResponse.serverError(res, 'Unable to change driver vehicle');
+    }
+  }
+
+  async unassignVehicle(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { notes } = req.body || {};
+      const adminIdentifier = req.user?.email || req.user?.sub || 'Super Admin';
+
+      const result = await adminVehicleService.unassignDriverVehicle(id, adminIdentifier, notes, req.user?.sub);
+      ApiResponse.success(res, result, 'Vehicle unassigned from driver successfully');
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        ApiResponse.error(res, err.code || 'UNASSIGN_VEHICLE_ERROR', err.message, err.statusCode);
+        return;
+      }
+      logger.error({ err: err.message }, '[AdminDriverController] Failed to unassign driver vehicle');
+      ApiResponse.serverError(res, 'Unable to unassign driver vehicle');
     }
   }
 }

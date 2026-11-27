@@ -89,6 +89,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
       'CREATE INDEX IF NOT EXISTS "drivers_availability_status_verification_status_account_status_idx" ON "drivers"("availability_status", "verification_status", "account_status");',
       'CREATE INDEX IF NOT EXISTS "bookings_booking_status_expires_at_idx" ON "bookings"("booking_status", "expires_at");',
       'CREATE UNIQUE INDEX IF NOT EXISTS "bookings_one_active_per_driver_idx" ON "bookings"("driver_id") WHERE "driver_id" IS NOT NULL AND "booking_status" IN (\'REQUESTED\', \'DRIVER_ASSIGNED\', \'DRIVER_ARRIVING\', \'DRIVER_ARRIVED\', \'TRIP_STARTED\');',
+      'CREATE UNIQUE INDEX IF NOT EXISTS "vehicle_assignments_one_active_per_driver_idx" ON "vehicle_assignments"("driver_id") WHERE "is_active" = true;',
+      'CREATE UNIQUE INDEX IF NOT EXISTS "vehicle_assignments_one_active_per_vehicle_idx" ON "vehicle_assignments"("vehicle_id") WHERE "is_active" = true;',
     ];
 
     for (const sql of realtimeDdl) {

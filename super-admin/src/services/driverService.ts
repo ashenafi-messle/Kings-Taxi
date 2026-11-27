@@ -471,4 +471,73 @@ export class DriverService {
         isCurrentlyAssigned: !!d.assignedVehicleId,
       }));
   }
+
+  static async getVehicleAssignmentHistory(driverId: string, page = 1, limit = 20): Promise<{
+    items: Array<{
+      id: string;
+      vehicleId: string;
+      driverId: string;
+      isActive: boolean;
+      assignedBy?: string | null;
+      assignedAt: string;
+      unassignedBy?: string | null;
+      unassignedAt?: string | null;
+      notes?: string | null;
+      vehicle?: {
+        id: string;
+        plateNumber: string;
+        make: string;
+        model: string;
+        color?: string;
+        vehicleType: string;
+        status: string;
+      } | null;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const res = await apiRequest<any>(`/admin/drivers/${driverId}/vehicle/history?page=${page}&limit=${limit}`);
+    if (res.success && res.data) {
+      return res.data;
+    }
+    return { items: [], total: 0, page, limit, totalPages: 1 };
+  }
+
+  static async assignVehicle(driverId: string, vehicleId: string, notes?: string): Promise<any> {
+    const res = await apiRequest<any>(`/admin/drivers/${driverId}/vehicle/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vehicleId, notes }),
+    });
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to assign vehicle');
+    }
+    return res.data;
+  }
+
+  static async changeVehicle(driverId: string, vehicleId: string, notes?: string): Promise<any> {
+    const res = await apiRequest<any>(`/admin/drivers/${driverId}/vehicle/change`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vehicleId, notes }),
+    });
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to change vehicle');
+    }
+    return res.data;
+  }
+
+  static async unassignVehicle(driverId: string, notes?: string): Promise<any> {
+    const res = await apiRequest<any>(`/admin/drivers/${driverId}/vehicle/unassign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to unassign vehicle');
+    }
+    return res.data;
+  }
 }

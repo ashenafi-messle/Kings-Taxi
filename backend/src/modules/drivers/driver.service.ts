@@ -60,7 +60,11 @@ export class DriverService {
         in: [DriverAvailabilityStatus.AVAILABLE, DriverAvailabilityStatus.ONLINE],
       },
       vehicles: {
-        some: { isActive: true, verificationStatus: 'VERIFIED' },
+        some: {
+          isActive: true,
+          verificationStatus: 'VERIFIED',
+          status: { in: ['AVAILABLE', 'ACTIVE', 'ASSIGNED'] },
+        },
       },
       assignedBookings: {
         none: {
@@ -218,7 +222,26 @@ export class DriverService {
       const driver = await tx.driver.findFirst({
         where: { id: driverId, deletedAt: null },
         include: {
-          vehicles: { where: { isActive: true, verificationStatus: 'VERIFIED' }, take: 1 },
+          vehicles: {
+            where: {
+              isActive: true,
+              verificationStatus: 'VERIFIED',
+              status: { in: ['AVAILABLE', 'ACTIVE', 'ASSIGNED'] },
+            },
+            take: 1,
+          },
+          vehicleAssignments: {
+            where: {
+              isActive: true,
+              vehicle: {
+                isActive: true,
+                verificationStatus: 'VERIFIED',
+                status: { in: ['AVAILABLE', 'ACTIVE', 'ASSIGNED'] },
+              },
+            },
+            include: { vehicle: true },
+            take: 1,
+          },
           subcities: { select: { subcityId: true } },
           assignedBookings: {
             where: { bookingStatus: { in: ACTIVE_RIDE_BOOKING_STATUSES } },
@@ -236,8 +259,8 @@ export class DriverService {
       if (driver.accountStatus !== AccountStatus.ACTIVE || driver.verificationStatus !== DriverVerificationStatus.APPROVED) {
         throw new AppError('Your driver account must be approved and active before going online.', 403, 'DRIVER_NOT_ELIGIBLE');
       }
-      if (!driver.vehicles.length) {
-        throw new AppError('An active verified vehicle is required before going online.', 400, 'NO_ACTIVE_VEHICLE');
+      if (!driver.vehicles.length && !driver.vehicleAssignments.length) {
+        throw new AppError('An active verified vehicle assignment is required before going online.', 400, 'NO_ACTIVE_VEHICLE');
       }
       if (!driver.primarySubcityId && !driver.subcities.length) {
         throw new AppError('No operating subcity assigned. Contact administration.', 400, 'NO_SUBCITY_ASSIGNED');

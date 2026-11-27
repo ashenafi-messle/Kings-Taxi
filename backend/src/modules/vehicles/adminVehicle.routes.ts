@@ -10,6 +10,7 @@ adminVehicleRouter.use(authenticateToken, requireRole(['ADMIN', 'SUPER_ADMIN']))
 
 adminVehicleRouter.get('/statistics', (req, res) => adminVehicleController.getStatistics(req, res));
 adminVehicleRouter.get('/eligible', (req, res) => adminVehicleController.getEligibleVehicles(req, res));
+adminVehicleRouter.get('/assignable', (req, res) => adminVehicleController.getAssignableVehicles(req, res));
 adminVehicleRouter.get('/', (req, res) => adminVehicleController.listVehicles(req, res));
 adminVehicleRouter.post('/', (req, res) => adminVehicleController.createVehicle(req, res));
 

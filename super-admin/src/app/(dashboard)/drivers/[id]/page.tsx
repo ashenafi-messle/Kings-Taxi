@@ -21,12 +21,16 @@ import {
   Clock,
   KeyRound,
   RefreshCw,
+  Search,
+  X,
+  Plus,
 } from 'lucide-react';
 import { PageHeader } from '../../../../components/common/PageHeader';
 import { StatusBadge } from '../../../../components/common/StatusBadge';
 import { ConfirmDialog } from '../../../../components/common/ConfirmDialog';
 import { DocumentReviewModal } from '../../../../components/common/DocumentReviewModal';
 import { DriverService } from '../../../../services/driverService';
+import { VehicleService } from '../../../../services/vehicleService';
 import { Driver } from '../../../../types';
 import { formatDate, formatDateTime } from '../../../../utils/dateUtils';
 import { formatETB } from '../../../../utils/formatters';
@@ -42,6 +46,18 @@ export default function DriverDetailPage() {
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [isResendingOnboarding, setIsResendingOnboarding] = useState(false);
   const [onboardingFeedback, setOnboardingFeedback] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
+
+  // Vehicle Assignment State
+  const [vehicleHistory, setVehicleHistory] = useState<any[]>([]);
+  const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
+  const [vehicleModalMode, setVehicleModalMode] = useState<'assign' | 'change'>('assign');
+  const [vehicleSearch, setVehicleSearch] = useState('');
+  const [assignableVehicles, setAssignableVehicles] = useState<any[]>([]);
+  const [isLoadingAssignable, setIsLoadingAssignable] = useState(false);
+  const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [assignmentNotes, setAssignmentNotes] = useState('');
+  const [isSubmittingVehicle, setIsSubmittingVehicle] = useState(false);
+  const [vehicleFeedback, setVehicleFeedback] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -57,13 +73,93 @@ export default function DriverDetailPage() {
   const loadDriver = async () => {
     setIsLoading(true);
     try {
-      const data = await DriverService.getDriverById(id);
+      const [data, historyRes] = await Promise.all([
+        DriverService.getDriverById(id),
+        DriverService.getVehicleAssignmentHistory(id, 1, 20),
+      ]);
       setDriver(data);
+      setVehicleHistory(historyRes.items || []);
     } catch (err) {
       console.error('Failed to load driver details:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchAssignableVehicles = async (searchText = '') => {
+    setIsLoadingAssignable(true);
+    try {
+      const res = await VehicleService.getAssignableVehicles({ search: searchText, page: 1, limit: 20 });
+      setAssignableVehicles(res.items || []);
+      if (res.items?.length > 0 && !res.items.some((v) => v.id === selectedVehicleId)) {
+        setSelectedVehicleId(res.items[0].id);
+      } else if (!res.items?.length) {
+        setSelectedVehicleId('');
+      }
+    } catch (err) {
+      console.error('Failed to load assignable vehicles:', err);
+    } finally {
+      setIsLoadingAssignable(false);
+    }
+  };
+
+  const openVehicleModal = (mode: 'assign' | 'change') => {
+    setVehicleModalMode(mode);
+    setVehicleSearch('');
+    setAssignmentNotes('');
+    setVehicleFeedback(null);
+    setIsVehicleModalOpen(true);
+    void fetchAssignableVehicles('');
+  };
+
+  const handleConfirmVehicleAssignment = async () => {
+    if (!driver || !selectedVehicleId || isSubmittingVehicle) return;
+    setIsSubmittingVehicle(true);
+    setVehicleFeedback(null);
+    try {
+      if (vehicleModalMode === 'change') {
+        await DriverService.changeVehicle(driver.id, selectedVehicleId, assignmentNotes || undefined);
+      } else {
+        await DriverService.assignVehicle(driver.id, selectedVehicleId, assignmentNotes || undefined);
+      }
+      setIsVehicleModalOpen(false);
+      setVehicleFeedback({
+        type: 'success',
+        message: vehicleModalMode === 'change' ? 'Driver vehicle changed successfully.' : 'Vehicle assigned to driver successfully.',
+      });
+      await loadDriver();
+    } catch (err: any) {
+      setVehicleFeedback({
+        type: 'danger',
+        message: err?.message || 'Unable to save vehicle assignment.',
+      });
+    } finally {
+      setIsSubmittingVehicle(false);
+    }
+  };
+
+  const handleUnassignVehicle = () => {
+    if (!driver) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Unassign Driver Vehicle',
+      message: `Are you sure you want to release ${driver.assignedVehiclePlate || 'the current vehicle'} from ${driver.fullName}? The driver will be set offline and cannot accept new rides until reassigned.`,
+      action: async () => {
+        setIsUpdating(true);
+        setVehicleFeedback(null);
+        try {
+          await DriverService.unassignVehicle(driver.id, 'Unassigned by Super Admin');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          setVehicleFeedback({ type: 'success', message: 'Vehicle unassigned and driver eligibility updated.' });
+          await loadDriver();
+        } catch (err: any) {
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          setVehicleFeedback({ type: 'danger', message: err?.message || 'Unable to unassign vehicle.' });
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
   };
 
   useEffect(() => {
@@ -432,35 +528,154 @@ export default function DriverDetailPage() {
             </div>
           </div>
 
-          {/* Assigned Vehicle Details */}
+          {/* Assigned Vehicle Details & Management */}
           <div className="card shadow-sm border-0 rounded-3 mb-4">
-            <div className="card-header bg-white border-bottom border-light p-3 d-flex align-items-center justify-content-between">
+            <div className="card-header bg-white border-bottom border-light p-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
               <div className="d-flex align-items-center gap-2">
                 <Car size={18} className="text-gold" />
-                <h3 className="h6 fw-bold text-obsidian mb-0">Assigned Vehicle Specifications</h3>
+                <h3 className="h6 fw-bold text-obsidian mb-0">Assigned Vehicle &amp; Fleet Integration</h3>
               </div>
-              <span className="badge bg-gold-subtle text-gold">Commercial Taxi License</span>
+              <div className="d-flex align-items-center gap-2">
+                {driver.assignedVehicleId ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-outline-dark btn-sm py-1 px-2.5 fw-semibold text-xs d-flex align-items-center gap-1"
+                      onClick={() => openVehicleModal('change')}
+                    >
+                      <RefreshCw size={13} />
+                      <span>Change Vehicle</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-danger btn-sm py-1 px-2.5 fw-semibold text-xs d-flex align-items-center gap-1"
+                      onClick={handleUnassignVehicle}
+                    >
+                      <XCircle size={13} />
+                      <span>Unassign</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-gold btn-sm py-1 px-2.5 fw-semibold text-xs d-flex align-items-center gap-1"
+                    onClick={() => openVehicleModal('assign')}
+                  >
+                    <Plus size={14} />
+                    <span>Assign Vehicle</span>
+                  </button>
+                )}
+              </div>
             </div>
             <div className="card-body p-3">
-              <div className="row g-3">
-                <div className="col-6 col-md-3">
-                  <span className="text-muted small d-block">Plate Number</span>
-                  <span className="fw-bold text-obsidian font-monospace">
-                    {driver.assignedVehiclePlate || 'N/A'}
-                  </span>
+              {vehicleFeedback && (
+                <div className={`alert alert-${vehicleFeedback.type} py-2 px-3 small mb-3`}>
+                  {vehicleFeedback.message}
                 </div>
-                <div className="col-6 col-md-3">
-                  <span className="text-muted small d-block">Vehicle Model</span>
-                  <span className="fw-bold text-obsidian">Toyota Corolla 2022</span>
+              )}
+
+              {driver.assignedVehicle ? (
+                <div className="row g-3">
+                  <div className="col-6 col-md-3">
+                    <span className="text-muted small d-block">Plate Number</span>
+                    <span className="fw-bold text-obsidian font-monospace">
+                      {driver.assignedVehicle.plateNumber}
+                    </span>
+                  </div>
+                  <div className="col-6 col-md-3">
+                    <span className="text-muted small d-block">Brand &amp; Model</span>
+                    <span className="fw-bold text-obsidian">
+                      {driver.assignedVehicle.make || ''} {driver.assignedVehicle.vehicleModel}
+                    </span>
+                  </div>
+                  <div className="col-6 col-md-3">
+                    <span className="text-muted small d-block">Vehicle Type &amp; Color</span>
+                    <span className="badge bg-light text-dark border">
+                      {(driver.assignedVehicle.vehicleType || 'STANDARD_SEDAN').replace(/_/g, ' ')}
+                      {driver.assignedVehicle.vehicleColor ? ` • ${driver.assignedVehicle.vehicleColor}` : ''}
+                    </span>
+                  </div>
+                  <div className="col-6 col-md-3">
+                    <span className="text-muted small d-block">Operational Status</span>
+                    <StatusBadge status={driver.assignedVehicle.status || 'ASSIGNED'} size="sm" />
+                  </div>
+                  <div className="col-6 col-md-3">
+                    <span className="text-muted small d-block">Assignment Status</span>
+                    <span className="badge bg-success-subtle text-success border border-success-subtle">
+                      {driver.assignedVehicle.assignmentStatus || 'ACTIVE'}
+                    </span>
+                  </div>
+                  <div className="col-6 col-md-3">
+                    <span className="text-muted small d-block">Assigned Date</span>
+                    <span className="small fw-medium text-obsidian">
+                      {driver.assignedVehicle.assignedAt ? formatDateTime(driver.assignedVehicle.assignedAt) : 'Recorded'}
+                    </span>
+                  </div>
+                  <div className="col-6 col-md-3">
+                    <span className="text-muted small d-block">Assigned By</span>
+                    <span className="small text-obsidian">
+                      {driver.assignedVehicle.assignedBy || 'Super Admin'}
+                    </span>
+                  </div>
+                  <div className="col-6 col-md-3 d-flex align-items-end">
+                    <Link
+                      href={`/vehicles/${driver.assignedVehicle.id}`}
+                      className="btn btn-outline-gold btn-sm py-1 px-2.5 text-xs fw-semibold"
+                    >
+                      Open Fleet Unit
+                    </Link>
+                  </div>
                 </div>
-                <div className="col-6 col-md-3">
-                  <span className="text-muted small d-block">Service Tier</span>
-                  <span className="badge bg-light text-dark border">Standard Sedan</span>
+              ) : (
+                <div className="text-center py-3 bg-light rounded-2 border border-dashed">
+                  <Car size={24} className="text-muted mb-1" />
+                  <div className="small fw-semibold text-obsidian">No Vehicle Currently Assigned</div>
+                  <div className="text-muted text-xs">
+                    Assign an eligible verified vehicle so this driver can go online and accept rides.
+                  </div>
                 </div>
-                <div className="col-6 col-md-3">
-                  <span className="text-muted small d-block">GPS Tracking Unit</span>
-                  <span className="text-success small fw-semibold">Connected (5s telemetry)</span>
+              )}
+
+              {/* Assignment History */}
+              <div className="border-top mt-3 pt-3">
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <span className="text-xs fw-bold text-uppercase text-muted">Vehicle Assignment History</span>
+                  <span className="text-xs text-muted">{vehicleHistory.length} record(s)</span>
                 </div>
+                {vehicleHistory.length === 0 ? (
+                  <p className="text-muted text-xs mb-0">No historical vehicle assignments recorded yet.</p>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table table-sm align-middle mb-0 text-xs">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Plate</th>
+                          <th>Vehicle</th>
+                          <th>Status</th>
+                          <th>Assigned</th>
+                          <th>Released</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vehicleHistory.map((h) => (
+                          <tr key={h.id}>
+                            <td className="font-monospace fw-semibold">{h.vehicle?.plateNumber || '—'}</td>
+                            <td>
+                              {h.vehicle ? `${h.vehicle.make} ${h.vehicle.model}` : '—'}
+                            </td>
+                            <td>
+                              <span className={`badge ${h.isActive ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}`}>
+                                {h.isActive ? 'ACTIVE' : 'RELEASED'}
+                              </span>
+                            </td>
+                            <td>{formatDateTime(h.assignedAt)}</td>
+                            <td>{h.unassignedAt ? formatDateTime(h.unassignedAt) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -526,6 +741,119 @@ export default function DriverDetailPage() {
           }))}
           onReviewDocument={handleReviewDocument}
         />
+      )}
+
+      {isVehicleModalOpen && (
+        <div className="modal d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.55)' }} tabIndex={-1}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg rounded-3">
+              <div className="modal-header border-bottom">
+                <h5 className="modal-title fw-bold text-obsidian">
+                  {vehicleModalMode === 'change' ? 'Change Assigned Vehicle' : 'Assign Vehicle to Driver'}
+                </h5>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light"
+                  onClick={() => setIsVehicleModalOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="modal-body p-4">
+                <div className="mb-3">
+                  <label className="form-label small fw-semibold text-obsidian">
+                    Search Assignable Fleet Vehicles (Plate, Brand, Model)
+                  </label>
+                  <div className="input-group">
+                    <span className="input-group-text bg-light">
+                      <Search size={15} />
+                    </span>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Type plate number, Toyota, Corolla..."
+                      value={vehicleSearch}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setVehicleSearch(val);
+                        void fetchAssignableVehicles(val);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {isLoadingAssignable ? (
+                  <div className="text-center py-4 text-muted small">Loading eligible vehicles...</div>
+                ) : assignableVehicles.length === 0 ? (
+                  <div className="alert alert-warning small mb-3">
+                    No eligible unassigned vehicles found. Ensure the vehicle is active, verified, and not assigned to another driver.
+                  </div>
+                ) : (
+                  <div className="list-group mb-3" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                    {assignableVehicles.map((v) => {
+                      const selected = selectedVehicleId === v.id;
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => setSelectedVehicleId(v.id)}
+                          className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${
+                            selected ? 'active bg-dark border-dark text-white' : ''
+                          }`}
+                        >
+                          <div>
+                            <div className="fw-bold font-monospace">
+                              {v.plateNumber} — {v.make} {v.model} ({v.year})
+                            </div>
+                            <div className={`text-xs ${selected ? 'text-white-50' : 'text-muted'}`}>
+                              {v.categoryName} • {v.color} • {v.capacity} seats • Status: {v.status}
+                            </div>
+                          </div>
+                          <span className={`badge ${selected ? 'bg-gold text-dark' : 'bg-success-subtle text-success'}`}>
+                            AVAILABLE
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div>
+                  <label className="form-label small fw-semibold text-obsidian">Assignment Notes (Optional)</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g., Assigned for Gondar Maraki zone operations"
+                    value={assignmentNotes}
+                    onChange={(e) => setAssignmentNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer border-top">
+                <button
+                  type="button"
+                  className="btn btn-light btn-sm"
+                  onClick={() => setIsVehicleModalOpen(false)}
+                  disabled={isSubmittingVehicle}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-gold btn-sm fw-semibold"
+                  onClick={handleConfirmVehicleAssignment}
+                  disabled={!selectedVehicleId || isSubmittingVehicle}
+                >
+                  {isSubmittingVehicle
+                    ? 'Saving...'
+                    : vehicleModalMode === 'change'
+                    ? 'Confirm Vehicle Change'
+                    : 'Confirm Assignment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
