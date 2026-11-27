@@ -79,6 +79,27 @@ export async function ensureDatabaseSchema(): Promise<void> {
     }
     logger.info('[Schema Initializer] Verified document file_url and image_url column types are TEXT.');
 
+    // 2.5 Ensure real-time ride dispatch & driver health columns/enums/indexes always exist
+    const realtimeDdl = [
+      'ALTER TYPE "DriverAvailabilityStatus" ADD VALUE IF NOT EXISTS \'ONLINE\';',
+      'ALTER TYPE "BookingStatus" ADD VALUE IF NOT EXISTS \'REJECTED\';',
+      'ALTER TYPE "BookingStatus" ADD VALUE IF NOT EXISTS \'EXPIRED\';',
+      'ALTER TABLE "drivers" ADD COLUMN IF NOT EXISTS "last_heartbeat_at" TIMESTAMPTZ(6), ADD COLUMN IF NOT EXISTS "is_socket_connected" BOOLEAN NOT NULL DEFAULT false, ADD COLUMN IF NOT EXISTS "primary_subcity_id" UUID;',
+      'ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "expires_at" TIMESTAMPTZ(6), ADD COLUMN IF NOT EXISTS "rejected_at" TIMESTAMPTZ(6), ADD COLUMN IF NOT EXISTS "rejection_reason" VARCHAR(255);',
+      'CREATE INDEX IF NOT EXISTS "drivers_availability_status_verification_status_account_status_idx" ON "drivers"("availability_status", "verification_status", "account_status");',
+      'CREATE INDEX IF NOT EXISTS "bookings_booking_status_expires_at_idx" ON "bookings"("booking_status", "expires_at");',
+      'CREATE UNIQUE INDEX IF NOT EXISTS "bookings_one_active_per_driver_idx" ON "bookings"("driver_id") WHERE "driver_id" IS NOT NULL AND "booking_status" IN (\'REQUESTED\', \'DRIVER_ASSIGNED\', \'DRIVER_ARRIVING\', \'DRIVER_ARRIVED\', \'TRIP_STARTED\');',
+    ];
+
+    for (const sql of realtimeDdl) {
+      try {
+        await prisma.$executeRawUnsafe(sql);
+      } catch (err: any) {
+        logger.warn({ err: err?.message, sql }, '[Schema Initializer] Non-fatal realtime DDL warning');
+      }
+    }
+    logger.info('[Schema Initializer] Verified real-time ride dispatch and driver health schema.');
+
     // 3. Check if driver columns exist
     const checkDriverCols = await prisma.$queryRaw<Array<{ column_name: string }>>`
       SELECT column_name 
