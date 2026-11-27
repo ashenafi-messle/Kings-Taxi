@@ -8,19 +8,14 @@ export function resolveApiBaseUrl(): string {
     return envUrl.replace(/\/+$/, '');
   }
 
-  const isProd =
-    process.env.NODE_ENV === 'production' ||
-    process.env.EXPO_PUBLIC_ENVIRONMENT === 'production';
-
-  if (isProd) {
-    return PRODUCTION_API_URL;
+  if (process.env.EXPO_PUBLIC_USE_LOCAL_API === 'true') {
+    if (Platform.OS === 'android') {
+      return 'http://10.0.2.2:5000/api/v1';
+    }
+    return 'http://127.0.0.1:5000/api/v1';
   }
 
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:5000/api/v1';
-  }
-
-  return 'http://127.0.0.1:5000/api/v1';
+  return PRODUCTION_API_URL;
 }
 
 export const DRIVER_API_ENDPOINTS = {
