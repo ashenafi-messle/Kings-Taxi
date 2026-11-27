@@ -1,5 +1,6 @@
 // Learn more https://docs.expo.dev/guides/customizing-metro/
 const { getDefaultConfig } = require('expo/metro-config');
+const fs = require('fs');
 const path = require('path');
 
 // Monorepo root and project root configuration
@@ -30,18 +31,26 @@ if (!config.resolver.platforms.includes('web')) {
 //
 //    lucide-react-native v0.469+: "react-native" field → dist/esm/lucide-react-native.js
 //    which does NOT exist in the installed package (only CJS dist exists).
+function resolveWorkspaceCjs(relativePath) {
+  const localPath = path.resolve(projectRoot, 'node_modules', relativePath);
+  if (fs.existsSync(localPath)) return localPath;
+  const rootPath = path.resolve(monorepoRoot, 'node_modules', relativePath);
+  if (fs.existsSync(rootPath)) return rootPath;
+  return null;
+}
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === 'socket.io-client') {
-    return {
-      filePath: path.resolve(projectRoot, 'node_modules/socket.io-client/build/cjs/index.js'),
-      type: 'sourceFile',
-    };
+    const filePath = resolveWorkspaceCjs('socket.io-client/build/cjs/index.js');
+    if (filePath) {
+      return { filePath, type: 'sourceFile' };
+    }
   }
   if (moduleName === 'lucide-react-native') {
-    return {
-      filePath: path.resolve(projectRoot, 'node_modules/lucide-react-native/dist/cjs/lucide-react-native.js'),
-      type: 'sourceFile',
-    };
+    const filePath = resolveWorkspaceCjs('lucide-react-native/dist/cjs/lucide-react-native.js');
+    if (filePath) {
+      return { filePath, type: 'sourceFile' };
+    }
   }
   return context.resolveRequest(context, moduleName, platform);
 };
