@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Kings Taxi Driver",
+    "slug": "kings-taxi-driver",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "kingstaxidriver",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#F5F6F7"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "et.kingstaxi.driver"
+    },
+    "android": {
+      "package": "et.kingstaxi.driver",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#F5F6F7"
+      },
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

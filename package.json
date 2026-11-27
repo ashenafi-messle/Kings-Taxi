@@ -5,6 +5,7 @@
   "description": "Kings Taxi Mobile & Mobility Services Platform",
   "workspaces": [
     "apps/passenger-mobile",
+    "apps/driver-mobile",
     "backend",
     "shared",
     "super-admin"
