@@ -51,6 +51,7 @@ export interface CreateDriverPayload {
   email?: string;
   password?: string;
   city?: string;
+  subcityId?: string;
   address?: string;
   licenseNumber?: string;
   licenseExpiry?: string;
@@ -78,6 +79,7 @@ export interface UpdateDriverPayload {
   phone?: string;
   email?: string;
   city?: string;
+  subcityId?: string;
   address?: string;
   licenseNumber?: string;
   licenseExpiry?: string;
@@ -221,6 +223,15 @@ export class AdminDriverService {
               createdAt: true,
             },
           },
+          primarySubcity: {
+            select: { id: true, name: true, slug: true, city: true },
+          },
+          subcities: {
+            orderBy: { isPrimary: 'desc' },
+            include: {
+              subcity: { select: { id: true, name: true, slug: true, city: true } },
+            },
+          },
         },
       }),
     ]);
@@ -250,6 +261,15 @@ export class AdminDriverService {
         accountActivatedAt: d.accountActivatedAt ? d.accountActivatedAt.toISOString() : null,
         provisionedBy: d.provisionedBy || null,
         city: d.city,
+        subcityId: d.primarySubcity?.id || d.subcities?.[0]?.subcity?.id || null,
+        subcityName: d.primarySubcity?.name || d.subcities?.[0]?.subcity?.name || null,
+        subcities: (d.subcities || []).map((ds) => ({
+          id: ds.subcity.id,
+          name: ds.subcity.name,
+          slug: ds.subcity.slug,
+          city: ds.subcity.city,
+          isPrimary: ds.isPrimary,
+        })),
         address: d.address,
         licenseNumber: d.licenseNumber || '',
         licenseExpiry: d.licenseExpiry ? d.licenseExpiry.toISOString().split('T')[0] : '',
@@ -375,6 +395,15 @@ export class AdminDriverService {
           orderBy: { createdAt: 'desc' },
           take: 15,
         },
+        primarySubcity: {
+          select: { id: true, name: true, slug: true, city: true },
+        },
+        subcities: {
+          orderBy: { isPrimary: 'desc' },
+          include: {
+            subcity: { select: { id: true, name: true, slug: true, city: true } },
+          },
+        },
         trips: {
           orderBy: { createdAt: 'desc' },
           take: 5,
@@ -430,6 +459,15 @@ export class AdminDriverService {
       accountActivatedAt: driver.accountActivatedAt ? driver.accountActivatedAt.toISOString() : null,
       provisionedBy: driver.provisionedBy || null,
       city: driver.city,
+      subcityId: driver.primarySubcity?.id || driver.subcities?.[0]?.subcity?.id || null,
+      subcityName: driver.primarySubcity?.name || driver.subcities?.[0]?.subcity?.name || null,
+      subcities: (driver.subcities || []).map((ds) => ({
+        id: ds.subcity.id,
+        name: ds.subcity.name,
+        slug: ds.subcity.slug,
+        city: ds.subcity.city,
+        isPrimary: ds.isPrimary,
+      })),
       address: driver.address || '',
       gender: driver.gender || 'MALE',
       dateOfBirth: driver.dateOfBirth ? driver.dateOfBirth.toISOString().split('T')[0] : '',
@@ -545,6 +583,23 @@ export class AdminDriverService {
       throw new AppError('A driver with this email address is already registered.', 409);
     }
 
+    // Validate optional/initial subcity presence zone
+    let resolvedSubcityId: string | null = null;
+    if (payload.subcityId && payload.subcityId.trim()) {
+      const cleanSubcityId = payload.subcityId.trim();
+      if (!UUID_REGEX.test(cleanSubcityId)) {
+        throw new AppError('Invalid subcity identifier format.', 400);
+      }
+      const subcity = await prisma.subcity.findFirst({
+        where: { id: cleanSubcityId, isActive: true },
+        select: { id: true },
+      });
+      if (!subcity) {
+        throw new AppError('Selected subcity was not found or is inactive.', 400);
+      }
+      resolvedSubcityId = subcity.id;
+    }
+
     // Generate cryptographically secure temporary password (never stored in plaintext or returned)
     const temporaryPassword = generateSecureTemporaryPassword(12);
     const passwordHash = await hashDriverPassword(temporaryPassword);
@@ -645,6 +700,7 @@ export class AdminDriverService {
             provisionedBy: adminIdentifier,
             idempotencyKey: cleanIdempotencyKey,
             city: payload.city || 'Gondar',
+            primarySubcityId: resolvedSubcityId,
             address: payload.address || null,
             licenseNumber: payload.licenseNumber || null,
             licenseExpiry: payload.licenseExpiry ? new Date(payload.licenseExpiry) : null,
@@ -655,6 +711,17 @@ export class AdminDriverService {
             emergencyContactRelationship: payload.emergencyContactRelationship || null,
           },
         });
+
+        // Assign initial primary operating subcity if provided
+        if (resolvedSubcityId) {
+          await tx.driverSubcity.create({
+            data: {
+              driverId: driver.id,
+              subcityId: resolvedSubcityId,
+              isPrimary: true,
+            },
+          });
+        }
 
         // Insert initial driver documents with clean storage URLs
         for (const doc of processedDocuments) {

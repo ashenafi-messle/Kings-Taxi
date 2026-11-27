@@ -57,6 +57,15 @@ export interface Driver {
   gender?: 'MALE' | 'FEMALE' | 'OTHER';
   dateOfBirth?: string;
   city: string; // e.g., "Gondar", "Addis Ababa"
+  subcityId?: string | null;
+  subcityName?: string | null;
+  subcities?: Array<{
+    id: string;
+    name: string;
+    slug?: string;
+    city?: string;
+    isPrimary?: boolean;
+  }>;
   address?: string;
   emergencyContact?: {
     name: string;

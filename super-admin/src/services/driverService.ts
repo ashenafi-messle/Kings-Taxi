@@ -2,9 +2,30 @@ import { Driver, DriverDocument, DriverFilterParams, PaginatedResult } from '../
 import { apiRequest, buildApiUrl, apiFetchBlob, getStoredAdminToken, BlobResult } from './apiClient';
 import { mockDrivers } from './mockData';
 
+export interface SubcityOption {
+  id: string;
+  name: string;
+  slug: string;
+  city: string;
+}
+
 let fallbackDriversData: Driver[] = [...mockDrivers];
 
 export class DriverService {
+  /**
+   * Retrieves active operating subcities for driver zone assignment
+   */
+  static async getSubcities(): Promise<SubcityOption[]> {
+    try {
+      const res = await apiRequest<SubcityOption[]>('/subcities');
+      if (res.success && Array.isArray(res.data)) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[DriverService] Failed to load subcities:', err);
+    }
+    return [];
+  }
   /**
    * Retrieves paginated drivers from the central backend with filtering and search
    */
@@ -158,6 +179,7 @@ export class DriverService {
         phone: payload.phone,
         email: payload.email,
         city: payload.city,
+        subcityId: payload.subcityId || undefined,
         address: payload.address,
         licenseNumber: payload.licenseNumber,
         licenseExpiry: payload.licenseExpiry,

@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { UserPlus, ArrowLeft, Save, AlertCircle, ShieldCheck, CheckCircle2, MailWarning, RefreshCw } from 'lucide-react';
 import { PageHeader } from '../../../../components/common/PageHeader';
-import { DriverService } from '../../../../services/driverService';
+import { DriverService, SubcityOption } from '../../../../services/driverService';
 import { Driver } from '../../../../types';
 import { DocumentUploadField, DocumentUploadValue } from '../../../../components/common/DocumentUploadField';
 
@@ -22,8 +22,11 @@ export default function NewDriverPage() {
     email: '',
     licenseNumber: '',
     city: 'Gondar',
+    subcityId: '',
     assignedVehiclePlate: '',
   });
+  const [subcities, setSubcities] = useState<SubcityOption[]>([]);
+  const [subcitiesLoading, setSubcitiesLoading] = useState(true);
   const [licenseDoc, setLicenseDoc] = useState<DocumentUploadValue | null>(null);
   const [nationalIdDoc, setNationalIdDoc] = useState<DocumentUploadValue | null>(null);
   const [policeDoc, setPoliceDoc] = useState<DocumentUploadValue | null>(null);
@@ -39,8 +42,33 @@ export default function NewDriverPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'city' ? { subcityId: '' } : {}),
+    }));
   };
+
+  useEffect(() => {
+    let active = true;
+    DriverService.getSubcities()
+      .then((list) => {
+        if (active) setSubcities(list);
+      })
+      .finally(() => {
+        if (active) setSubcitiesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filteredSubcities = useMemo(() => {
+    const byCity = subcities.filter(
+      (s) => s.city.toLowerCase() === formData.city.toLowerCase()
+    );
+    return byCity.length > 0 ? byCity : subcities;
+  }, [subcities, formData.city]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +91,10 @@ export default function NewDriverPage() {
     }
     if (!formData.licenseNumber.trim()) {
       setError('Driver commercial license number is required.');
+      return;
+    }
+    if (filteredSubcities.length > 0 && !formData.subcityId) {
+      setError('Please select an initial operating subcity (presence zone) for this driver.');
       return;
     }
 
@@ -132,6 +164,7 @@ export default function NewDriverPage() {
         email: formData.email.trim(),
         licenseNumber: formData.licenseNumber,
         city: formData.city,
+        subcityId: formData.subcityId || undefined,
         assignedVehiclePlate: formData.assignedVehiclePlate || undefined,
         verificationStatus: 'PENDING',
         idempotencyKey: idempotencyKeyRef.current,
@@ -377,6 +410,33 @@ export default function NewDriverPage() {
                       <option value="Bahir Dar">Bahir Dar</option>
                       <option value="Lalibela">Lalibela</option>
                       <option value="Hawassa">Hawassa</option>
+                    </select>
+                  </div>
+
+                  <div className="col-12 col-md-6">
+                    <label className="form-label text-sm fw-medium text-obsidian mb-1">
+                      Initial Operating Subcity (Presence Zone) {filteredSubcities.length > 0 ? '*' : ''}
+                    </label>
+                    <select
+                      name="subcityId"
+                      required={filteredSubcities.length > 0}
+                      disabled={subcitiesLoading}
+                      value={formData.subcityId}
+                      onChange={handleChange}
+                      className="form-select form-select-sm py-2 shadow-none"
+                    >
+                      <option value="">
+                        {subcitiesLoading
+                          ? 'Loading subcities...'
+                          : filteredSubcities.length > 0
+                          ? 'Select initial operating subcity...'
+                          : 'No active subcities configured'}
+                      </option>
+                      {filteredSubcities.map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name} ({sub.city})
+                        </option>
+                      ))}
                     </select>
                   </div>
 

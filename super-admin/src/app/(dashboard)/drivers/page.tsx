@@ -178,7 +178,10 @@ export default function DriversPage() {
           </div>
           <div className="text-muted text-xs d-flex align-items-center gap-1 mt-0.5">
             <MapPin size={12} />
-            <span>{driver.city}</span>
+            <span>
+              {driver.city}
+              {driver.subcityName ? ` • ${driver.subcityName}` : ''}
+            </span>
           </div>
         </div>
       ),

@@ -163,6 +163,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS "account_provisioned_at" TIMESTAMPTZ(6),
       ADD COLUMN IF NOT EXISTS "account_activated_at" TIMESTAMPTZ(6),
       ADD COLUMN IF NOT EXISTS "last_login_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "primary_subcity_id" UUID,
       ADD COLUMN IF NOT EXISTS "provisioned_by" VARCHAR(128),
       ADD COLUMN IF NOT EXISTS "idempotency_key" VARCHAR(128);
     `);

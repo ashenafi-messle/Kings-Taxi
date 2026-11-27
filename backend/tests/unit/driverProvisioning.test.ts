@@ -17,6 +17,12 @@ const { mockPrisma, mockSendDriverOnboardingEmail, mockAuditRecord } = vi.hoiste
     driverStatusHistory: {
       create: vi.fn(),
     },
+    subcity: {
+      findFirst: vi.fn(),
+    },
+    driverSubcity: {
+      create: vi.fn(),
+    },
     trip: {
       count: vi.fn(),
     },
@@ -276,6 +282,46 @@ describe('Driver Account Provisioning & Automatic Password Email Delivery', () =
       expect(res.provisioning.emailSent).toBe(false);
       expect(res.provisioning.onboardingEmailStatus).toBe('FAILED');
       expect(res.provisioning.error).toBe('SMTP connection refused');
+    });
+
+    it('assigns initial primary subcity and creates DriverSubcity record when subcityId is provided', async () => {
+      const subcityId = '33333333-3333-4333-8333-333333333333';
+      const created = buildBaseDriverRecord({
+        primarySubcityId: subcityId,
+        primarySubcity: { id: subcityId, name: 'Maraki', slug: 'maraki', city: 'Gondar' },
+        subcities: [{ isPrimary: true, subcity: { id: subcityId, name: 'Maraki', slug: 'maraki', city: 'Gondar' } }],
+      });
+
+      mockPrisma.driver.findUnique.mockResolvedValue(null);
+      mockPrisma.subcity.findFirst.mockResolvedValueOnce({ id: subcityId });
+      mockPrisma.driver.create.mockResolvedValueOnce(created);
+      mockPrisma.driverSubcity.create.mockResolvedValueOnce({});
+      mockPrisma.driverStatusHistory.create.mockResolvedValueOnce({});
+      mockPrisma.driver.update.mockResolvedValueOnce(created);
+      mockPrisma.driver.findFirst.mockResolvedValueOnce(created);
+      mockSendDriverOnboardingEmail.mockResolvedValueOnce({ success: true, provider: 'Mock' });
+
+      const res: any = await adminDriverService.createDriver(
+        {
+          fullName: 'Abebe Kebede',
+          phone: '+251911223344',
+          email: 'abebe.driver@kingstaxi.et',
+          city: 'Gondar',
+          subcityId,
+        },
+        'superadmin@kingstaxi.et'
+      );
+
+      expect(mockPrisma.driver.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ primarySubcityId: subcityId }),
+        })
+      );
+      expect(mockPrisma.driverSubcity.create).toHaveBeenCalledWith({
+        data: { driverId: created.id, subcityId, isPrimary: true },
+      });
+      expect(res.subcityId).toBe(subcityId);
+      expect(res.subcityName).toBe('Maraki');
     });
   });
 

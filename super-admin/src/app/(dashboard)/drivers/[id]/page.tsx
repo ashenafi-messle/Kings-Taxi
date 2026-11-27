@@ -249,6 +249,12 @@ export default function DriverDetailPage() {
                   <span className="text-muted small d-block">Operating City</span>
                   <span className="text-obsidian fw-medium small">{driver.city}</span>
                 </div>
+                <div className="mb-2.5">
+                  <span className="text-muted small d-block">Initial Subcity (Presence Zone)</span>
+                  <span className="text-obsidian fw-medium small">
+                    {driver.subcityName || 'Not assigned'}
+                  </span>
+                </div>
                 <div>
                   <span className="text-muted small d-block">Assigned Vehicle</span>
                   {driver.assignedVehiclePlate ? (
