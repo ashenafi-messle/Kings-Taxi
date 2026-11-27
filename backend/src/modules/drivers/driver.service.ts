@@ -62,7 +62,7 @@ export class DriverService {
       vehicles: {
         some: {
           isActive: true,
-          verificationStatus: 'VERIFIED',
+          verificationStatus: { not: 'REJECTED' },
           status: { in: ['AVAILABLE', 'ACTIVE', 'ASSIGNED'] },
         },
       },
@@ -98,7 +98,7 @@ export class DriverService {
         totalTrips: true,
         availabilityStatus: true,
         vehicles: {
-          where: { isActive: true, verificationStatus: 'VERIFIED' },
+          where: { isActive: true, verificationStatus: { not: 'REJECTED' } },
           select: {
             plateNumber: true,
             vehicleModel: true,
@@ -129,12 +129,12 @@ export class DriverService {
       availabilityStatus: d.availabilityStatus,
       vehicle: d.vehicles[0]
         ? {
-            plateNumber: d.vehicles[0].plateNumber,
-            vehicleModel: d.vehicles[0].vehicleModel,
-            vehicleColor: d.vehicles[0].vehicleColor,
-            vehicleType: d.vehicles[0].vehicleType,
-            seatingCapacity: d.vehicles[0].seatingCapacity,
-          }
+          plateNumber: d.vehicles[0].plateNumber,
+          vehicleModel: d.vehicles[0].vehicleModel,
+          vehicleColor: d.vehicles[0].vehicleColor,
+          vehicleType: d.vehicles[0].vehicleType,
+          seatingCapacity: d.vehicles[0].seatingCapacity,
+        }
         : null,
       subcities: d.subcities.map((s) => ({
         id: s.subcity.id,
@@ -164,7 +164,7 @@ export class DriverService {
         totalTrips: true,
         availabilityStatus: true,
         vehicles: {
-          where: { isActive: true, verificationStatus: 'VERIFIED' },
+          where: { isActive: true, verificationStatus: { not: 'REJECTED' } },
           select: {
             plateNumber: true,
             vehicleModel: true,
@@ -197,12 +197,12 @@ export class DriverService {
       availabilityStatus: driver.availabilityStatus,
       vehicle: driver.vehicles[0]
         ? {
-            plateNumber: driver.vehicles[0].plateNumber,
-            vehicleModel: driver.vehicles[0].vehicleModel,
-            vehicleColor: driver.vehicles[0].vehicleColor,
-            vehicleType: driver.vehicles[0].vehicleType,
-            seatingCapacity: driver.vehicles[0].seatingCapacity,
-          }
+          plateNumber: driver.vehicles[0].plateNumber,
+          vehicleModel: driver.vehicles[0].vehicleModel,
+          vehicleColor: driver.vehicles[0].vehicleColor,
+          vehicleType: driver.vehicles[0].vehicleType,
+          seatingCapacity: driver.vehicles[0].seatingCapacity,
+        }
         : null,
       subcities: driver.subcities.map((s) => ({
         id: s.subcity.id,
@@ -225,7 +225,7 @@ export class DriverService {
           vehicles: {
             where: {
               isActive: true,
-              verificationStatus: 'VERIFIED',
+              verificationStatus: { not: 'REJECTED' },
               status: { in: ['AVAILABLE', 'ACTIVE', 'ASSIGNED'] },
             },
             take: 1,
@@ -235,7 +235,7 @@ export class DriverService {
               isActive: true,
               vehicle: {
                 isActive: true,
-                verificationStatus: 'VERIFIED',
+                verificationStatus: { not: 'REJECTED' },
                 status: { in: ['AVAILABLE', 'ACTIVE', 'ASSIGNED'] },
               },
             },

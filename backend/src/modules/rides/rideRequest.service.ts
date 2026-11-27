@@ -247,7 +247,8 @@ export class RideRequestService {
         where: {
           driverId: input.driverId,
           isActive: true,
-          verificationStatus: 'VERIFIED',
+          verificationStatus: { not: 'REJECTED' },
+          status: { in: ['AVAILABLE', 'ACTIVE', 'ASSIGNED'] },
         },
         select: { id: true },
       });
