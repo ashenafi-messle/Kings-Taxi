@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -7,17 +8,36 @@ import { Colors } from '../src/theme/tokens';
 
 export default function RootLayout() {
   const isAuthenticated = useDriverStore((s) => s.auth.isAuthenticated);
+  const isRestoringSession = useDriverStore((s) => s.isRestoringSession);
+  const restoreSession = useDriverStore((s) => s.restoreSession);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
+
+  useEffect(() => {
+    if (isRestoringSession) return;
     const inAuthGroup = segments[0] === '(auth)';
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/login');
     } else if (isAuthenticated && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, segments, router]);
+  }, [isAuthenticated, isRestoringSession, segments, router]);
+
+  if (isRestoringSession) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" backgroundColor={Colors.screenBg} />
+        <View style={styles.splash}>
+          <ActivityIndicator size="large" color={Colors.primaryBlack} />
+          <Text style={styles.splashText}>Verifying Driver Session...</Text>
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -54,3 +74,18 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  splash: {
+    flex: 1,
+    backgroundColor: Colors.screenBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  splashText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.secondaryText,
+  },
+});

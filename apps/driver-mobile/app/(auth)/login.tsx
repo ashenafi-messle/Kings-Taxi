@@ -15,7 +15,7 @@ import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Eye, EyeOff, Lock, ShieldCheck, User } from 'lucide-react-native';
 import { BRAND_LOGO_URL, CardShadow, Colors, Radius, Spacing } from '../../src/theme/tokens';
-import { mockAuthenticateDriver } from '../../src/services/mockDriverService';
+import { loginDriver } from '../../src/services/driverAuthService';
 import { useDriverStore } from '../../src/store/useDriverStore';
 
 export default function DriverLoginScreen() {
@@ -45,23 +45,13 @@ export default function DriverLoginScreen() {
 
     setIsLoading(true);
     try {
-      const result = await mockAuthenticateDriver(trimmedId, password);
-      if (!result.success || !result.profile) {
-        setError(result.error || 'Authentication failed.');
-        return;
-      }
-      loginSuccess(result.profile, trimmedId);
-    } catch {
-      setError('Unable to sign in right now. Please try again.');
+      const profile = await loginDriver(trimmedId, password);
+      loginSuccess(profile, trimmedId);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to sign in right now. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const fillDemoCredentials = () => {
-    setIdentifier('abebe.kebede@kingstaxi.et');
-    setPassword('Driver@2026');
-    setError('');
   };
 
   return (
@@ -191,19 +181,16 @@ export default function DriverLoginScreen() {
             <View style={styles.demoNotice}>
               <View style={styles.demoHeader}>
                 <ShieldCheck size={15} color={Colors.primaryBlack} />
-                <Text style={styles.demoTitle}>Phase 1 Mock Sign-In</Text>
+                <Text style={styles.demoTitle}>Provisioned Fleet Accounts</Text>
               </View>
               <Text style={styles.demoBody}>
-                Accounts are provisioned by Super Admin. Tap below to prefill the Phase 1 demo driver.
+                Driver accounts are created and approved by Kings Taxi administration. Use your registered email or phone number and password.
               </Text>
-              <Pressable onPress={fillDemoCredentials} style={styles.demoFillBtn}>
-                <Text style={styles.demoFillText}>Use Demo Driver (Abebe Kebede)</Text>
-              </Pressable>
             </View>
           </View>
 
           <Text style={styles.footerNote}>
-            Kings Taxi Driver App • Phase 1 UI Preview
+            Kings Taxi Driver App • Secure Fleet Access
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

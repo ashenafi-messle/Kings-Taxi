@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { driverController } from './driver.controller';
 import { driverDocumentController } from './driverDocument.controller';
-import { authenticateToken, requireRole } from '../../core/middleware/auth.middleware';
+import { authenticateDriver } from '../../core/middleware/auth.middleware';
 import { ApiResponse } from '../../core/response/apiResponse';
 
 export const driverRouter = Router();
@@ -23,7 +23,7 @@ driverRouter.get('/available', (req, res) => driverController.getAvailableDriver
 driverRouter.get('/:id/public', (req, res) => driverController.getPublicDriver(req, res));
 
 // Authenticated driver endpoints
-driverRouter.post('/me/availability', authenticateToken, requireRole(['DRIVER', 'ADMIN', 'SUPER_ADMIN']), (req, res) =>
+driverRouter.post('/me/availability', authenticateDriver, (req, res) =>
   driverController.updateAvailability(req, res)
 );
 

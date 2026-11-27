@@ -15,10 +15,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, Mail, Shield } from 'lucide-react-native';
 import { CardShadow, Colors, Radius, Spacing } from '../../src/theme/tokens';
 import {
-  mockCompletePasswordReset,
-  mockRequestPasswordResetOtp,
-  mockVerifyResetOtp,
-} from '../../src/services/mockDriverService';
+  requestDriverPasswordResetOtp,
+  resetDriverPassword,
+  verifyDriverResetOtp,
+} from '../../src/services/driverAuthService';
 
 type ResetStep = 'EMAIL' | 'OTP' | 'NEW_PASSWORD' | 'SUCCESS';
 
@@ -26,8 +26,9 @@ export default function ForgotPasswordScreen() {
   const router = useRouter();
   const [step, setStep] = useState<ResetStep>('EMAIL');
   const [email, setEmail] = useState('');
-  const [maskedEmail, setMaskedEmail] = useState('');
+  const [genericNotice, setGenericNotice] = useState('');
   const [otp, setOtp] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNew, setShowNew] = useState(false);
@@ -36,46 +37,78 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState('');
 
   const handleSendOtp = async () => {
+    if (isLoading) return;
     setError('');
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setError('Please enter a valid registered email address.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const res = await mockRequestPasswordResetOtp(email);
-      if (!res.success) {
-        setError(res.error || 'Unable to send simulated OTP.');
-        return;
-      }
-      setMaskedEmail(res.maskedEmail || email);
+      const res = await requestDriverPasswordResetOtp(cleanEmail);
+      setGenericNotice(
+        res.message || 'If an eligible account exists, a verification code will be sent.'
+      );
       setStep('OTP');
+    } catch (err: any) {
+      setError(err?.message || 'Unable to process password reset request.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleVerifyOtp = async () => {
+    if (isLoading) return;
     setError('');
+    const cleanOtp = otp.trim();
+    if (!/^\d{6}$/.test(cleanOtp)) {
+      setError('Please enter the 6-digit verification code.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const res = await mockVerifyResetOtp(otp);
-      if (!res.success) {
-        setError(res.error || 'Invalid simulated OTP.');
-        return;
-      }
+      const res = await verifyDriverResetOtp(email, cleanOtp);
+      setResetToken(res.resetToken);
+      setOtp('');
       setStep('NEW_PASSWORD');
+    } catch (err: any) {
+      setError(err?.message || 'Invalid or expired verification code.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleResetPassword = async () => {
+    if (isLoading) return;
     setError('');
+    if (
+      newPassword.length < 8 ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[a-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword)
+    ) {
+      setError(
+        'Password must be at least 8 characters and include uppercase, lowercase, and a number.'
+      );
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const res = await mockCompletePasswordReset(newPassword, confirmPassword);
-      if (!res.success) {
-        setError(res.error || 'Unable to update password.');
-        return;
-      }
+      await resetDriverPassword(resetToken, newPassword);
+      setResetToken('');
+      setNewPassword('');
+      setConfirmPassword('');
       setStep('SUCCESS');
+    } catch (err: any) {
+      setError(err?.message || 'Unable to reset password.');
     } finally {
       setIsLoading(false);
     }
@@ -101,7 +134,7 @@ export default function ForgotPasswordScreen() {
             <View style={styles.stepBadge}>
               <Text style={styles.stepBadgeText}>
                 {step === 'EMAIL' && 'STEP 1 OF 3 • REGISTERED EMAIL'}
-                {step === 'OTP' && 'STEP 2 OF 3 • SIMULATED OTP'}
+                {step === 'OTP' && 'STEP 2 OF 3 • VERIFY EMAIL OTP'}
                 {step === 'NEW_PASSWORD' && 'STEP 3 OF 3 • NEW PASSWORD'}
                 {step === 'SUCCESS' && 'COMPLETED'}
               </Text>
@@ -117,7 +150,7 @@ export default function ForgotPasswordScreen() {
               <>
                 <Text style={styles.title}>Reset Driver Password</Text>
                 <Text style={styles.subtitle}>
-                  Enter your registered driver email address to preview the OTP recovery workflow (no real email is sent in Phase 1).
+                  Enter your registered driver email address. We will send a 6-digit verification code if an eligible account exists.
                 </Text>
 
                 <Text style={styles.label}>Registered Email</Text>
@@ -127,7 +160,7 @@ export default function ForgotPasswordScreen() {
                     style={styles.input}
                     value={email}
                     onChangeText={setEmail}
-                    placeholder="abebe.kebede@kingstaxi.et"
+                    placeholder="driver@kingstaxi.et"
                     placeholderTextColor={Colors.metallicMuted}
                     autoCapitalize="none"
                     keyboardType="email-address"
@@ -142,7 +175,7 @@ export default function ForgotPasswordScreen() {
                   {isLoading ? (
                     <ActivityIndicator color={Colors.cardWhite} size="small" />
                   ) : (
-                    <Text style={styles.primaryBtnText}>Send Simulated OTP</Text>
+                    <Text style={styles.primaryBtnText}>Send Verification Code</Text>
                   )}
                 </Pressable>
               </>
@@ -150,9 +183,9 @@ export default function ForgotPasswordScreen() {
 
             {step === 'OTP' && (
               <>
-                <Text style={styles.title}>Verify Simulated OTP</Text>
+                <Text style={styles.title}>Verify Email Code</Text>
                 <Text style={styles.subtitle}>
-                  Simulated OTP prepared for <Text style={styles.bold}>{maskedEmail}</Text>. Enter any 6 digits (e.g. 123456) to continue.
+                  {genericNotice || 'If an eligible account exists, a verification code has been sent to your email.'}
                 </Text>
 
                 <Text style={styles.label}>6-Digit Verification Code</Text>
@@ -162,7 +195,7 @@ export default function ForgotPasswordScreen() {
                     style={styles.input}
                     value={otp}
                     onChangeText={setOtp}
-                    placeholder="123456"
+                    placeholder="Enter 6-digit code"
                     placeholderTextColor={Colors.metallicMuted}
                     keyboardType="number-pad"
                     maxLength={6}
@@ -177,7 +210,7 @@ export default function ForgotPasswordScreen() {
                   {isLoading ? (
                     <ActivityIndicator color={Colors.cardWhite} size="small" />
                   ) : (
-                    <Text style={styles.primaryBtnText}>Verify OTP</Text>
+                    <Text style={styles.primaryBtnText}>Verify Code</Text>
                   )}
                 </Pressable>
 
@@ -191,7 +224,7 @@ export default function ForgotPasswordScreen() {
               <>
                 <Text style={styles.title}>Set New Password</Text>
                 <Text style={styles.subtitle}>
-                  Choose a strong permanent password with at least 8 characters.
+                  Choose a strong password (8+ characters, uppercase, lowercase, and a number).
                 </Text>
 
                 <Text style={styles.label}>New Password</Text>
@@ -253,9 +286,9 @@ export default function ForgotPasswordScreen() {
             {step === 'SUCCESS' && (
               <View style={styles.successBox}>
                 <CheckCircle2 size={48} color={Colors.success} />
-                <Text style={styles.successTitle}>Password Reset Simulated</Text>
+                <Text style={styles.successTitle}>Password Updated</Text>
                 <Text style={styles.successSubtitle}>
-                  Your simulated password reset flow completed. In production, this updates your driver account credentials.
+                  Your Kings Taxi Driver password has been updated and prior sessions have been signed out.
                 </Text>
                 <Pressable
                   onPress={() => router.replace('/(auth)/login')}

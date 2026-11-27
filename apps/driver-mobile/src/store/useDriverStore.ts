@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { INITIAL_MOCK_RIDES, MOCK_PROVISIONED_DRIVERS } from '../data/mockDriverData';
+import { INITIAL_MOCK_RIDES } from '../data/mockDriverData';
 import {
   ActiveTripSession,
   AuthSession,
@@ -9,9 +9,12 @@ import {
   RideItem,
 } from '../types/driver.types';
 import { calculateDemoFare } from '../services/mockDriverService';
+import { logoutDriver, restoreDriverSession } from '../services/driverAuthService';
+import { registerSessionExpiredHandler } from '../services/apiClient';
 
 interface DriverStoreState {
   auth: AuthSession;
+  isRestoringSession: boolean;
   profile: DriverProfile | null;
   isOnline: boolean;
   selectedRideTab: RideCategory;
@@ -21,8 +24,9 @@ interface DriverStoreState {
   pushAlertsEnabled: boolean;
   soundAlertsEnabled: boolean;
 
+  restoreSession: () => Promise<void>;
   loginSuccess: (profile: DriverProfile, identifierUsed: string) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   toggleAvailability: () => void;
   setSelectedRideTab: (tab: RideCategory) => void;
   startTrip: (rideId: string) => { ok: boolean; error?: string };
@@ -46,7 +50,8 @@ export const useDriverStore = create<DriverStoreState>((set, get) => ({
     identifierUsed: null,
     authenticatedAt: null,
   },
-  profile: MOCK_PROVISIONED_DRIVERS[0].profile,
+  isRestoringSession: true,
+  profile: null,
   isOnline: false,
   selectedRideTab: 'PENDING',
   rides: INITIAL_MOCK_RIDES,
@@ -54,6 +59,52 @@ export const useDriverStore = create<DriverStoreState>((set, get) => ({
   language: 'en',
   pushAlertsEnabled: true,
   soundAlertsEnabled: true,
+
+  restoreSession: async () => {
+    registerSessionExpiredHandler(() => {
+      set({
+        auth: {
+          isAuthenticated: false,
+          driverId: null,
+          identifierUsed: null,
+          authenticatedAt: null,
+        },
+        profile: null,
+        isOnline: false,
+        activeTrip: null,
+      });
+    });
+
+    set({ isRestoringSession: true });
+    try {
+      const restored = await restoreDriverSession();
+      if (restored) {
+        set({
+          auth: {
+            isAuthenticated: true,
+            driverId: restored.id,
+            identifierUsed: restored.email || restored.phone,
+            authenticatedAt: new Date().toISOString(),
+          },
+          profile: restored,
+          isRestoringSession: false,
+        });
+        return;
+      }
+    } catch {
+      // Fallback to unauthenticated state
+    }
+    set({
+      auth: {
+        isAuthenticated: false,
+        driverId: null,
+        identifierUsed: null,
+        authenticatedAt: null,
+      },
+      profile: null,
+      isRestoringSession: false,
+    });
+  },
 
   loginSuccess: (profile, identifierUsed) =>
     set({
@@ -64,9 +115,11 @@ export const useDriverStore = create<DriverStoreState>((set, get) => ({
         authenticatedAt: new Date().toISOString(),
       },
       profile,
+      isRestoringSession: false,
     }),
 
-  logout: () =>
+  logout: async () => {
+    await logoutDriver();
     set({
       auth: {
         isAuthenticated: false,
@@ -74,9 +127,11 @@ export const useDriverStore = create<DriverStoreState>((set, get) => ({
         identifierUsed: null,
         authenticatedAt: null,
       },
+      profile: null,
       isOnline: false,
       activeTrip: null,
-    }),
+    });
+  },
 
   toggleAvailability: () =>
     set((state) => ({

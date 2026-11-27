@@ -1221,4 +1221,74 @@ Kings Taxi Transportation & Tourism Platform.
       purpose: 'DRIVER_ONBOARDING',
     });
   }
+
+  /**
+   * Sends a 6-digit OTP for Driver Forgot-Password verification.
+   * Never logs the OTP.
+   */
+  async sendDriverPasswordResetOtpEmail(params: {
+    to: string;
+    driverName: string;
+    otp: string;
+    expiresInMinutes?: number;
+  }): Promise<{ success: boolean; provider?: string; error?: string }> {
+    const sender = this.getSenderDetails();
+    const ttlMin = params.expiresInMinutes ?? 10;
+    const subject = 'Kings Taxi Driver — Password Reset Verification Code';
+
+    const safeName = this.escapeHtml(params.driverName);
+    const safeOtp = this.escapeHtml(params.otp);
+    const safeSupportEmail = this.escapeHtml(sender.email);
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0d0f12; margin: 0; padding: 0; color: #e0e6ed; }
+    .wrapper { max-width: 560px; margin: 28px auto; background-color: #161a22; border: 1px solid #2d333b; border-radius: 14px; overflow: hidden; }
+    .header { background: #111418; padding: 24px 28px; border-bottom: 2px solid #D99A28; text-align: center; }
+    .brand-title { color: #D99A28; font-size: 24px; font-weight: 800; letter-spacing: 1.5px; margin: 0; }
+    .body { padding: 28px; line-height: 1.6; font-size: 15px; color: #d1d5db; }
+    .otp-box { background-color: #111418; border: 1px dashed #D99A28; border-radius: 10px; padding: 18px; margin: 20px 0; text-align: center; }
+    .otp-code { font-size: 30px; font-weight: 800; letter-spacing: 8px; color: #F5D69E; font-family: ui-monospace, monospace; }
+    .footer { background-color: #111418; padding: 16px 28px; border-top: 1px solid #2d333b; text-align: center; font-size: 12px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header"><h1 class="brand-title">KINGS TAXI DRIVER</h1></div>
+    <div class="body">
+      <p style="margin-top:0;color:#ffffff;font-weight:700;">Hello ${safeName},</p>
+      <p>We received a request to reset your Kings Taxi Driver App password. Use the verification code below within <strong>${ttlMin} minutes</strong>:</p>
+      <div class="otp-box"><span class="otp-code">${safeOtp}</span></div>
+      <p style="font-size:13px;color:#9ca3af;">If you did not request this password reset, please ignore this message and never share this code with anyone. Support: ${safeSupportEmail}</p>
+    </div>
+    <div class="footer">&copy; ${new Date().getFullYear()} Kings Taxi Ethiopia</div>
+  </div>
+</body>
+</html>`.trim();
+
+    const plainText = [
+      `Hello ${params.driverName},`,
+      '',
+      `Your Kings Taxi Driver password reset verification code is: ${params.otp}`,
+      `This code expires in ${ttlMin} minutes.`,
+      '',
+      'Never share this code with anyone.',
+      `Support: ${sender.email}`,
+    ].join('\n');
+
+    return this.dispatchViaTransports({
+      to: params.to,
+      recipientName: params.driverName,
+      subject,
+      htmlContent,
+      plainText,
+      purpose: 'DRIVER_PASSWORD_RESET_OTP',
+    });
+  }
 }

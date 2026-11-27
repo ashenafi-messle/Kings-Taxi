@@ -162,8 +162,34 @@ export async function ensureDatabaseSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS "temp_password_expires_at" TIMESTAMPTZ(6),
       ADD COLUMN IF NOT EXISTS "account_provisioned_at" TIMESTAMPTZ(6),
       ADD COLUMN IF NOT EXISTS "account_activated_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "last_login_at" TIMESTAMPTZ(6),
       ADD COLUMN IF NOT EXISTS "provisioned_by" VARCHAR(128),
       ADD COLUMN IF NOT EXISTS "idempotency_key" VARCHAR(128);
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "driver_password_resets" (
+        "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+        "driver_id" UUID NOT NULL REFERENCES "drivers"("id") ON DELETE CASCADE,
+        "email" VARCHAR(255) NOT NULL,
+        "otp_hash" VARCHAR(255) NOT NULL,
+        "salt" VARCHAR(128) NOT NULL,
+        "expires_at" TIMESTAMPTZ(6) NOT NULL,
+        "attempts" INTEGER NOT NULL DEFAULT 0,
+        "max_attempts" INTEGER NOT NULL DEFAULT 5,
+        "resend_cooldown_until" TIMESTAMPTZ(6) NOT NULL,
+        "is_verified" BOOLEAN NOT NULL DEFAULT false,
+        "verified_at" TIMESTAMPTZ(6),
+        "reset_token_hash" VARCHAR(255),
+        "reset_token_expires_at" TIMESTAMPTZ(6),
+        "is_consumed" BOOLEAN NOT NULL DEFAULT false,
+        "consumed_at" TIMESTAMPTZ(6),
+        "ip_address" VARCHAR(45),
+        "user_agent" VARCHAR(512),
+        "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "driver_password_resets_pkey" PRIMARY KEY ("id")
+      );
     `);
 
     // C. Alter vehicles table with specifications & operational status

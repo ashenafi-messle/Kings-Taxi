@@ -2,7 +2,8 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthController } from './auth.controller';
 import { AdminAuthController } from './adminAuth.controller';
-import { authenticateToken, requireRole } from '../../core/middleware/auth.middleware';
+import { DriverAuthController } from './driverAuth.controller';
+import { authenticateDriver, authenticateToken, requireRole } from '../../core/middleware/auth.middleware';
 import { ApiResponse } from '../../core/response/apiResponse';
 
 export const authRouter = Router();
@@ -85,6 +86,15 @@ authRouter.get(
   requireRole(['ADMIN', 'SUPER_ADMIN']),
   AdminAuthController.getCurrentAdmin
 );
+
+// Driver Authentication & Password Recovery Endpoints
+authRouter.post('/driver/login', authRateLimiter, DriverAuthController.login);
+authRouter.post('/driver/refresh', authRateLimiter, DriverAuthController.refreshToken);
+authRouter.post('/driver/logout', authenticateDriver, DriverAuthController.logout);
+authRouter.get('/driver/me', authenticateDriver, DriverAuthController.getCurrentDriver);
+authRouter.post('/driver/forgot-password', authRateLimiter, DriverAuthController.forgotPassword);
+authRouter.post('/driver/verify-reset-otp', authRateLimiter, DriverAuthController.verifyResetOtp);
+authRouter.post('/driver/reset-password', authRateLimiter, DriverAuthController.resetPassword);
 
 // Safe Diagnostics Endpoint (Inspect channels & delivery health without leaking secrets)
 authRouter.get('/diagnostics', AuthController.getDiagnostics);
