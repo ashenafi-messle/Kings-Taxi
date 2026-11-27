@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useCallback, useMemo } from 'react';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Inbox } from 'lucide-react-native';
 import { Colors, Radius, Spacing } from '../../src/theme/tokens';
@@ -19,6 +19,15 @@ export default function RidesScreen() {
   const rides = useDriverStore((s) => s.rides);
   const selectedTab = useDriverStore((s) => s.selectedRideTab);
   const setSelectedTab = useDriverStore((s) => s.setSelectedRideTab);
+  const isSyncingRides = useDriverStore((s) => s.isSyncingRides);
+  const ridesError = useDriverStore((s) => s.ridesError);
+  const syncDriverState = useDriverStore((s) => s.syncDriverState);
+
+  useFocusEffect(
+    useCallback(() => {
+      void syncDriverState();
+    }, [syncDriverState])
+  );
 
   const counts = useMemo(
     () => ({
@@ -30,7 +39,13 @@ export default function RidesScreen() {
           r.status === 'PAYMENT_PENDING_VERIFICATION'
       ).length,
       CONFIRMED: rides.filter((r) => r.status === 'CONFIRMED').length,
-      HISTORY: rides.filter((r) => r.status === 'COMPLETED' || r.status === 'CANCELLED').length,
+      HISTORY: rides.filter(
+        (r) =>
+          r.status === 'COMPLETED' ||
+          r.status === 'CANCELLED' ||
+          r.status === 'REJECTED' ||
+          r.status === 'EXPIRED'
+      ).length,
     }),
     [rides]
   );
@@ -48,7 +63,13 @@ export default function RidesScreen() {
     if (selectedTab === 'CONFIRMED') {
       return rides.filter((r) => r.status === 'CONFIRMED');
     }
-    return rides.filter((r) => r.status === 'COMPLETED' || r.status === 'CANCELLED');
+    return rides.filter(
+      (r) =>
+        r.status === 'COMPLETED' ||
+        r.status === 'CANCELLED' ||
+        r.status === 'REJECTED' ||
+        r.status === 'EXPIRED'
+    );
   }, [rides, selectedTab]);
 
   return (
@@ -75,11 +96,20 @@ export default function RidesScreen() {
         </View>
       </View>
 
+      {ridesError ? (
+        <View style={{ backgroundColor: Colors.errorBg, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm }}>
+          <Text style={{ color: Colors.error, fontSize: 12, fontWeight: '600' }}>{ridesError}</Text>
+        </View>
+      ) : null}
+
       <FlatList
         data={filteredRides}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isSyncingRides} onRefresh={() => void syncDriverState()} />
+        }
         renderItem={({ item }) => (
           <RideCard ride={item} onPressDetails={(id) => router.push(`/ride/${id}`)} />
         )}

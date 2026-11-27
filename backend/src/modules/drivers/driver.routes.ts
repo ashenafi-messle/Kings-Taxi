@@ -23,6 +23,15 @@ driverRouter.get('/available', (req, res) => driverController.getAvailableDriver
 driverRouter.get('/:id/public', (req, res) => driverController.getPublicDriver(req, res));
 
 // Authenticated driver endpoints
+driverRouter.get('/availability/me', authenticateDriver, (req, res) =>
+  driverController.getMyAvailability(req, res)
+);
+driverRouter.post('/availability/online', authenticateDriver, (req, res) =>
+  driverController.goOnline(req, res)
+);
+driverRouter.post('/availability/offline', authenticateDriver, (req, res) =>
+  driverController.goOffline(req, res)
+);
 driverRouter.post('/me/availability', authenticateDriver, (req, res) =>
   driverController.updateAvailability(req, res)
 );

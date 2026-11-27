@@ -145,6 +145,8 @@ enum BookingStatus {
   TRIP_STARTED
   TRIP_COMPLETED
   CANCELLED
+  REJECTED
+  EXPIRED
 }
 
 enum TripStatus {
@@ -534,6 +536,8 @@ model Driver {
   currentLatitude    Float?                   @map("current_latitude")
   currentLongitude   Float?                   @map("current_longitude")
   lastLocationUpdate DateTime?                @map("last_location_update") @db.Timestamptz(6)
+  lastHeartbeatAt    DateTime?                @map("last_heartbeat_at") @db.Timestamptz(6)
+  isSocketConnected  Boolean                  @default(false) @map("is_socket_connected")
   rating             Float                    @default(5.0)
   totalTrips         Int                      @default(0) @map("total_trips")
 
@@ -559,6 +563,7 @@ model Driver {
   @@index([accountStatus])
   @@index([verificationStatus])
   @@index([availabilityStatus])
+  @@index([availabilityStatus, verificationStatus, accountStatus])
   @@index([onboardingStatus])
   @@index([onboardingEmailStatus])
   @@index([primarySubcityId])
@@ -649,6 +654,9 @@ model Booking {
   subcityId                String?   @map("subcity_id") @db.Uuid
   passengerContactPhone    String?   @map("passenger_contact_phone") @db.VarChar(32)
   acceptedAt               DateTime? @map("accepted_at") @db.Timestamptz(6)
+  expiresAt                DateTime? @map("expires_at") @db.Timestamptz(6)
+  rejectedAt               DateTime? @map("rejected_at") @db.Timestamptz(6)
+  rejectionReason          String?   @map("rejection_reason") @db.VarChar(255)
   startedAt                DateTime? @map("started_at") @db.Timestamptz(6)
   completedAt              DateTime? @map("completed_at") @db.Timestamptz(6)
   cancelledAt              DateTime? @map("cancelled_at") @db.Timestamptz(6)
@@ -672,6 +680,7 @@ model Booking {
 
   @@index([passengerId, bookingStatus])
   @@index([driverId, bookingStatus])
+  @@index([bookingStatus, expiresAt])
   @@index([subcityId])
   @@index([bookingReference])
   @@index([createdAt])

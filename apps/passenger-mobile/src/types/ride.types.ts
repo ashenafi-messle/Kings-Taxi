@@ -15,6 +15,8 @@ export type RideStatus =
   | 'TRIP_COMPLETED'
   | 'AWAITING_PAYMENT'
   | 'CANCELLED'
+  | 'REJECTED'
+  | 'EXPIRED'
   | 'PAYMENT_PENDING'
   | 'PAYMENT_COMPLETED'
   | 'PAYMENT_FAILED';
@@ -66,6 +68,9 @@ export interface RideBooking {
   estimatedDurationMins: number;
   driver?: DriverInfo;
   createdAt: string;
+  expiresAt?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
   startedAt?: string;
   completedAt?: string;
   paymentMethod?: string;

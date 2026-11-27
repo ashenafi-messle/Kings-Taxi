@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Calendar, Clock, MapPin, Navigation, Phone, Play, ShieldAlert } from 'lucide-react-native';
+import { Calendar, CheckCircle2, Clock, MapPin, Navigation, Phone, ShieldAlert, XCircle } from 'lucide-react-native';
 import { CardShadow, Colors, Radius, Spacing } from '../../src/theme/tokens';
 import { useDriverStore } from '../../src/store/useDriverStore';
 import { StatusPill } from '../../src/components/StatusPill';
@@ -11,9 +11,11 @@ export default function RideDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const rides = useDriverStore((s) => s.rides);
-  const startTrip = useDriverStore((s) => s.startTrip);
+  const acceptRideRequest = useDriverStore((s) => s.acceptRideRequest);
+  const rejectRideRequest = useDriverStore((s) => s.rejectRideRequest);
 
   const [actionError, setActionError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState<'ACCEPT' | 'REJECT' | null>(null);
 
   const ride = rides.find((r) => r.id === id);
 
@@ -33,14 +35,34 @@ export default function RideDetailsScreen() {
     );
   }
 
-  const handleStartTrip = () => {
+  const handleAccept = async () => {
+    if (isSubmitting) return;
     setActionError('');
-    const res = startTrip(ride.id);
-    if (!res.ok) {
-      setActionError(res.error || 'Unable to start trip.');
-      return;
+    setIsSubmitting('ACCEPT');
+    try {
+      const res = await acceptRideRequest(ride.id);
+      if (!res.ok) {
+        setActionError(res.error || 'Unable to accept ride request.');
+      }
+    } finally {
+      setIsSubmitting(null);
     }
-    router.replace('/(tabs)/trips');
+  };
+
+  const handleReject = async () => {
+    if (isSubmitting) return;
+    setActionError('');
+    setIsSubmitting('REJECT');
+    try {
+      const res = await rejectRideRequest(ride.id, 'Driver declined request');
+      if (!res.ok) {
+        setActionError(res.error || 'Unable to reject ride request.');
+      } else {
+        router.replace('/(tabs)/rides');
+      }
+    } finally {
+      setIsSubmitting(null);
+    }
   };
 
   return (
@@ -143,50 +165,62 @@ export default function RideDetailsScreen() {
 
         {/* State-Specific Actions */}
         {ride.status === 'PENDING' && (
-          <Pressable
-            onPress={handleStartTrip}
-            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
-          >
-            <Play size={16} color={Colors.cardWhite} fill={Colors.cardWhite} />
-            <Text style={styles.primaryBtnText}>Start Trip</Text>
-          </Pressable>
+          <View style={{ gap: 10 }}>
+            <Pressable
+              disabled={isSubmitting !== null}
+              onPress={handleAccept}
+              style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
+            >
+              {isSubmitting === 'ACCEPT' ? (
+                <ActivityIndicator color={Colors.cardWhite} size="small" />
+              ) : (
+                <>
+                  <CheckCircle2 size={17} color={Colors.cardWhite} />
+                  <Text style={styles.primaryBtnText}>Accept Ride Request</Text>
+                </>
+              )}
+            </Pressable>
+
+            <Pressable
+              disabled={isSubmitting !== null}
+              onPress={handleReject}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                { backgroundColor: Colors.errorBg, borderWidth: 1, borderColor: '#F5C2C2' },
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              {isSubmitting === 'REJECT' ? (
+                <ActivityIndicator color={Colors.error} size="small" />
+              ) : (
+                <>
+                  <XCircle size={17} color={Colors.error} />
+                  <Text style={[styles.primaryBtnText, { color: Colors.error }]}>
+                    Reject Request
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </View>
         )}
 
         {ride.status === 'CONFIRMED' && (
           <View style={styles.infoBanner}>
-            <Text style={styles.infoBannerTitle}>Confirmed Scheduled Ride</Text>
+            <Text style={styles.infoBannerTitle}>Ride Request Accepted</Text>
             <Text style={styles.infoBannerText}>
-              This ride is confirmed for {ride.requestDate} at {ride.requestTime}. Confirmed scheduled rides cannot be started early from this preview.
+              You have accepted this ride request for {ride.passengerName} ({ride.passengerPhone}). The passenger has been notified in real time.
             </Text>
           </View>
         )}
 
-        {ride.status === 'IN_PROGRESS' && (
-          <Pressable
-            onPress={() => router.replace('/(tabs)/trips')}
-            style={styles.primaryBtn}
-          >
-            <Text style={styles.primaryBtnText}>Open Active Trip Monitor</Text>
-          </Pressable>
-        )}
-
-        {(ride.status === 'AWAITING_PAYMENT' ||
-          ride.status === 'PAYMENT_PENDING_VERIFICATION') && (
-          <Pressable
-            onPress={() => router.push(`/checkout/${ride.id}`)}
-            style={styles.primaryBtn}
-          >
-            <Text style={styles.primaryBtnText}>Open Checkout &amp; Payment</Text>
-          </Pressable>
-        )}
-
-        {(ride.status === 'COMPLETED' || ride.status === 'CANCELLED') && (
+        {(ride.status === 'COMPLETED' ||
+          ride.status === 'CANCELLED' ||
+          ride.status === 'REJECTED' ||
+          ride.status === 'EXPIRED') && (
           <View style={styles.infoBanner}>
-            <Text style={styles.infoBannerTitle}>Historical Record</Text>
+            <Text style={styles.infoBannerTitle}>Request Record ({ride.status})</Text>
             <Text style={styles.infoBannerText}>
-              {ride.status === 'COMPLETED'
-                ? `Completed ${ride.completedAt || ''}. Displayed for driver history.`
-                : `Cancelled ${ride.completedAt || ''}. Displayed for driver history.`}
+              This ride request is in state {ride.status} and is displayed for driver history.
             </Text>
           </View>
         )}

@@ -5,6 +5,14 @@ import { env } from '../../config/env';
 import { prisma } from '../../core/database/prisma';
 import { logger } from '../../core/logging/logger';
 import type { TokenPayload } from '../../core/middleware/auth.middleware';
+import {
+  DRIVER_TOKEN_AUDIENCE,
+  DRIVER_TOKEN_ISSUER,
+} from '../../core/middleware/auth.middleware';
+import {
+  registerRideSocketConnection,
+  setRideSocketServer,
+} from '../realtime/rideSocket';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -102,7 +110,7 @@ export function initSupportSocket(httpServer: HttpServer): SocketIOServer {
     pingTimeout: 20000,
   });
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       const token = extractToken(socket);
       if (!token) {
@@ -112,9 +120,32 @@ export function initSupportSocket(httpServer: HttpServer): SocketIOServer {
       if (!decoded?.sub || !decoded?.role) {
         return next(new Error('INVALID_TOKEN'));
       }
-      if (!['PASSENGER', 'ADMIN', 'SUPER_ADMIN'].includes(decoded.role)) {
+      if (!['PASSENGER', 'DRIVER', 'ADMIN', 'SUPER_ADMIN'].includes(decoded.role)) {
         return next(new Error('FORBIDDEN'));
       }
+
+      // Enforce strict scope & live account status for DRIVER sockets
+      if (decoded.role === 'DRIVER') {
+        const verifiedDriver = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+          issuer: DRIVER_TOKEN_ISSUER,
+          audience: DRIVER_TOKEN_AUDIENCE,
+        }) as TokenPayload;
+        if (verifiedDriver.tokenType !== 'access') {
+          return next(new Error('INVALID_TOKEN_SCOPE'));
+        }
+        const driver = await prisma.driver.findFirst({
+          where: { id: verifiedDriver.sub, deletedAt: null },
+          select: { id: true, accountStatus: true, verificationStatus: true },
+        });
+        if (
+          !driver ||
+          driver.accountStatus !== 'ACTIVE' ||
+          driver.verificationStatus !== 'APPROVED'
+        ) {
+          return next(new Error('DRIVER_NOT_ELIGIBLE'));
+        }
+      }
+
       socket.data.user = decoded;
       return next();
     } catch (err: any) {
@@ -122,9 +153,13 @@ export function initSupportSocket(httpServer: HttpServer): SocketIOServer {
     }
   });
 
+  setRideSocketServer(io);
+
   io.on('connection', (socket) => {
     const user = socket.data.user as TokenPayload;
     const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
+
+    void registerRideSocketConnection(socket, user);
 
     if (isAdmin) {
       socket.join('support:admins');

@@ -12,6 +12,7 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  AppState,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -46,6 +47,7 @@ import {
 } from '../../src/components';
 import { useRideStore, useAuthStore } from '../../src/stores';
 import { GONDAR_LOCATIONS, networkService, NetworkState, offlineGpsQueueService } from '../../src/services';
+import { passengerRideSocket } from '../../src/services/passengerRideSocket';
 import { formatETB } from '../../src/utils/currency';
 import { useTranslation } from '../../src/i18n';
 import { AddressLocation, VehicleCategory, VehicleOption } from '../../src/types';
@@ -105,16 +107,45 @@ export default function ActiveRideScreen() {
     return () => unsub();
   }, [currentRide?.id]);
 
-  // Background polling every 3.5s to keep state synchronized with backend
+  // Real-time Socket.IO subscription + AppState foreground sync + fallback polling
   useEffect(() => {
     if (!currentRide?.id) return;
 
     syncRideState(currentRide.id);
+
+    const disconnectSocket = passengerRideSocket.connect({
+      onConnect: () => {
+        syncRideState(currentRide.id);
+      },
+      onRequestAccepted: (payload) => {
+        useRideStore.getState().applyRealtimeRideEvent(payload, 'DRIVER_APPROVED');
+      },
+      onRequestRejected: (payload) => {
+        useRideStore.getState().applyRealtimeRideEvent(payload, 'REJECTED');
+      },
+      onRequestCancelled: (payload) => {
+        useRideStore.getState().applyRealtimeRideEvent(payload, 'CANCELLED');
+      },
+      onRequestExpired: (payload) => {
+        useRideStore.getState().applyRealtimeRideEvent(payload, 'EXPIRED');
+      },
+    });
+
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        syncRideState(currentRide.id);
+      }
+    });
+
     const interval = setInterval(() => {
       syncRideState(currentRide.id);
-    }, 3500);
+    }, 5000);
 
-    return () => clearInterval(interval);
+    return () => {
+      disconnectSocket();
+      appStateSub.remove();
+      clearInterval(interval);
+    };
   }, [currentRide?.id]);
 
   // Android hardware back handler for active ride
@@ -299,6 +330,39 @@ export default function ActiveRideScreen() {
                 Retaining validated road distance. Live telematics will resume once connection restores.
               </Text>
             </View>
+          </View>
+        )}
+
+        {/* =========================================================================
+            TERMINAL REQUEST STATES: REJECTED / EXPIRED / CANCELLED
+           ========================================================================= */}
+        {(status === 'REJECTED' || status === 'EXPIRED' || status === 'CANCELLED') && (
+          <View style={styles.waitingCard}>
+            <View style={styles.pulseContainer}>
+              <XCircle size={40} color={theme.colors.danger} />
+            </View>
+            <Text style={styles.waitingTitle}>
+              {status === 'REJECTED'
+                ? 'Driver Declined Request'
+                : status === 'EXPIRED'
+                ? 'Request Timed Out'
+                : 'Ride Request Cancelled'}
+            </Text>
+            <Text style={styles.waitingSubtitle}>
+              {status === 'REJECTED'
+                ? currentRide.rejectionReason || 'The selected driver is unable to take this request. Please choose another available driver.'
+                : status === 'EXPIRED'
+                ? 'No response was received before the request expired. Please select an available driver and try again.'
+                : currentRide.cancellationReason || 'This ride request has been cancelled.'}
+            </Text>
+            <PrimaryButton
+              title="Choose Another Driver"
+              onPress={() => {
+                resetRide();
+                router.replace('/rides/book');
+              }}
+              style={{ width: '100%', marginTop: theme.spacing.md }}
+            />
           </View>
         )}
 

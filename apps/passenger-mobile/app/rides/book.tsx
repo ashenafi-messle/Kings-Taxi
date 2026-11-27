@@ -28,6 +28,7 @@ import {
 import { theme } from '../../src/theme';
 import { AppHeader, PrimaryButton } from '../../src/components';
 import { useRideStore, useAuthStore } from '../../src/stores';
+import { passengerRideSocket } from '../../src/services/passengerRideSocket';
 import { SubcityInfo, PublicDriverInfo } from '../../src/types';
 import { formatETB } from '../../src/utils/currency';
 
@@ -71,6 +72,19 @@ export default function RideBookingScreen() {
 
     const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backSub.remove();
+  }, []);
+
+  // Subscribe to live driver availability updates for the active subcity
+  useEffect(() => {
+    const disconnect = passengerRideSocket.connect({
+      onDriverAvailabilityChanged: () => {
+        const activeSubcityId = useRideStore.getState().selectedSubcity?.id;
+        if (activeSubcityId) {
+          useRideStore.getState().fetchDrivers(activeSubcityId);
+        }
+      },
+    });
+    return () => disconnect();
   }, []);
 
   const handleRequestRide = async () => {
@@ -200,7 +214,7 @@ export default function RideBookingScreen() {
           <View style={styles.emptyDriversBox}>
             <Text style={styles.emptyDriversTitle}>No Drivers Currently Online</Text>
             <Text style={styles.emptyDriversSubtitle}>
-              You can still submit your ride request. The first driver to come online will be dispatched immediately.
+              No drivers are online in this subcity right now. This list updates automatically as soon as a driver goes online.
             </Text>
           </View>
         ) : (
@@ -290,7 +304,7 @@ export default function RideBookingScreen() {
         <PrimaryButton
           title={isBookingRide ? 'Submitting Request...' : 'Request Kings Taxi'}
           onPress={handleRequestRide}
-          disabled={isBookingRide || !selectedSubcity}
+          disabled={isBookingRide || !selectedSubcity || !selectedDriver}
           icon={<Car size={20} color="#FFFFFF" />}
           style={styles.requestBtn}
         />

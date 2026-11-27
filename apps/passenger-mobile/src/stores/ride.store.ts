@@ -76,6 +76,7 @@ interface RideState {
   simulateTripCompletion: () => void;
 
   syncRideState: (rideId?: string) => Promise<void>;
+  applyRealtimeRideEvent: (payload: any, forcedStatus?: RideStatus) => void;
   requestDestinationChange: (
     newDestination: string,
     newCoords: { latitude: number; longitude: number }
@@ -376,6 +377,11 @@ export const useRideStore = create<RideState>((set, get) => ({
       return false;
     }
 
+    if (!selectedDriver) {
+      set({ bookingError: 'Please select an available driver in this subcity' });
+      return false;
+    }
+
     set({ isBookingRide: true, bookingError: null, isSearchingDriver: true });
 
     try {
@@ -386,7 +392,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         additionalInstructions: additionalInstructions || undefined,
         approximateLatitude: selectedSubcity.centerLatitude || pickupLocation.coordinates.latitude,
         approximateLongitude: selectedSubcity.centerLongitude || pickupLocation.coordinates.longitude,
-        preferredDriverId: selectedDriver?.id,
+        preferredDriverId: selectedDriver.id,
       });
 
       if (res.success && res.data) {
@@ -401,6 +407,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         });
         return true;
       } else {
+        get().fetchDrivers(selectedSubcity.id).catch(() => {});
         set({
           isBookingRide: false,
           isSearchingDriver: false,
@@ -409,6 +416,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         return false;
       }
     } catch (err: any) {
+      get().fetchDrivers(selectedSubcity.id).catch(() => {});
       set({
         isBookingRide: false,
         isSearchingDriver: false,
@@ -587,23 +595,76 @@ export const useRideStore = create<RideState>((set, get) => ({
     get().onTripCompleted();
   },
 
-  async syncRideState(rideId?: string): Promise<void> {
-    const id = rideId || get().currentRide?.id;
-    if (!id) return;
+  applyRealtimeRideEvent(payload: any, forcedStatus?: RideStatus) {
+    if (!payload) return;
+    const mapped = RideService.mapBackendRideRequest(payload);
+    const nextStatus = forcedStatus || mapped.status;
+    const current = get().currentRide;
 
-    // Do not sync or revive if current ride is already paid or cancelled
+    if (current && current.id !== mapped.id) {
+      return;
+    }
+
+    const updated: RideBooking = {
+      ...(current || mapped),
+      ...mapped,
+      status: nextStatus,
+      driver: mapped.driver || current?.driver,
+    };
+
+    set({
+      currentRide: updated,
+      isSearchingDriver: nextStatus === 'WAITING_FOR_DRIVER',
+      ...(nextStatus === 'DRIVER_APPROVED' && updated.driver
+        ? { approvedDriver: updated.driver }
+        : {}),
+    });
+  },
+
+  async syncRideState(rideId?: string): Promise<void> {
     const active = get().currentRide;
-    if (!active || active.status === 'PAYMENT_COMPLETED' || active.status === 'CANCELLED') {
+    const id = rideId || active?.id;
+
+    // Do not sync or revive if current ride is already paid or terminally closed
+    if (
+      active &&
+      (active.status === 'PAYMENT_COMPLETED' ||
+        active.status === 'CANCELLED' ||
+        active.status === 'REJECTED' ||
+        active.status === 'EXPIRED')
+    ) {
       return;
     }
 
     try {
+      const reqRes = id
+        ? await RideService.getPassengerRequestById(id)
+        : await RideService.getPassengerCurrentRequest();
+
+      if (reqRes.success && reqRes.data) {
+        const mapped = reqRes.data;
+        const current = get().currentRide;
+        if (current && current.id !== mapped.id) {
+          return;
+        }
+        set({
+          currentRide: {
+            ...(current || mapped),
+            ...mapped,
+            driver: mapped.driver || current?.driver,
+          },
+          isSearchingDriver: mapped.status === 'WAITING_FOR_DRIVER',
+        });
+        return;
+      }
+
+      if (!id) return;
+
       const res = await RideService.getRideDetails(id);
       if (res.success && res.data) {
         const d = res.data;
         const current = get().currentRide;
 
-        // Double check status before updating
         if (current && current.status !== 'PAYMENT_COMPLETED' && current.status !== 'CANCELLED') {
           const updated: RideBooking = {
             ...current,

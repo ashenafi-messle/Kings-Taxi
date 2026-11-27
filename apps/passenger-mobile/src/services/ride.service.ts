@@ -243,76 +243,93 @@ export class RideService {
     return { success: true, data: vehicles };
   }
 
+  static mapBackendRideRequest(b: any, fallbackSubcityName?: string): RideBooking {
+    const rawStatus = String(b?.bookingStatus || 'REQUESTED').toUpperCase();
+    let status: RideBooking['status'] = 'WAITING_FOR_DRIVER';
+    if (rawStatus === 'DRIVER_ASSIGNED') status = 'DRIVER_APPROVED';
+    else if (rawStatus === 'REJECTED') status = 'REJECTED';
+    else if (rawStatus === 'EXPIRED') status = 'EXPIRED';
+    else if (rawStatus === 'CANCELLED') status = 'CANCELLED';
+    else if (rawStatus === 'IN_PROGRESS') status = 'TRIP_STARTED';
+    else if (rawStatus === 'COMPLETED') status = 'TRIP_COMPLETED';
+
+    const subcityName = b?.subcity?.name || fallbackSubcityName || 'Gondar';
+    const lat = Number(b?.pickupLatitude ?? b?.subcity?.centerLatitude ?? 12.6074);
+    const lon = Number(b?.pickupLongitude ?? b?.subcity?.centerLongitude ?? 37.4589);
+
+    return {
+      id: b.id,
+      bookingReference: b.bookingReference,
+      status,
+      subcityId: b.subcityId || b.subcity?.id,
+      subcityName,
+      passengerContactPhone: b.passengerContactPhone,
+      additionalInstructions: b.additionalInstructions,
+      pickup: {
+        id: 'pickup_subcity_loc',
+        title: b.pickupLocation || `${subcityName} Subcity, Gondar`,
+        address: b.pickupLocation || `${subcityName} Passenger Pickup Point`,
+        coordinates: { latitude: lat, longitude: lon },
+        city: 'Gondar',
+      },
+      destination: {
+        id: 'dest_ondemand_loc',
+        title: b.destinationLocation || 'On-Demand Journey in Gondar',
+        address: b.destinationLocation || 'Destination to be finalized during trip',
+        coordinates: { latitude: lat + 0.005, longitude: lon + 0.005 },
+        city: 'Gondar',
+      },
+      driver: b.driver
+        ? {
+            id: b.driver.id,
+            name: b.driver.fullName || 'Kings Taxi Driver',
+            phone: '',
+            rating: Number(b.driver.rating ?? 5.0),
+            totalTrips: Number(b.driver.totalTrips ?? 0),
+            photoUrl: b.driver.profileImage || mockDriver.photoUrl,
+            vehicleMake: b.driver.vehicle?.vehicleModel?.split(' ')[0] || 'Toyota',
+            vehicleModel: b.driver.vehicle?.vehicleModel || 'Corolla',
+            vehiclePlate: b.driver.vehicle?.plateNumber || '3-A00000',
+            vehicleColor: b.driver.vehicle?.vehicleColor || 'Silver',
+          }
+        : undefined,
+      distanceKm: 0,
+      estimatedDurationMins: 0,
+      createdAt: b.createdAt || new Date().toISOString(),
+      expiresAt: b.expiresAt || undefined,
+      rejectedAt: b.rejectedAt || undefined,
+      rejectionReason: b.rejectionReason || undefined,
+      cancellationReason: b.cancellationReason || undefined,
+    };
+  }
+
   /**
-   * Request an on-demand ride without requiring pickup or destination input.
-   * Uses verified passenger phone, selected subcity, and optional pickup instructions.
+   * Request an on-demand ride targeting a selected available driver in the chosen subcity.
    */
   static async requestOnDemandRide(params: CreateOnDemandRideParams): Promise<ApiResponse<RideBooking>> {
-    const lat = params.approximateLatitude || 12.6074;
-    const lon = params.approximateLongitude || 37.4589;
     const subcityName = params.subcityName || 'Gondar';
+    const driverId = params.preferredDriverId;
 
-    if (API_CONFIG.isMockAuth) {
-      const mockBooking: RideBooking = {
-        id: `ride_ondemand_${Date.now()}`,
-        bookingReference: `KT-${Date.now().toString(36).toUpperCase()}-REQ`,
-        status: 'WAITING_FOR_DRIVER',
-        subcityId: params.subcityId,
-        subcityName,
-        passengerContactPhone: params.passengerContactPhone,
-        additionalInstructions: params.additionalInstructions,
-        pickup: {
-          id: 'pickup_subcity_loc',
-          title: `${subcityName} Subcity, Gondar`,
-          address: `${subcityName} Passenger Pickup Point`,
-          coordinates: { latitude: lat, longitude: lon },
-          city: 'Gondar',
-        },
-        destination: {
-          id: 'dest_ondemand_loc',
-          title: 'On-Demand Journey in Gondar',
-          address: 'Destination to be finalized during trip',
-          coordinates: { latitude: lat + 0.005, longitude: lon + 0.005 },
-          city: 'Gondar',
-        },
-        vehicleCategory: 'economy',
-        distanceKm: 0,
-        estimatedDurationMins: 0,
-        createdAt: new Date().toISOString(),
-      };
-      return { success: true, data: mockBooking };
-    }
-
-    // Direct driver resolution if preferred, else discover first available driver in subcity
-    let driverId = params.preferredDriverId;
     if (!driverId) {
-      const driversRes = await this.getAvailableDrivers(params.subcityId);
-      if (driversRes.success && driversRes.data && driversRes.data.length > 0) {
-        driverId = driversRes.data[0].id;
-      }
+      return {
+        success: false,
+        data: null as any,
+        error: 'Please select an available driver in this subcity.',
+      };
     }
 
-    // Call backend booking endpoint
-    const backendPayload: CreateBookingParams = {
-      driverId: driverId || '00000000-0000-0000-0000-000000000000',
-      subcityId: params.subcityId,
-      pickupLocation: `${subcityName} Subcity, Gondar`,
-      pickupLatitude: lat,
-      pickupLongitude: lon,
-      destinationLocation: 'On-Demand Journey in Gondar',
-      destinationLatitude: lat + 0.005,
-      destinationLongitude: lon + 0.005,
-      passengerContactPhone: params.passengerContactPhone,
-      additionalInstructions: params.additionalInstructions,
-      vehicleCategory: 'economy',
-    };
-
-    const res = await requestWithAuth<any>('/passengers/rides', {
+    const res = await requestWithAuth<any>('/rides/requests', {
       method: 'POST',
-      body: JSON.stringify(backendPayload),
+      body: JSON.stringify({
+        driverId,
+        subcityId: params.subcityId,
+        contactPhone: params.passengerContactPhone,
+        pickupLocation: `${subcityName} Subcity, Gondar`,
+        additionalInstructions: params.additionalInstructions?.trim() || undefined,
+      }),
     });
 
-    if (!res.success) {
+    if (!res.success || !res.data) {
       return {
         success: false,
         data: null as any,
@@ -320,35 +337,38 @@ export class RideService {
       };
     }
 
-    const b = res.data;
-    const formatted: RideBooking = {
-      id: b.id,
-      bookingReference: b.bookingReference,
-      status: 'WAITING_FOR_DRIVER',
-      subcityId: params.subcityId,
-      subcityName,
-      passengerContactPhone: params.passengerContactPhone,
-      additionalInstructions: params.additionalInstructions,
-      pickup: {
-        id: 'pickup_subcity_loc',
-        title: `${subcityName} Subcity, Gondar`,
-        address: `${subcityName} Passenger Pickup Point`,
-        coordinates: { latitude: lat, longitude: lon },
-        city: 'Gondar',
-      },
-      destination: {
-        id: 'dest_ondemand_loc',
-        title: 'On-Demand Journey in Gondar',
-        address: 'Destination to be finalized during trip',
-        coordinates: { latitude: lat + 0.005, longitude: lon + 0.005 },
-        city: 'Gondar',
-      },
-      distanceKm: 0,
-      estimatedDurationMins: 0,
-      createdAt: b.createdAt || new Date().toISOString(),
+    return {
+      success: true,
+      data: this.mapBackendRideRequest(res.data, subcityName),
     };
+  }
 
-    return { success: true, data: formatted };
+  static async getPassengerCurrentRequest(): Promise<ApiResponse<RideBooking | null>> {
+    if (API_CONFIG.isMockAuth) {
+      return { success: true, data: null };
+    }
+    const res = await requestWithAuth<any>('/rides/requests/passenger/current');
+    if (!res.success) {
+      return { success: false, data: null, error: res.error };
+    }
+    return {
+      success: true,
+      data: res.data ? this.mapBackendRideRequest(res.data) : null,
+    };
+  }
+
+  static async getPassengerRequestById(requestId: string): Promise<ApiResponse<RideBooking | null>> {
+    if (API_CONFIG.isMockAuth) {
+      return { success: true, data: null };
+    }
+    const res = await requestWithAuth<any>(`/rides/requests/${requestId}`);
+    if (!res.success) {
+      return { success: false, data: null, error: res.error };
+    }
+    return {
+      success: true,
+      data: res.data ? this.mapBackendRideRequest(res.data) : null,
+    };
   }
 
   /**
@@ -431,7 +451,7 @@ export class RideService {
    * Cancel ride
    */
   static async cancelRide(rideId: string, reason?: string): Promise<ApiResponse<any>> {
-    return requestWithAuth<any>(`/passengers/rides/${rideId}/cancel`, {
+    return requestWithAuth<any>(`/rides/requests/${rideId}/cancel`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });

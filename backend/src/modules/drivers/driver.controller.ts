@@ -38,6 +38,48 @@ export class DriverController {
     }
   }
 
+  async getMyAvailability(req: Request, res: Response): Promise<void> {
+    try {
+      const driverId = req.user?.sub;
+      if (!driverId) {
+        ApiResponse.unauthorized(res, 'Driver authentication required');
+        return;
+      }
+      const state = await driverService.getMyAvailability(driverId);
+      ApiResponse.success(res, state, 'Driver availability retrieved');
+    } catch (err: any) {
+      ApiResponse.error(res, err.code || 'AVAILABILITY_ERROR', err.message || 'Unable to get availability', err.statusCode || 500);
+    }
+  }
+
+  async goOnline(req: Request, res: Response): Promise<void> {
+    try {
+      const driverId = req.user?.sub;
+      if (!driverId) {
+        ApiResponse.unauthorized(res, 'Driver authentication required');
+        return;
+      }
+      const updated = await driverService.goOnline(driverId);
+      ApiResponse.success(res, updated, 'Driver is now online and available');
+    } catch (err: any) {
+      ApiResponse.error(res, err.code || 'AVAILABILITY_ERROR', err.message || 'Unable to go online', err.statusCode || 400);
+    }
+  }
+
+  async goOffline(req: Request, res: Response): Promise<void> {
+    try {
+      const driverId = req.user?.sub;
+      if (!driverId) {
+        ApiResponse.unauthorized(res, 'Driver authentication required');
+        return;
+      }
+      const updated = await driverService.goOffline(driverId);
+      ApiResponse.success(res, updated, 'Driver is now offline');
+    } catch (err: any) {
+      ApiResponse.error(res, err.code || 'AVAILABILITY_ERROR', err.message || 'Unable to go offline', err.statusCode || 400);
+    }
+  }
+
   /**
    * POST /api/v1/drivers/me/availability
    */

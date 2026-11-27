@@ -163,6 +163,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS "account_provisioned_at" TIMESTAMPTZ(6),
       ADD COLUMN IF NOT EXISTS "account_activated_at" TIMESTAMPTZ(6),
       ADD COLUMN IF NOT EXISTS "last_login_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "last_heartbeat_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "is_socket_connected" BOOLEAN NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS "primary_subcity_id" UUID,
       ADD COLUMN IF NOT EXISTS "provisioned_by" VARCHAR(128),
       ADD COLUMN IF NOT EXISTS "idempotency_key" VARCHAR(128);
@@ -191,6 +193,19 @@ export async function ensureDatabaseSchema(): Promise<void> {
         "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "driver_password_resets_pkey" PRIMARY KEY ("id")
       );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TYPE "BookingStatus" ADD VALUE IF NOT EXISTS 'REJECTED';
+    `).catch(() => {});
+    await prisma.$executeRawUnsafe(`
+      ALTER TYPE "BookingStatus" ADD VALUE IF NOT EXISTS 'EXPIRED';
+    `).catch(() => {});
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "bookings"
+      ADD COLUMN IF NOT EXISTS "expires_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "rejected_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "rejection_reason" VARCHAR(255);
     `);
 
     // C. Alter vehicles table with specifications & operational status

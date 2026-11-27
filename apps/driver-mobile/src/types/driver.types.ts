@@ -21,7 +21,9 @@ export type RideStatus =
   | 'AWAITING_PAYMENT'
   | 'PAYMENT_PENDING_VERIFICATION'
   | 'COMPLETED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'REJECTED'
+  | 'EXPIRED';
 
 export type PaymentVerificationStatus = 'UNSUBMITTED' | 'PENDING_VERIFICATION';
 
@@ -72,6 +74,8 @@ export interface RideItem {
   pickupCoords?: GeoPoint;
   destinationCoords?: GeoPoint;
   requestedService: string;
+  subcityName?: string | null;
+  expiresAt?: string | null;
   requestDate: string;
   requestTime: string;
   estimatedDistanceKm: number;

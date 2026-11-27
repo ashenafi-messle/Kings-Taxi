@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -10,12 +10,35 @@ export default function RootLayout() {
   const isAuthenticated = useDriverStore((s) => s.auth.isAuthenticated);
   const isRestoringSession = useDriverStore((s) => s.isRestoringSession);
   const restoreSession = useDriverStore((s) => s.restoreSession);
+  const connectRealtime = useDriverStore((s) => s.connectRealtime);
+  const disconnectRealtime = useDriverStore((s) => s.disconnectRealtime);
+  const syncDriverState = useDriverStore((s) => s.syncDriverState);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      disconnectRealtime();
+      return;
+    }
+
+    void syncDriverState();
+    void connectRealtime();
+
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void syncDriverState();
+      }
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [isAuthenticated, connectRealtime, disconnectRealtime, syncDriverState]);
 
   useEffect(() => {
     if (isRestoringSession) return;

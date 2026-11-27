@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -28,6 +29,9 @@ export default function DriverDashboardScreen() {
   const router = useRouter();
   const profile = useDriverStore((s) => s.profile);
   const isOnline = useDriverStore((s) => s.isOnline);
+  const isAvailabilityLoading = useDriverStore((s) => s.isAvailabilityLoading);
+  const availabilityError = useDriverStore((s) => s.availabilityError);
+  const isSocketConnected = useDriverStore((s) => s.isSocketConnected);
   const toggleAvailability = useDriverStore((s) => s.toggleAvailability);
   const rides = useDriverStore((s) => s.rides);
   const activeTrip = useDriverStore((s) => s.activeTrip);
@@ -90,22 +94,39 @@ export default function DriverDashboardScreen() {
         {/* Availability Toggle Card */}
         <View style={styles.availabilityCard}>
           <View style={styles.availLeft}>
-            <StatusPill status={isOnline ? 'ONLINE' : 'OFFLINE'} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <StatusPill status={isOnline ? 'ONLINE' : 'OFFLINE'} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: isSocketConnected ? Colors.success : Colors.secondaryText }}>
+                {isSocketConnected ? '• Live Connected' : '• Syncing'}
+              </Text>
+            </View>
             <Text style={styles.availTitle}>
               {isOnline ? 'Accepting Ride Requests' : 'You Are Currently Offline'}
             </Text>
             <Text style={styles.availHint}>
               {isOnline
-                ? 'Dispatch status is active in your operating zone.'
-                : 'Switch online to receive new passenger dispatches.'}
+                ? 'Your profile is discoverable by passengers in your assigned subcity.'
+                : 'Switch online to receive real-time passenger ride requests.'}
             </Text>
+            {availabilityError ? (
+              <Text style={{ fontSize: 12, color: Colors.error, fontWeight: '600', marginTop: 4 }}>
+                {availabilityError}
+              </Text>
+            ) : null}
           </View>
-          <Switch
-            value={isOnline}
-            onValueChange={toggleAvailability}
-            trackColor={{ false: Colors.primarySilver, true: Colors.primaryBlack }}
-            thumbColor={Colors.cardWhite}
-          />
+          {isAvailabilityLoading ? (
+            <ActivityIndicator size="small" color={Colors.primaryBlack} />
+          ) : (
+            <Switch
+              value={isOnline}
+              disabled={isAvailabilityLoading}
+              onValueChange={() => {
+                void toggleAvailability();
+              }}
+              trackColor={{ false: Colors.primarySilver, true: Colors.primaryBlack }}
+              thumbColor={Colors.cardWhite}
+            />
+          )}
         </View>
 
         {/* Active Trip Banner */}
