@@ -961,4 +961,264 @@ Kings Taxi Transportation & Tourism Platform.
       return false;
     }
   }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Shared multi-transport email dispatch (Brevo HTTPS -> Resend HTTPS -> Primary SMTP -> Fallback SMTP)
+   * without logging sensitive message bodies or credentials.
+   */
+  private async dispatchViaTransports(params: {
+    to: string;
+    recipientName: string;
+    subject: string;
+    htmlContent: string;
+    plainText: string;
+    purpose: string;
+  }): Promise<{ success: boolean; provider?: string; error?: string }> {
+    const startTime = Date.now();
+    const maskedTo = this.maskEmail(params.to);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(params.to.trim())) {
+      this.recordAudit({
+        id: `aud_${Date.now()}`,
+        recipient: maskedTo,
+        purpose: params.purpose,
+        status: 'FAILED',
+        timestamp: new Date().toISOString(),
+        durationMs: Date.now() - startTime,
+        errorMessage: 'Invalid recipient email format',
+      });
+      return { success: false, error: 'Invalid recipient email format' };
+    }
+
+    if (!this.primaryTransporter && !env.BREVO_API_KEY && !env.RESEND_API_KEY && env.NODE_ENV === 'test') {
+      logger.info({ recipient: maskedTo, purpose: params.purpose }, '[EmailService] [TEST MODE] Simulating email delivery');
+      this.recordAudit({
+        id: `aud_${Date.now()}`,
+        recipient: maskedTo,
+        purpose: params.purpose,
+        status: 'SIMULATED',
+        timestamp: new Date().toISOString(),
+        durationMs: 5,
+        provider: 'Test Simulator',
+      });
+      return { success: true, provider: 'Test Simulator' };
+    }
+
+    const sender = this.getSenderDetails();
+
+    if (await this.sendViaBrevoApi(params.to, params.recipientName, params.subject, params.htmlContent, params.plainText)) {
+      const durationMs = Date.now() - startTime;
+      logger.info({ recipient: maskedTo, purpose: params.purpose, durationMs }, '[EmailService] Delivered via Brevo HTTPS API');
+      this.recordAudit({
+        id: `aud_${Date.now()}`,
+        recipient: maskedTo,
+        purpose: params.purpose,
+        status: 'SUCCESS',
+        timestamp: new Date().toISOString(),
+        durationMs,
+        provider: 'Brevo HTTPS API',
+      });
+      return { success: true, provider: 'Brevo HTTPS API' };
+    }
+
+    if (await this.sendViaResendApi(params.to, params.subject, params.htmlContent, params.plainText)) {
+      const durationMs = Date.now() - startTime;
+      logger.info({ recipient: maskedTo, purpose: params.purpose, durationMs }, '[EmailService] Delivered via Resend HTTPS API');
+      this.recordAudit({
+        id: `aud_${Date.now()}`,
+        recipient: maskedTo,
+        purpose: params.purpose,
+        status: 'SUCCESS',
+        timestamp: new Date().toISOString(),
+        durationMs,
+        provider: 'Resend HTTPS API',
+      });
+      return { success: true, provider: 'Resend HTTPS API' };
+    }
+
+    if (!this.primaryTransporter) {
+      this.initTransporters();
+    }
+
+    let lastError = 'No email provider credentials configured (SMTP or HTTPS API)';
+    if (this.primaryTransporter) {
+      try {
+        const info = await this.primaryTransporter.sendMail({
+          from: sender.full,
+          to: params.to,
+          subject: params.subject,
+          text: params.plainText,
+          html: params.htmlContent,
+        });
+        const durationMs = Date.now() - startTime;
+        logger.info({ recipient: maskedTo, messageId: info.messageId, purpose: params.purpose, durationMs }, '[EmailService] Delivered via primary SMTP');
+        this.recordAudit({
+          id: info.messageId || `aud_${Date.now()}`,
+          recipient: maskedTo,
+          purpose: params.purpose,
+          status: 'SUCCESS',
+          timestamp: new Date().toISOString(),
+          durationMs,
+          provider: `SMTP (${env.SMTP_HOST}:${env.SMTP_PORT})`,
+        });
+        return { success: true, provider: `SMTP (${env.SMTP_HOST}:${env.SMTP_PORT})` };
+      } catch (primaryErr: any) {
+        lastError = primaryErr?.message || 'Primary SMTP failed';
+        logger.warn({ recipient: maskedTo, error: lastError }, '[EmailService] Primary SMTP failed; checking fallback');
+
+        if (this.fallbackTransporter) {
+          try {
+            const info = await this.fallbackTransporter.sendMail({
+              from: sender.full,
+              to: params.to,
+              subject: params.subject,
+              text: params.plainText,
+              html: params.htmlContent,
+            });
+            const durationMs = Date.now() - startTime;
+            logger.info({ recipient: maskedTo, messageId: info.messageId, purpose: params.purpose, durationMs }, '[EmailService] Delivered via fallback SMTP');
+            this.recordAudit({
+              id: info.messageId || `aud_${Date.now()}`,
+              recipient: maskedTo,
+              purpose: params.purpose,
+              status: 'SUCCESS',
+              timestamp: new Date().toISOString(),
+              durationMs,
+              provider: `SMTP Fallback (${env.SMTP_HOST}:2525)`,
+            });
+            return { success: true, provider: `SMTP Fallback (${env.SMTP_HOST}:2525)` };
+          } catch (fallbackErr: any) {
+            lastError = fallbackErr?.message || lastError;
+            logger.error({ recipient: maskedTo, error: lastError }, '[EmailService] Fallback SMTP failed');
+          }
+        }
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    logger.error({ recipient: maskedTo, purpose: params.purpose, durationMs }, '[EmailService] All email delivery transports failed');
+    this.recordAudit({
+      id: `aud_${Date.now()}`,
+      recipient: maskedTo,
+      purpose: params.purpose,
+      status: 'FAILED',
+      timestamp: new Date().toISOString(),
+      durationMs,
+      errorMessage: lastError,
+    });
+    return { success: false, error: lastError };
+  }
+
+  /**
+   * Sends the Kings Taxi branded Driver Account Provisioning & Temporary Password onboarding email.
+   * Never logs the temporary password.
+   */
+  async sendDriverOnboardingEmail(params: {
+    to: string;
+    driverName: string;
+    registeredEmail: string;
+    registeredPhone: string;
+    temporaryPassword: string;
+    expiresAt: Date;
+  }): Promise<{ success: boolean; provider?: string; error?: string }> {
+    const sender = this.getSenderDetails();
+    const subject = 'Your Kings Taxi Driver Account Has Been Created';
+    const expiryDisplay = params.expiresAt.toISOString().split('T')[0];
+
+    const safeName = this.escapeHtml(params.driverName);
+    const safeEmail = this.escapeHtml(params.registeredEmail);
+    const safePhone = this.escapeHtml(params.registeredPhone);
+    const safePass = this.escapeHtml(params.temporaryPassword);
+    const safeSupportEmail = this.escapeHtml(sender.email);
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0d0f12; margin: 0; padding: 0; color: #e0e6ed; }
+    .wrapper { max-width: 600px; margin: 28px auto; background-color: #161a22; border: 1px solid #2d333b; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
+    .header { background: linear-gradient(135deg, #1c2128 0%, #111418 100%); padding: 28px 32px 22px; border-bottom: 2px solid #D99A28; text-align: center; }
+    .brand-title { color: #D99A28; font-size: 26px; font-weight: 800; letter-spacing: 1.5px; margin: 0; text-transform: uppercase; }
+    .brand-sub { color: #F5D69E; font-size: 11px; font-weight: 700; letter-spacing: 2px; margin-top: 6px; text-transform: uppercase; }
+    .body { padding: 30px 32px; line-height: 1.6; font-size: 15px; color: #d1d5db; }
+    .cred-box { background-color: #111418; border: 1px solid #D99A28; border-radius: 10px; padding: 18px 20px; margin: 22px 0; }
+    .cred-row { margin: 8px 0; font-size: 14px; }
+    .cred-label { color: #9ca3af; font-weight: 600; display: inline-block; min-width: 155px; }
+    .cred-value { color: #ffffff; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .pass-pill { display: inline-block; background-color: #241c0d; color: #F5D69E; border: 1px dashed #D99A28; padding: 6px 12px; border-radius: 6px; font-size: 16px; letter-spacing: 0.8px; }
+    .notice { background-color: #1f1912; border-left: 3px solid #D99A28; padding: 12px 16px; border-radius: 6px; font-size: 13px; color: #f3e8d2; margin: 18px 0; }
+    .footer { background-color: #111418; padding: 18px 32px; border-top: 1px solid #2d333b; text-align: center; font-size: 12px; color: #9ca3af; }
+    a { color: #D99A28; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <h1 class="brand-title">KINGS TAXI</h1>
+      <div class="brand-sub">Fleet &amp; Driver Operations • Ethiopia</div>
+    </div>
+    <div class="body">
+      <p style="margin-top:0;font-size:17px;color:#ffffff;font-weight:700;">Welcome to Kings Taxi, ${safeName}!</p>
+      <p>Your driver account has been successfully registered by the Kings Taxi administration.</p>
+      <div class="cred-box">
+        <div class="cred-row"><span class="cred-label">Registered Email:</span> <span class="cred-value">${safeEmail}</span></div>
+        <div class="cred-row"><span class="cred-label">Registered Phone:</span> <span class="cred-value">${safePhone}</span></div>
+        <div class="cred-row"><span class="cred-label">Temporary Password:</span> <span class="cred-value pass-pill">${safePass}</span></div>
+        <div class="cred-row"><span class="cred-label">Credential Valid Until:</span> <span class="cred-value">${expiryDisplay}</span></div>
+      </div>
+      <p>Keep these credentials safe. You will use your registered email or phone number and this temporary password to access the <strong>Kings Taxi Driver App</strong> when the driver application becomes available.</p>
+      <div class="notice">
+        <strong>Security Notice:</strong> For security reasons, you will be required to change your temporary password when the driver authentication system is implemented and you first access your account. <strong>Never share your password with anyone</strong> — Kings Taxi staff will never ask for your password.
+      </div>
+      <p style="margin-bottom:0;font-size:13px;color:#9ca3af;">Need assistance? Contact Kings Taxi Fleet Support at <a href="mailto:${safeSupportEmail}">${safeSupportEmail}</a>.</p>
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} Kings Taxi Ethiopia. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>`.trim();
+
+    const plainText = [
+      `Welcome to Kings Taxi, ${params.driverName}!`,
+      '',
+      'Your driver account has been successfully registered by our administration.',
+      '',
+      'Your account login information:',
+      `Registered Email: ${params.registeredEmail}`,
+      `Registered Phone: ${params.registeredPhone}`,
+      `Temporary Password: ${params.temporaryPassword}`,
+      `Credential Valid Until: ${expiryDisplay}`,
+      '',
+      'Keep these credentials safe. You will use your registered email or phone number and this password to access the Kings Taxi Driver App when the driver application becomes available.',
+      '',
+      'For security reasons, you will be required to change your temporary password when the driver authentication system is implemented and you first access your account.',
+      '',
+      'Never share your password with anyone.',
+      `Support Contact: ${sender.email}`,
+    ].join('\n');
+
+    return this.dispatchViaTransports({
+      to: params.to,
+      recipientName: params.driverName,
+      subject,
+      htmlContent,
+      plainText,
+      purpose: 'DRIVER_ONBOARDING',
+    });
+  }
 }

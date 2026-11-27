@@ -129,6 +129,43 @@ export async function ensureDatabaseSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS "verified_by" VARCHAR(128);
     `);
 
+    // B2. Ensure driver provisioning & onboarding lifecycle enums/columns exist
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        CREATE TYPE "DriverOnboardingStatus" AS ENUM (
+          'PENDING_ONBOARDING',
+          'ONBOARDING_EMAIL_SENT',
+          'ONBOARDING_EMAIL_FAILED',
+          'ACTIVE',
+          'ONBOARDING_EXPIRED'
+        );
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    `);
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        CREATE TYPE "OnboardingEmailStatus" AS ENUM (
+          'NOT_SENT',
+          'PENDING',
+          'SENT',
+          'FAILED'
+        );
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    `);
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "drivers"
+      ADD COLUMN IF NOT EXISTS "must_change_password" BOOLEAN NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS "onboarding_status" "DriverOnboardingStatus" NOT NULL DEFAULT 'PENDING_ONBOARDING',
+      ADD COLUMN IF NOT EXISTS "onboarding_email_status" "OnboardingEmailStatus" NOT NULL DEFAULT 'NOT_SENT',
+      ADD COLUMN IF NOT EXISTS "onboarding_email_sent_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "onboarding_email_last_attempt_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "onboarding_email_error" TEXT,
+      ADD COLUMN IF NOT EXISTS "temp_password_expires_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "account_provisioned_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "account_activated_at" TIMESTAMPTZ(6),
+      ADD COLUMN IF NOT EXISTS "provisioned_by" VARCHAR(128),
+      ADD COLUMN IF NOT EXISTS "idempotency_key" VARCHAR(128);
+    `);
+
     // C. Alter vehicles table with specifications & operational status
     await prisma.$executeRawUnsafe(`
       ALTER TABLE "vehicles" 

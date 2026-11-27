@@ -17,6 +17,8 @@ import {
   FileText,
   Clock,
   Radio,
+  Mail,
+  RefreshCw,
 } from 'lucide-react';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { StatCard } from '../../../components/common/StatCard';
@@ -48,6 +50,8 @@ export default function DriversPage() {
   const [cityFilter, setCityFilter] = useState('ALL');
 
   const [reviewingDriver, setReviewingDriver] = useState<Driver | null>(null);
+  const [resendingDriverId, setResendingDriverId] = useState<string | null>(null);
+  const [onboardingNotice, setOnboardingNotice] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
 
   const fetchDrivers = async () => {
     setIsLoading(true);
@@ -104,6 +108,35 @@ export default function DriversPage() {
     }
   };
 
+  const handleResendOnboarding = async (e: React.MouseEvent, driver: Driver) => {
+    e.stopPropagation();
+    if (resendingDriverId) return;
+    setResendingDriverId(driver.id);
+    setOnboardingNotice(null);
+    try {
+      const updated = await DriverService.resendOnboardingEmail(driver.id);
+      setDrivers((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+      if (updated.provisioning?.emailSent) {
+        setOnboardingNotice({
+          type: 'success',
+          message: `New temporary password generated and onboarding email sent to ${driver.fullName}.`,
+        });
+      } else {
+        setOnboardingNotice({
+          type: 'danger',
+          message: updated.provisioning?.error || `Failed to send onboarding email to ${driver.fullName}.`,
+        });
+      }
+    } catch (err: any) {
+      setOnboardingNotice({
+        type: 'danger',
+        message: err.message || 'Unable to resend onboarding email.',
+      });
+    } finally {
+      setResendingDriverId(null);
+    }
+  };
+
   const columns: Column<Driver>[] = [
     {
       key: 'fullName',
@@ -157,6 +190,18 @@ export default function DriversPage() {
       render: (driver) => <StatusBadge status={driver.verificationStatus} size="sm" />,
     },
     {
+      key: 'onboardingStatus',
+      header: 'Provisioning & Email',
+      render: (driver) => (
+        <div className="d-flex flex-column gap-1">
+          <StatusBadge status={driver.onboardingStatus || 'PENDING_ONBOARDING'} size="sm" />
+          <span className="text-muted" style={{ fontSize: '0.6875rem' }}>
+            Email: {(driver.onboardingEmailStatus || 'NOT_SENT').replace(/_/g, ' ')}
+          </span>
+        </div>
+      ),
+    },
+    {
       key: 'availabilityStatus',
       header: 'Duty Status',
       sortable: true,
@@ -208,6 +253,21 @@ export default function DriversPage() {
           >
             <Eye size={16} />
           </Link>
+          {driver.mustChangePassword !== false && driver.email && driver.accountStatus !== 'SUSPENDED' && (
+            <button
+              type="button"
+              disabled={resendingDriverId === driver.id}
+              className="btn btn-light btn-sm p-1.5 text-warning hover-gold border-0"
+              title="Regenerate Temp Password & Resend Onboarding Email"
+              onClick={(e) => handleResendOnboarding(e, driver)}
+            >
+              {resendingDriverId === driver.id ? (
+                <RefreshCw size={15} className="spin" />
+              ) : (
+                <Mail size={15} />
+              )}
+            </button>
+          )}
           {driver.verificationStatus === 'PENDING' && (
             <button
               type="button"
@@ -254,6 +314,17 @@ export default function DriversPage() {
       />
 
       {/* Driver KPI Cards */}
+      {onboardingNotice && (
+        <div className={`alert alert-${onboardingNotice.type} py-2.5 px-3 mb-3 small d-flex justify-content-between align-items-center`}>
+          <span>{onboardingNotice.message}</span>
+          <button
+            type="button"
+            className="btn-close btn-sm"
+            aria-label="Close"
+            onClick={() => setOnboardingNotice(null)}
+          />
+        </div>
+      )}
       <div className="row g-3 mb-4">
         <div className="col-6 col-lg-2">
           <StatCard

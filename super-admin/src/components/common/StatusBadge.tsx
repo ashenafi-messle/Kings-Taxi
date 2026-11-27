@@ -37,6 +37,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     case 'CHECKED_OUT':
     case 'OPERATIONAL':
     case 'PAID':
+    case 'ONBOARDING_EMAIL_SENT':
+    case 'SENT':
       badgeStyle = {
         backgroundColor: '#EAF7EE',
         color: '#15803D',
@@ -59,6 +61,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     case 'DEGRADED':
     case 'MEDIUM':
     case 'HIGH':
+    case 'PENDING_ONBOARDING':
+    case 'NOT_SENT':
       badgeStyle = {
         backgroundColor: '#FEF6E4',
         color: '#B45309',
@@ -77,6 +81,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     case 'MAINTENANCE':
     case 'UNDER_MAINTENANCE':
     case 'FAILED':
+    case 'ONBOARDING_EMAIL_FAILED':
+    case 'ONBOARDING_EXPIRED':
       badgeStyle = {
         backgroundColor: '#FEE8E8',
         color: '#B91C1C',

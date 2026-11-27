@@ -141,68 +141,59 @@ export class DriverService {
   }
 
   /**
-   * Registers a new driver in PostgreSQL through the central backend
+   * Registers a new driver in PostgreSQL through the central backend,
+   * provisions their auth account, and triggers onboarding email delivery.
    */
   static async createDriver(payload: Partial<Driver>): Promise<Driver> {
-    try {
-      const res = await apiRequest<Driver>('/admin/drivers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: payload.fullName,
-          phone: payload.phone,
-          email: payload.email,
-          city: payload.city,
-          address: payload.address,
-          licenseNumber: payload.licenseNumber,
-          licenseExpiry: payload.licenseExpiry,
-          dateOfBirth: payload.dateOfBirth,
-          gender: payload.gender,
-          emergencyContactName: payload.emergencyContact?.name,
-          emergencyContactPhone: payload.emergencyContact?.phone,
-          emergencyContactRelationship: payload.emergencyContact?.relationship,
-          documents: payload.documents,
-        }),
-      });
-
-      if (res.success && res.data) {
-        fallbackDriversData = [res.data, ...fallbackDriversData];
-        return res.data;
-      }
-      if (res.error) {
-        throw new Error(res.error);
-      }
-    } catch (err) {
-      console.warn('[DriverService] Failed to create driver via API:', err);
-      throw err;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (payload.idempotencyKey) {
+      headers['Idempotency-Key'] = payload.idempotencyKey;
     }
 
-    // Offline fallback
-    const newId = `drv_${Date.now()}`;
-    const newDriver: Driver = {
-      id: newId,
-      driverId: `DRV-${1050 + fallbackDriversData.length}`,
-      fullName: payload.fullName || 'New Driver',
-      email: payload.email || '',
-      phone: payload.phone || '',
-      city: payload.city || 'Gondar',
-      licenseNumber: payload.licenseNumber || 'ETH-PENDING',
-      licenseExpiry: payload.licenseExpiry || '2027-12-31',
-      verificationStatus: payload.verificationStatus || 'PENDING',
-      documents: payload.documents || [],
-      availabilityStatus: 'OFFLINE',
-      rating: 5.0,
-      totalRides: 0,
-      completedRides: 0,
-      cancelledRides: 0,
-      totalEarningsETB: 0,
-      distanceCoveredKm: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    const res = await apiRequest<Driver>('/admin/drivers', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        fullName: payload.fullName,
+        phone: payload.phone,
+        email: payload.email,
+        city: payload.city,
+        address: payload.address,
+        licenseNumber: payload.licenseNumber,
+        licenseExpiry: payload.licenseExpiry,
+        dateOfBirth: payload.dateOfBirth,
+        gender: payload.gender,
+        emergencyContactName: payload.emergencyContact?.name,
+        emergencyContactPhone: payload.emergencyContact?.phone,
+        emergencyContactRelationship: payload.emergencyContact?.relationship,
+        idempotencyKey: payload.idempotencyKey,
+        documents: payload.documents,
+      }),
+    });
 
-    fallbackDriversData = [newDriver, ...fallbackDriversData];
-    return newDriver;
+    if (res.success && res.data) {
+      fallbackDriversData = [res.data, ...fallbackDriversData.filter((d) => d.id !== res.data!.id)];
+      return res.data;
+    }
+
+    throw new Error(res.error || 'Failed to register driver.');
+  }
+
+  /**
+   * Regenerates a temporary password and resends the onboarding email
+   * for a pending driver account.
+   */
+  static async resendOnboardingEmail(id: string): Promise<Driver> {
+    const res = await apiRequest<Driver>(`/admin/drivers/${id}/resend-onboarding`, {
+      method: 'POST',
+    });
+
+    if (res.success && res.data) {
+      fallbackDriversData = fallbackDriversData.map((d) => (d.id === id ? res.data! : d));
+      return res.data;
+    }
+
+    throw new Error(res.error || 'Failed to resend onboarding email.');
   }
 
   /**

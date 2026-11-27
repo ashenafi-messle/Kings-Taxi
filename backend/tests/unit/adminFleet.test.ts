@@ -58,6 +58,14 @@ vi.mock('../../src/core/database/prisma', () => ({
   prisma: mockPrismaClient,
 }));
 
+vi.mock('../../src/integrations/email/email.service', () => ({
+  EmailService: {
+    getInstance: () => ({
+      sendDriverOnboardingEmail: vi.fn().mockResolvedValue({ success: true, provider: 'Test Mock' }),
+    }),
+  },
+}));
+
 import { adminDriverService } from '../../src/modules/drivers/adminDriver.service';
 import { adminVehicleService } from '../../src/modules/vehicles/adminVehicle.service';
 

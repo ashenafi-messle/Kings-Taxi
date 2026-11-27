@@ -4,9 +4,19 @@ import {
   AccountStatus,
   DriverVerificationStatus,
   DriverAvailabilityStatus,
+  DriverOnboardingStatus,
+  OnboardingEmailStatus,
+  ActorType,
 } from '@prisma/client';
 import { AppError } from '../../core/errors/appError';
 import { logger } from '../../core/logging/logger';
+import { auditService } from '../../core/audit/audit.service';
+import { EmailService } from '../../integrations/email/email.service';
+import {
+  generateSecureTemporaryPassword,
+  hashDriverPassword,
+  computeTempPasswordExpiry,
+} from '../../utils/driverPassword';
 import { normalizeEthiopianPhone } from '../../utils/phone';
 import {
   validateAndUploadDocument,
@@ -14,15 +24,14 @@ import {
   UploadedAssetReference,
 } from '../../utils/documentStorage';
 
-// Scrypt hashing helper consistent with platform auth
-const hashPasswordAsync = (password: string, salt: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 }, (err, derivedKey) => {
-      if (err) reject(err);
-      else resolve(derivedKey.toString('hex'));
-    });
-  });
-};
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export interface AdminActorContext {
+  actorId?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
 
 export interface DriverListParams {
   search?: string;
@@ -51,6 +60,7 @@ export interface CreateDriverPayload {
   emergencyContactPhone?: string;
   emergencyContactRelationship?: string;
   assignedVehicleId?: string;
+  idempotencyKey?: string;
   documents?: Array<{
     documentType: string;
     documentNumber?: string;
@@ -229,6 +239,16 @@ export class AdminDriverService {
         verificationStatus: d.verificationStatus,
         accountStatus: d.accountStatus,
         availabilityStatus: d.availabilityStatus,
+        mustChangePassword: d.mustChangePassword,
+        onboardingStatus: d.onboardingStatus,
+        onboardingEmailStatus: d.onboardingEmailStatus,
+        onboardingEmailSentAt: d.onboardingEmailSentAt ? d.onboardingEmailSentAt.toISOString() : null,
+        onboardingEmailLastAttemptAt: d.onboardingEmailLastAttemptAt ? d.onboardingEmailLastAttemptAt.toISOString() : null,
+        onboardingEmailError: d.onboardingEmailError || null,
+        tempPasswordExpiresAt: d.tempPasswordExpiresAt ? d.tempPasswordExpiresAt.toISOString() : null,
+        accountProvisionedAt: d.accountProvisionedAt ? d.accountProvisionedAt.toISOString() : null,
+        accountActivatedAt: d.accountActivatedAt ? d.accountActivatedAt.toISOString() : null,
+        provisionedBy: d.provisionedBy || null,
         city: d.city,
         address: d.address,
         licenseNumber: d.licenseNumber || '',
@@ -399,6 +419,16 @@ export class AdminDriverService {
       accountStatus: driver.accountStatus,
       verificationStatus: driver.verificationStatus,
       availabilityStatus: driver.availabilityStatus,
+      mustChangePassword: driver.mustChangePassword,
+      onboardingStatus: driver.onboardingStatus,
+      onboardingEmailStatus: driver.onboardingEmailStatus,
+      onboardingEmailSentAt: driver.onboardingEmailSentAt ? driver.onboardingEmailSentAt.toISOString() : null,
+      onboardingEmailLastAttemptAt: driver.onboardingEmailLastAttemptAt ? driver.onboardingEmailLastAttemptAt.toISOString() : null,
+      onboardingEmailError: driver.onboardingEmailError || null,
+      tempPasswordExpiresAt: driver.tempPasswordExpiresAt ? driver.tempPasswordExpiresAt.toISOString() : null,
+      accountProvisionedAt: driver.accountProvisionedAt ? driver.accountProvisionedAt.toISOString() : null,
+      accountActivatedAt: driver.accountActivatedAt ? driver.accountActivatedAt.toISOString() : null,
+      provisionedBy: driver.provisionedBy || null,
       city: driver.city,
       address: driver.address || '',
       gender: driver.gender || 'MALE',
@@ -449,14 +479,55 @@ export class AdminDriverService {
   }
 
   /**
-   * Register a new driver through Super Admin
+   * Register a new driver through Super Admin, provision their authentication account,
+   * generate a cryptographically secure temporary password, and send the onboarding email.
    */
-  async createDriver(payload: CreateDriverPayload, adminIdentifier: string) {
+  async createDriver(
+    payload: CreateDriverPayload,
+    adminIdentifier: string,
+    actorContext: AdminActorContext = {}
+  ) {
+    if (!payload.fullName || !payload.fullName.trim()) {
+      throw new AppError('Driver full name is required.', 400);
+    }
+
     const phoneRes = normalizeEthiopianPhone(payload.phone);
     if (!phoneRes.isValid) {
       throw new AppError('Invalid Ethiopian phone number. Format: +251 9XXXXXXXX or 09XXXXXXXX', 400);
     }
     const cleanPhone = phoneRes.normalized;
+
+    if (!payload.email || !payload.email.trim()) {
+      throw new AppError('Driver email address is required for account provisioning and credential delivery.', 400);
+    }
+    const cleanEmail = payload.email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      throw new AppError('Please provide a valid driver email address.', 400);
+    }
+
+    const cleanIdempotencyKey =
+      payload.idempotencyKey && payload.idempotencyKey.trim()
+        ? payload.idempotencyKey.trim().slice(0, 128)
+        : null;
+
+    if (cleanIdempotencyKey) {
+      const existingByKey = await prisma.driver.findUnique({
+        where: { idempotencyKey: cleanIdempotencyKey },
+      });
+      if (existingByKey) {
+        const existingProfile = await this.getDriverById(existingByKey.id);
+        return {
+          ...existingProfile,
+          provisioning: {
+            emailSent: existingByKey.onboardingEmailStatus === OnboardingEmailStatus.SENT,
+            onboardingStatus: existingByKey.onboardingStatus,
+            onboardingEmailStatus: existingByKey.onboardingEmailStatus,
+            error: existingByKey.onboardingEmailError || undefined,
+            deduplicated: true,
+          },
+        };
+      }
+    }
 
     // Check unique phone number
     const existingPhone = await prisma.driver.findUnique({
@@ -466,23 +537,19 @@ export class AdminDriverService {
       throw new AppError('A driver with this phone number is already registered.', 409);
     }
 
-    // Check unique email if provided
-    let cleanEmail: string | undefined = undefined;
-    if (payload.email && payload.email.trim()) {
-      cleanEmail = payload.email.trim().toLowerCase();
-      const existingEmail = await prisma.driver.findUnique({
-        where: { email: cleanEmail },
-      });
-      if (existingEmail) {
-        throw new AppError('A driver with this email address is already registered.', 409);
-      }
+    // Check unique email
+    const existingEmail = await prisma.driver.findUnique({
+      where: { email: cleanEmail },
+    });
+    if (existingEmail) {
+      throw new AppError('A driver with this email address is already registered.', 409);
     }
 
-    // Hash password or default temporary credential
-    const defaultPlainPass = payload.password || `KingsDriver#${crypto.randomInt(1000, 9999)}`;
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = await hashPasswordAsync(defaultPlainPass, salt);
-    const passwordHash = `${hash}:${salt}`;
+    // Generate cryptographically secure temporary password (never stored in plaintext or returned)
+    const temporaryPassword = generateSecureTemporaryPassword(12);
+    const passwordHash = await hashDriverPassword(temporaryPassword);
+    const now = new Date();
+    const expiresAt = computeTempPasswordExpiry();
 
     const newDriverId = crypto.randomUUID();
 
@@ -563,12 +630,20 @@ export class AdminDriverService {
             id: newDriverId,
             fullName: payload.fullName.trim(),
             phoneNumber: cleanPhone,
-            email: cleanEmail || null,
+            email: cleanEmail,
             passwordHash,
             profileImage: cleanProfileImage,
             accountStatus: AccountStatus.PENDING_VERIFICATION,
             verificationStatus: DriverVerificationStatus.PENDING,
             availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+            mustChangePassword: true,
+            onboardingStatus: DriverOnboardingStatus.PENDING_ONBOARDING,
+            onboardingEmailStatus: OnboardingEmailStatus.PENDING,
+            onboardingEmailLastAttemptAt: now,
+            tempPasswordExpiresAt: expiresAt,
+            accountProvisionedAt: now,
+            provisionedBy: adminIdentifier,
+            idempotencyKey: cleanIdempotencyKey,
             city: payload.city || 'Gondar',
             address: payload.address || null,
             licenseNumber: payload.licenseNumber || null,
@@ -613,14 +688,269 @@ export class AdminDriverService {
         return driver;
       });
 
-      logger.info({ driverId: created.id, admin: adminIdentifier }, '[AdminDriverService] Driver registered successfully');
-      return this.getDriverById(created.id);
+      logger.info({ driverId: created.id, admin: adminIdentifier }, '[AdminDriverService] Driver registered and provisioned');
+
+      // Audit provisioning without recording any sensitive credentials
+      await Promise.all([
+        auditService.record({
+          actorId: actorContext.actorId,
+          actorType: ActorType.ADMIN,
+          action: 'DRIVER_PROFILE_REGISTERED',
+          entityType: 'DRIVER',
+          entityId: created.id,
+          ipAddress: actorContext.ipAddress,
+          userAgent: actorContext.userAgent,
+          metadata: { admin: adminIdentifier, city: created.city },
+        }),
+        auditService.record({
+          actorId: actorContext.actorId,
+          actorType: ActorType.ADMIN,
+          action: 'DRIVER_ACCOUNT_PROVISIONED',
+          entityType: 'DRIVER',
+          entityId: created.id,
+          ipAddress: actorContext.ipAddress,
+          userAgent: actorContext.userAgent,
+          metadata: { admin: adminIdentifier, mustChangePassword: true, expiresAt: expiresAt.toISOString() },
+        }),
+        auditService.record({
+          actorId: actorContext.actorId,
+          actorType: ActorType.ADMIN,
+          action: 'DRIVER_ONBOARDING_EMAIL_INITIATED',
+          entityType: 'DRIVER',
+          entityId: created.id,
+          ipAddress: actorContext.ipAddress,
+          userAgent: actorContext.userAgent,
+          metadata: { admin: adminIdentifier },
+        }),
+      ]);
+
+      // Send onboarding email outside the database transaction
+      let emailResult: { success: boolean; provider?: string; error?: string };
+      try {
+        emailResult = await EmailService.getInstance().sendDriverOnboardingEmail({
+          to: cleanEmail,
+          driverName: created.fullName,
+          registeredEmail: cleanEmail,
+          registeredPhone: cleanPhone,
+          temporaryPassword,
+          expiresAt,
+        });
+      } catch (emailErr: any) {
+        emailResult = { success: false, error: emailErr?.message || 'Unexpected email dispatch error' };
+      }
+
+      const attemptAt = new Date();
+      await prisma.driver.update({
+        where: { id: created.id },
+        data: emailResult.success
+          ? {
+              onboardingStatus: DriverOnboardingStatus.ONBOARDING_EMAIL_SENT,
+              onboardingEmailStatus: OnboardingEmailStatus.SENT,
+              onboardingEmailSentAt: attemptAt,
+              onboardingEmailLastAttemptAt: attemptAt,
+              onboardingEmailError: null,
+            }
+          : {
+              onboardingStatus: DriverOnboardingStatus.ONBOARDING_EMAIL_FAILED,
+              onboardingEmailStatus: OnboardingEmailStatus.FAILED,
+              onboardingEmailLastAttemptAt: attemptAt,
+              onboardingEmailError: emailResult.error || 'Email delivery failed',
+            },
+      });
+
+      await auditService.record({
+        actorId: actorContext.actorId,
+        actorType: ActorType.ADMIN,
+        action: emailResult.success ? 'DRIVER_ONBOARDING_EMAIL_SENT' : 'DRIVER_ONBOARDING_EMAIL_FAILED',
+        entityType: 'DRIVER',
+        entityId: created.id,
+        ipAddress: actorContext.ipAddress,
+        userAgent: actorContext.userAgent,
+        metadata: {
+          admin: adminIdentifier,
+          provider: emailResult.provider || null,
+          error: emailResult.success ? null : emailResult.error || 'Email delivery failed',
+        },
+      });
+
+      const driverProfile = await this.getDriverById(created.id);
+      return {
+        ...driverProfile,
+        provisioning: {
+          emailSent: emailResult.success,
+          onboardingStatus: emailResult.success
+            ? DriverOnboardingStatus.ONBOARDING_EMAIL_SENT
+            : DriverOnboardingStatus.ONBOARDING_EMAIL_FAILED,
+          onboardingEmailStatus: emailResult.success
+            ? OnboardingEmailStatus.SENT
+            : OnboardingEmailStatus.FAILED,
+          provider: emailResult.provider,
+          error: emailResult.success ? undefined : emailResult.error,
+        },
+      };
     } catch (txError: any) {
       if (uploadedAssets.length > 0) {
         await cleanupUploadedAssets(uploadedAssets);
       }
       throw txError;
     }
+  }
+
+  /**
+   * Resend onboarding instructions by regenerating a fresh temporary password
+   * (since plaintext passwords are never stored) and sending the onboarding email.
+   * Rejects accounts that have already set a permanent password.
+   */
+  async resendDriverOnboarding(
+    driverId: string,
+    adminIdentifier: string,
+    actorContext: AdminActorContext = {}
+  ) {
+    if (!UUID_REGEX.test(driverId)) {
+      throw new AppError('Invalid driver identifier format.', 400);
+    }
+
+    const driver = await prisma.driver.findFirst({
+      where: { id: driverId, deletedAt: null },
+    });
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+
+    if (driver.accountStatus === AccountStatus.SUSPENDED || driver.accountStatus === AccountStatus.DELETED) {
+      throw new AppError('Cannot send onboarding credentials to a suspended or deleted driver account.', 400);
+    }
+
+    if (!driver.email || !EMAIL_REGEX.test(driver.email.trim())) {
+      throw new AppError('Driver does not have a valid registered email address.', 400);
+    }
+
+    if (!driver.mustChangePassword) {
+      throw new AppError(
+        'This driver has already activated their account and set a permanent password. Onboarding resend is only allowed for pending accounts.',
+        400
+      );
+    }
+
+    const temporaryPassword = generateSecureTemporaryPassword(12);
+    const passwordHash = await hashDriverPassword(temporaryPassword);
+    const now = new Date();
+    const expiresAt = computeTempPasswordExpiry();
+    const cleanEmail = driver.email.trim().toLowerCase();
+
+    await prisma.$transaction(async (tx) => {
+      await tx.driver.update({
+        where: { id: driver.id },
+        data: {
+          passwordHash,
+          mustChangePassword: true,
+          tempPasswordExpiresAt: expiresAt,
+          onboardingStatus: DriverOnboardingStatus.PENDING_ONBOARDING,
+          onboardingEmailStatus: OnboardingEmailStatus.PENDING,
+          onboardingEmailLastAttemptAt: now,
+          onboardingEmailError: null,
+        },
+      });
+
+      await (tx as any).driverStatusHistory.create({
+        data: {
+          driverId: driver.id,
+          statusType: 'ONBOARDING_RETRY',
+          fromStatus: driver.onboardingStatus,
+          toStatus: DriverOnboardingStatus.PENDING_ONBOARDING,
+          reason: 'Administrator regenerated temporary credential and retried onboarding email',
+          changedBy: adminIdentifier,
+        },
+      });
+    });
+
+    await Promise.all([
+      auditService.record({
+        actorId: actorContext.actorId,
+        actorType: ActorType.ADMIN,
+        action: 'DRIVER_TEMP_CREDENTIAL_REGENERATED',
+        entityType: 'DRIVER',
+        entityId: driver.id,
+        ipAddress: actorContext.ipAddress,
+        userAgent: actorContext.userAgent,
+        metadata: { admin: adminIdentifier, expiresAt: expiresAt.toISOString() },
+      }),
+      auditService.record({
+        actorId: actorContext.actorId,
+        actorType: ActorType.ADMIN,
+        action: 'DRIVER_ONBOARDING_EMAIL_RETRIED',
+        entityType: 'DRIVER',
+        entityId: driver.id,
+        ipAddress: actorContext.ipAddress,
+        userAgent: actorContext.userAgent,
+        metadata: { admin: adminIdentifier },
+      }),
+    ]);
+
+    let emailResult: { success: boolean; provider?: string; error?: string };
+    try {
+      emailResult = await EmailService.getInstance().sendDriverOnboardingEmail({
+        to: cleanEmail,
+        driverName: driver.fullName,
+        registeredEmail: cleanEmail,
+        registeredPhone: driver.phoneNumber,
+        temporaryPassword,
+        expiresAt,
+      });
+    } catch (emailErr: any) {
+      emailResult = { success: false, error: emailErr?.message || 'Unexpected email dispatch error' };
+    }
+
+    const attemptAt = new Date();
+    await prisma.driver.update({
+      where: { id: driver.id },
+      data: emailResult.success
+        ? {
+            onboardingStatus: DriverOnboardingStatus.ONBOARDING_EMAIL_SENT,
+            onboardingEmailStatus: OnboardingEmailStatus.SENT,
+            onboardingEmailSentAt: attemptAt,
+            onboardingEmailLastAttemptAt: attemptAt,
+            onboardingEmailError: null,
+          }
+        : {
+            onboardingStatus: DriverOnboardingStatus.ONBOARDING_EMAIL_FAILED,
+            onboardingEmailStatus: OnboardingEmailStatus.FAILED,
+            onboardingEmailLastAttemptAt: attemptAt,
+            onboardingEmailError: emailResult.error || 'Email delivery failed',
+          },
+    });
+
+    await auditService.record({
+      actorId: actorContext.actorId,
+      actorType: ActorType.ADMIN,
+      action: emailResult.success ? 'DRIVER_ONBOARDING_EMAIL_SENT' : 'DRIVER_ONBOARDING_EMAIL_FAILED',
+      entityType: 'DRIVER',
+      entityId: driver.id,
+      ipAddress: actorContext.ipAddress,
+      userAgent: actorContext.userAgent,
+      metadata: {
+        admin: adminIdentifier,
+        isRetry: true,
+        provider: emailResult.provider || null,
+        error: emailResult.success ? null : emailResult.error || 'Email delivery failed',
+      },
+    });
+
+    const driverProfile = await this.getDriverById(driver.id);
+    return {
+      ...driverProfile,
+      provisioning: {
+        emailSent: emailResult.success,
+        onboardingStatus: emailResult.success
+          ? DriverOnboardingStatus.ONBOARDING_EMAIL_SENT
+          : DriverOnboardingStatus.ONBOARDING_EMAIL_FAILED,
+        onboardingEmailStatus: emailResult.success
+          ? OnboardingEmailStatus.SENT
+          : OnboardingEmailStatus.FAILED,
+        provider: emailResult.provider,
+        error: emailResult.success ? undefined : emailResult.error,
+      },
+    };
   }
 
   /**

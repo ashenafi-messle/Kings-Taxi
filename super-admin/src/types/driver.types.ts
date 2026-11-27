@@ -5,6 +5,22 @@
 export type DriverVerificationStatus = 'VERIFIED' | 'APPROVED' | 'PENDING' | 'REJECTED' | 'SUSPENDED' | 'DOCUMENT_REQUIRED';
 export type DriverAvailabilityStatus = 'ONLINE' | 'OFFLINE' | 'AVAILABLE' | 'BUSY' | 'ON_TRIP' | 'SUSPENDED' | 'TEMPORARILY_UNAVAILABLE';
 export type DocumentReviewStatus = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'REQUIRES_RESUBMISSION';
+export type DriverOnboardingStatus =
+  | 'PENDING_ONBOARDING'
+  | 'ONBOARDING_EMAIL_SENT'
+  | 'ONBOARDING_EMAIL_FAILED'
+  | 'ACTIVE'
+  | 'ONBOARDING_EXPIRED';
+export type OnboardingEmailStatus = 'NOT_SENT' | 'PENDING' | 'SENT' | 'FAILED';
+
+export interface DriverProvisioningResult {
+  emailSent: boolean;
+  onboardingStatus: DriverOnboardingStatus;
+  onboardingEmailStatus: OnboardingEmailStatus;
+  provider?: string;
+  error?: string;
+  deduplicated?: boolean;
+}
 
 export interface DriverDocument {
   id: string;
@@ -77,6 +93,21 @@ export interface Driver {
   cancelledRides: number;
   totalEarningsETB: number;
   distanceCoveredKm: number;
+
+  // Account Provisioning & Onboarding Lifecycle
+  accountStatus?: string;
+  mustChangePassword?: boolean;
+  onboardingStatus?: DriverOnboardingStatus;
+  onboardingEmailStatus?: OnboardingEmailStatus;
+  onboardingEmailSentAt?: string | null;
+  onboardingEmailLastAttemptAt?: string | null;
+  onboardingEmailError?: string | null;
+  tempPasswordExpiresAt?: string | null;
+  accountProvisionedAt?: string | null;
+  accountActivatedAt?: string | null;
+  provisionedBy?: string | null;
+  idempotencyKey?: string;
+  provisioning?: DriverProvisioningResult;
 
   createdAt: string;
   updatedAt: string;

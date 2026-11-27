@@ -1,15 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserPlus, ArrowLeft, Save, AlertCircle, ShieldCheck } from 'lucide-react';
+import { UserPlus, ArrowLeft, Save, AlertCircle, ShieldCheck, CheckCircle2, MailWarning, RefreshCw } from 'lucide-react';
 import { PageHeader } from '../../../../components/common/PageHeader';
 import { DriverService } from '../../../../services/driverService';
+import { Driver } from '../../../../types';
 import { DocumentUploadField, DocumentUploadValue } from '../../../../components/common/DocumentUploadField';
 
 export default function NewDriverPage() {
   const router = useRouter();
+  const idempotencyKeyRef = useRef<string>(
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `drv_idem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  );
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '+251 9',
@@ -23,7 +29,13 @@ export default function NewDriverPage() {
   const [policeDoc, setPoliceDoc] = useState<DocumentUploadValue | null>(null);
   const [badgeDoc, setBadgeDoc] = useState<DocumentUploadValue | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRetryingEmail, setIsRetryingEmail] = useState(false);
   const [error, setError] = useState('');
+  const [createdDriver, setCreatedDriver] = useState<Driver | null>(null);
+  const [resultBanner, setResultBanner] = useState<{
+    type: 'success' | 'warning';
+    message: string;
+  } | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -32,7 +44,9 @@ export default function NewDriverPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading || createdDriver) return;
     setError('');
+    setResultBanner(null);
 
     if (!formData.fullName.trim()) {
       setError('Driver full name is required.');
@@ -40,6 +54,11 @@ export default function NewDriverPage() {
     }
     if (!formData.phone.trim() || formData.phone.length < 10) {
       setError('Please provide a valid Ethiopian phone number.');
+      return;
+    }
+    const trimmedEmail = formData.email.trim();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('A valid driver email address is required for account provisioning and password delivery.');
       return;
     }
     if (!formData.licenseNumber.trim()) {
@@ -107,22 +126,63 @@ export default function NewDriverPage() {
         });
       }
 
-      await DriverService.createDriver({
+      const created = await DriverService.createDriver({
         fullName: formData.fullName,
         phone: formData.phone,
-        email: formData.email || undefined,
+        email: formData.email.trim(),
         licenseNumber: formData.licenseNumber,
         city: formData.city,
         assignedVehiclePlate: formData.assignedVehiclePlate || undefined,
         verificationStatus: 'PENDING',
+        idempotencyKey: idempotencyKeyRef.current,
         documents: docs,
       });
 
-      router.push('/drivers');
+      setCreatedDriver(created);
+      if (created.provisioning?.emailSent) {
+        setResultBanner({
+          type: 'success',
+          message:
+            'Driver registered successfully. The login password has been generated and the onboarding email has been initiated.',
+        });
+      } else {
+        setResultBanner({
+          type: 'warning',
+          message:
+            'Driver profile and account were successfully created, but the onboarding email could not be sent. You can retry email delivery from the driver profile.',
+        });
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to onboard new driver.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRetryEmail = async () => {
+    if (!createdDriver || isRetryingEmail) return;
+    setIsRetryingEmail(true);
+    try {
+      const updated = await DriverService.resendOnboardingEmail(createdDriver.id);
+      setCreatedDriver(updated);
+      if (updated.provisioning?.emailSent) {
+        setResultBanner({
+          type: 'success',
+          message:
+            'A new temporary password has been generated and the onboarding email was sent successfully.',
+        });
+      } else {
+        setResultBanner({
+          type: 'warning',
+          message:
+            updated.provisioning?.error ||
+            'Onboarding email retry failed. Please verify email provider settings and retry from the driver profile.',
+        });
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to retry onboarding email.');
+    } finally {
+      setIsRetryingEmail(false);
     }
   };
 
@@ -155,6 +215,53 @@ export default function NewDriverPage() {
             </div>
 
             <div className="card-body p-4">
+              {resultBanner && createdDriver && (
+                <div
+                  className={`alert ${
+                    resultBanner.type === 'success' ? 'alert-success' : 'alert-warning'
+                  } d-flex align-items-start gap-2.5 py-3 px-3 mb-4 rounded-3 text-sm`}
+                >
+                  {resultBanner.type === 'success' ? (
+                    <CheckCircle2 size={18} className="flex-shrink-0 mt-0.5 text-success" />
+                  ) : (
+                    <MailWarning size={18} className="flex-shrink-0 mt-0.5 text-warning" />
+                  )}
+                  <div className="flex-grow-1">
+                    <div className="fw-semibold mb-1">
+                      {resultBanner.type === 'success'
+                        ? 'Driver Provisioned & Onboarding Initiated'
+                        : 'Account Provisioned — Email Delivery Failed'}
+                    </div>
+                    <div className="small mb-2">{resultBanner.message}</div>
+                    <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
+                      <Link
+                        href={`/drivers/${createdDriver.id}`}
+                        className="btn btn-sm btn-dark py-1 px-2.5 text-xs"
+                      >
+                        View Driver Profile
+                      </Link>
+                      <Link
+                        href="/drivers"
+                        className="btn btn-sm btn-outline-secondary py-1 px-2.5 text-xs"
+                      >
+                        Back to Drivers List
+                      </Link>
+                      {resultBanner.type === 'warning' && (
+                        <button
+                          type="button"
+                          disabled={isRetryingEmail}
+                          onClick={handleRetryEmail}
+                          className="btn btn-sm btn-gold py-1 px-2.5 text-xs d-inline-flex align-items-center gap-1"
+                        >
+                          <RefreshCw size={12} className={isRetryingEmail ? 'spin' : ''} />
+                          <span>{isRetryingEmail ? 'Retrying...' : 'Retry Onboarding Email'}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {error && (
                 <div className="alert alert-danger d-flex align-items-start gap-2.5 py-3 px-3 mb-4 rounded-3 text-sm">
                   <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-danger" />
@@ -220,11 +327,12 @@ export default function NewDriverPage() {
 
                   <div className="col-12 col-md-6">
                     <label className="form-label text-sm fw-medium text-obsidian mb-1">
-                      Email Address (Optional)
+                      Email Address *
                     </label>
                     <input
                       type="email"
                       name="email"
+                      required
                       value={formData.email}
                       onChange={handleChange}
                       placeholder="driver@example.com"
@@ -349,7 +457,7 @@ export default function NewDriverPage() {
                   </Link>
                   <button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isLoading || Boolean(createdDriver)}
                     className="btn btn-gold btn-sm px-4 fw-semibold d-flex align-items-center gap-1.5"
                   >
                     {isLoading ? (
@@ -357,7 +465,7 @@ export default function NewDriverPage() {
                     ) : (
                       <Save size={15} />
                     )}
-                    <span>Save Driver Profile</span>
+                    <span>{createdDriver ? 'Driver Saved' : isLoading ? 'Provisioning...' : 'Save Driver Profile'}</span>
                   </button>
                 </div>
               </form>

@@ -66,8 +66,22 @@ export class AdminDriverController {
   async createDriver(req: Request, res: Response): Promise<void> {
     try {
       const adminIdentifier = req.user?.email || req.user?.sub || 'Super Admin';
-      const driver = await adminDriverService.createDriver(req.body, adminIdentifier);
-      ApiResponse.success(res, driver, 'Driver created successfully', 201);
+      const idempotencyKey =
+        (req.headers['idempotency-key'] as string | undefined) || req.body?.idempotencyKey;
+      const driver = await adminDriverService.createDriver(
+        { ...req.body, idempotencyKey },
+        adminIdentifier,
+        {
+          actorId: req.user?.sub,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        }
+      );
+      const emailSent = (driver as any)?.provisioning?.emailSent;
+      const message = emailSent
+        ? 'Driver registered successfully. The login password has been generated and the onboarding email has been initiated.'
+        : 'Driver profile and account were created, but the onboarding email could not be sent. You can retry email delivery from the driver profile.';
+      ApiResponse.success(res, driver, message, 201);
     } catch (err: any) {
       if (err instanceof AppError) {
         ApiResponse.error(res, err.code || 'VALIDATION_ERROR', err.message, err.statusCode);
@@ -75,6 +89,30 @@ export class AdminDriverController {
       }
       logger.error({ err: err.message }, '[AdminDriverController] Failed to create driver');
       ApiResponse.serverError(res, err.message || 'Unable to create driver');
+    }
+  }
+
+  async resendOnboarding(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const adminIdentifier = req.user?.email || req.user?.sub || 'Super Admin';
+      const result = await adminDriverService.resendDriverOnboarding(id, adminIdentifier, {
+        actorId: req.user?.sub,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+      const emailSent = (result as any)?.provisioning?.emailSent;
+      const message = emailSent
+        ? 'A new temporary password was generated and the onboarding email has been sent.'
+        : 'Temporary credential was regenerated, but the onboarding email delivery failed.';
+      ApiResponse.success(res, result, message);
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        ApiResponse.error(res, err.code || 'ONBOARDING_ERROR', err.message, err.statusCode);
+        return;
+      }
+      logger.error({ err: err.message }, '[AdminDriverController] Failed to resend driver onboarding');
+      ApiResponse.serverError(res, err.message || 'Unable to resend driver onboarding');
     }
   }
 

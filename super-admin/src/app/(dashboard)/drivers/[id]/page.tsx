@@ -19,6 +19,8 @@ import {
   ShieldCheck,
   ArrowLeft,
   Clock,
+  KeyRound,
+  RefreshCw,
 } from 'lucide-react';
 import { PageHeader } from '../../../../components/common/PageHeader';
 import { StatusBadge } from '../../../../components/common/StatusBadge';
@@ -38,6 +40,8 @@ export default function DriverDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isResendingOnboarding, setIsResendingOnboarding] = useState(false);
+  const [onboardingFeedback, setOnboardingFeedback] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -109,6 +113,34 @@ export default function DriverDetailPage() {
         loadDriver();
       },
     });
+  };
+
+  const handleResendOnboarding = async () => {
+    if (!driver || isResendingOnboarding) return;
+    setIsResendingOnboarding(true);
+    setOnboardingFeedback(null);
+    try {
+      const updated = await DriverService.resendOnboardingEmail(driver.id);
+      setDriver(updated);
+      if (updated.provisioning?.emailSent) {
+        setOnboardingFeedback({
+          type: 'success',
+          message: 'A new temporary password was generated and sent to the driver email.',
+        });
+      } else {
+        setOnboardingFeedback({
+          type: 'danger',
+          message: updated.provisioning?.error || 'Failed to send onboarding email. Please check email provider settings.',
+        });
+      }
+    } catch (err: any) {
+      setOnboardingFeedback({
+        type: 'danger',
+        message: err.message || 'Unable to resend onboarding email.',
+      });
+    } finally {
+      setIsResendingOnboarding(false);
+    }
   };
 
   if (isLoading) {
@@ -240,6 +272,75 @@ export default function DriverDetailPage() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Account Provisioning & Onboarding Status */}
+          <div className="card shadow-sm border-0 rounded-3 mb-4">
+            <div className="card-header bg-white border-bottom border-light p-3 d-flex align-items-center justify-content-between">
+              <div className="d-flex align-items-center gap-2">
+                <KeyRound size={18} className="text-gold" />
+                <h3 className="h6 fw-bold text-obsidian mb-0">Account Provisioning</h3>
+              </div>
+              <StatusBadge status={driver.onboardingStatus || 'PENDING_ONBOARDING'} size="sm" />
+            </div>
+            <div className="card-body p-3">
+              {onboardingFeedback && (
+                <div className={`alert alert-${onboardingFeedback.type} py-2 px-2.5 small mb-3`}>
+                  {onboardingFeedback.message}
+                </div>
+              )}
+              <div className="d-flex flex-column gap-2 small">
+                <div className="d-flex justify-content-between align-items-center">
+                  <span className="text-muted">Registered Email</span>
+                  <span className="text-obsidian fw-medium text-truncate ms-2" style={{ maxWidth: 180 }}>
+                    {driver.email || 'Not set'}
+                  </span>
+                </div>
+                <div className="d-flex justify-content-between align-items-center">
+                  <span className="text-muted">Email Delivery</span>
+                  <StatusBadge status={driver.onboardingEmailStatus || 'NOT_SENT'} size="sm" />
+                </div>
+                <div className="d-flex justify-content-between align-items-center">
+                  <span className="text-muted">Password Status</span>
+                  <span className="fw-semibold text-obsidian">
+                    {driver.mustChangePassword === false ? 'Permanent Active' : 'Temporary (Must Change)'}
+                  </span>
+                </div>
+                {driver.onboardingEmailSentAt && (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="text-muted">Email Sent At</span>
+                    <span className="text-obsidian">{formatDateTime(driver.onboardingEmailSentAt)}</span>
+                  </div>
+                )}
+                {driver.tempPasswordExpiresAt && driver.mustChangePassword !== false && (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="text-muted">Temp Expiry</span>
+                    <span className="text-obsidian">{formatDateTime(driver.tempPasswordExpiresAt)}</span>
+                  </div>
+                )}
+                {driver.onboardingEmailError && driver.onboardingEmailStatus === 'FAILED' && (
+                  <div className="alert alert-danger py-1.5 px-2 mb-0 text-xs">
+                    {driver.onboardingEmailError}
+                  </div>
+                )}
+              </div>
+
+              {driver.mustChangePassword !== false && driver.email && driver.accountStatus !== 'SUSPENDED' && (
+                <button
+                  type="button"
+                  disabled={isResendingOnboarding}
+                  onClick={handleResendOnboarding}
+                  className="btn btn-outline-gold btn-sm w-100 mt-3 fw-semibold d-flex align-items-center justify-content-center gap-1.5"
+                >
+                  <RefreshCw size={14} className={isResendingOnboarding ? 'spin' : ''} />
+                  <span>
+                    {isResendingOnboarding
+                      ? 'Regenerating & Sending...'
+                      : 'Regenerate Password & Resend Email'}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
 
