@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Car, Clock, Navigation, Phone, Square } from 'lucide-react-native';
 import { CardShadow, Colors, Radius, Spacing } from '../../src/theme/tokens';
 import { useDriverStore } from '../../src/store/useDriverStore';
-import { SimulatedRouteMap } from '../../src/components/SimulatedRouteMap';
+import { ActiveTripMap } from '../../src/components/ActiveTripMap';
 import { StatusPill } from '../../src/components/StatusPill';
 import { ConfirmModal } from '../../src/components/ConfirmModal';
 
@@ -105,10 +105,11 @@ export default function ActiveTripScreen() {
           <StatusPill status={activeRide.status} />
         </View>
 
-        <SimulatedRouteMap
+        <ActiveTripMap
           pickupLocation={activeRide.pickupLocation}
           destination={activeRide.destination}
-          progressPct={activeTrip.currentProgressPct}
+          pickupCoords={activeRide.pickupCoords}
+          destinationCoords={activeRide.destinationCoords}
         />
 
         {/* Telemetry Simulation Row */}

@@ -56,6 +56,11 @@ export interface DriverProfile {
   license: DriverLicense;
 }
 
+export interface GeoPoint {
+  latitude: number;
+  longitude: number;
+}
+
 export interface RideItem {
   id: string;
   referenceCode: string;
@@ -64,6 +69,8 @@ export interface RideItem {
   passengerAvatar: string;
   pickupLocation: string;
   destination: string;
+  pickupCoords?: GeoPoint;
+  destinationCoords?: GeoPoint;
   requestedService: string;
   requestDate: string;
   requestTime: string;

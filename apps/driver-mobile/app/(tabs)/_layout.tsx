@@ -1,11 +1,18 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Car, Home, ListChecks, User, Wallet } from 'lucide-react-native';
 import { Colors } from '../../src/theme/tokens';
 import { useDriverStore } from '../../src/store/useDriverStore';
 
 export default function TabsLayout() {
   const activeTrip = useDriverStore((s) => s.activeTrip);
+  const insets = useSafeAreaInsets();
+
+  // Respect Android gesture / 3-button navigation bar & iOS home indicator
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 10 : 8);
+  const tabBarHeight = 56 + bottomInset;
 
   return (
     <Tabs
@@ -13,13 +20,17 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: Colors.primaryBlack,
         tabBarInactiveTintColor: Colors.secondaryText,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: Colors.cardWhite,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 8,
+          height: tabBarHeight,
+          paddingBottom: bottomInset,
           paddingTop: 6,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 2,
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -31,14 +42,14 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home size={size - 1} color={color} />,
+          tabBarIcon: ({ color, size }) => <Home size={Math.min(size, 22)} color={color} />,
         }}
       />
       <Tabs.Screen
         name="rides"
         options={{
           title: 'Rides',
-          tabBarIcon: ({ color, size }) => <ListChecks size={size - 1} color={color} />,
+          tabBarIcon: ({ color, size }) => <ListChecks size={Math.min(size, 22)} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -52,21 +63,21 @@ export default function TabsLayout() {
             fontSize: 9,
             fontWeight: '800',
           },
-          tabBarIcon: ({ color, size }) => <Car size={size - 1} color={color} />,
+          tabBarIcon: ({ color, size }) => <Car size={Math.min(size, 22)} color={color} />,
         }}
       />
       <Tabs.Screen
         name="earnings"
         options={{
           title: 'Earnings',
-          tabBarIcon: ({ color, size }) => <Wallet size={size - 1} color={color} />,
+          tabBarIcon: ({ color, size }) => <Wallet size={Math.min(size, 22)} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => <User size={size - 1} color={color} />,
+          tabBarIcon: ({ color, size }) => <User size={Math.min(size, 22)} color={color} />,
         }}
       />
     </Tabs>

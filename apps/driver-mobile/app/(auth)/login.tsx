@@ -26,6 +26,8 @@ export default function DriverLoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [logoLoading, setLogoLoading] = useState(true);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const handleLogin = async () => {
     if (isLoading) return;
@@ -75,7 +77,30 @@ export default function DriverLoginScreen() {
         >
           <View style={styles.brandSection}>
             <View style={styles.logoFrame}>
-              <Image source={{ uri: BRAND_LOGO_URL }} style={styles.logoImage} resizeMode="cover" />
+              {logoFailed ? (
+                <View style={styles.logoFallback}>
+                  <ShieldCheck size={34} color={Colors.primaryBlack} />
+                  <Text style={styles.logoFallbackText}>KT</Text>
+                </View>
+              ) : (
+                <>
+                  <Image
+                    source={{ uri: BRAND_LOGO_URL }}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                    onLoadEnd={() => setLogoLoading(false)}
+                    onError={() => {
+                      setLogoLoading(false);
+                      setLogoFailed(true);
+                    }}
+                  />
+                  {logoLoading ? (
+                    <View style={styles.logoLoader}>
+                      <ActivityIndicator size="small" color={Colors.primaryBlack} />
+                    </View>
+                  ) : null}
+                </>
+              )}
             </View>
             <Text style={styles.brandTitle}>KINGS TAXI</Text>
             <Text style={styles.brandSubtitle}>DRIVER PARTNER PORTAL</Text>
@@ -196,22 +221,44 @@ const styles = StyleSheet.create({
   },
   brandSection: {
     alignItems: 'center',
-    marginBottom: Spacing.xxl,
+    marginBottom: Spacing.xl,
   },
   logoFrame: {
-    width: 78,
-    height: 78,
-    borderRadius: 20,
+    width: '100%',
+    maxWidth: 200,
+    height: 92,
+    borderRadius: 18,
     backgroundColor: Colors.cardWhite,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: Colors.primarySilver,
-    overflow: 'hidden',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: Spacing.md,
+    position: 'relative',
     ...CardShadow,
   },
   logoImage: {
     width: '100%',
     height: '100%',
+  },
+  logoLoader: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  logoFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  logoFallbackText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    color: Colors.primaryBlack,
   },
   brandTitle: {
     fontSize: 22,
