@@ -809,9 +809,20 @@ export default function DriverDetailPage() {
                               {v.categoryName} • {v.color} • {v.capacity} seats • Status: {v.status}
                             </div>
                           </div>
-                          <span className={`badge ${selected ? 'bg-gold text-dark' : 'bg-success-subtle text-success'}`}>
-                            AVAILABLE
-                          </span>
+                          <div className="d-flex align-items-center gap-1.5">
+                            <span
+                              className={`badge ${
+                                v.verificationStatus === 'VERIFIED'
+                                  ? 'bg-success-subtle text-success'
+                                  : 'bg-warning-subtle text-warning'
+                              }`}
+                            >
+                              {v.verificationStatus === 'VERIFIED' ? 'VERIFIED' : 'PENDING DOCS'}
+                            </span>
+                            <span className={`badge ${selected ? 'bg-gold text-dark' : 'bg-success-subtle text-success'}`}>
+                              {v.status}
+                            </span>
+                          </div>
                         </button>
                       );
                     })}

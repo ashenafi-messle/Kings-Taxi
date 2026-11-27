@@ -780,7 +780,7 @@ export class AdminVehicleService {
 
     const where: any = {
       isActive: true,
-      verificationStatus: VehicleVerificationStatus.VERIFIED,
+      verificationStatus: { not: VehicleVerificationStatus.REJECTED },
       status: { in: [VehicleOperationalStatus.AVAILABLE, VehicleOperationalStatus.ACTIVE] },
       driverId: null,
       assignments: { none: { isActive: true } },
@@ -868,8 +868,8 @@ export class AdminVehicleService {
       if (vehicle.isActive === false) {
         throw new AppError('Cannot assign an inactive vehicle.', 400, 'VEHICLE_INACTIVE');
       }
-      if (vehicle.verificationStatus && vehicle.verificationStatus !== VehicleVerificationStatus.VERIFIED) {
-        throw new AppError('Vehicle must be VERIFIED before assignment.', 400, 'VEHICLE_NOT_VERIFIED');
+      if (vehicle.verificationStatus === VehicleVerificationStatus.REJECTED) {
+        throw new AppError('Cannot assign a rejected vehicle.', 400, 'VEHICLE_REJECTED');
       }
       if (
         vehicle.status !== VehicleOperationalStatus.AVAILABLE &&
